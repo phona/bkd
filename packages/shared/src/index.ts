@@ -30,6 +30,33 @@ export type PermissionMode = 'auto' | 'supervised' | 'plan'
 export type BusyAction = 'queue' | 'cancel'
 export type SessionStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
 
+/**
+ * Per-engine UI rendering hints. Frontend queries these instead of
+ * string-matching `engineType`, so adding a new engine doesn't require
+ * touching renderer call sites.
+ *
+ * Naming: kebab-case behaviour keys. ABSENT = no special behaviour
+ * (fail-safe direction — new engines that forget to declare hints get
+ * generic rendering, not surprises).
+ *
+ * Hint catalogue:
+ * - `task-plan-preamble`: engine bundles a structured task-plan preamble
+ *   (## Goal / ## Constraints / ## Progress / ...) inside the assistant
+ *   message before the actual reply. Frontend collapses it visually.
+ *   Currently set on `acp:opencode`.
+ * - `inline-thinking`: engine outputs interleaved think→tool→think→tool
+ *   pattern (Claude-style). Absence implies tools-then-thinking-then-
+ *   answer pattern (opencode/Codex style). Reserved for future renderer
+ *   variations; not consumed yet by 2026-05-10.
+ * - `lock-model-when-omitted`: when the issue was created with
+ *   omit-model enabled, freeze model selection in the chat input.
+ *   Replaces the hardcoded `engineType === 'claude-code' || ...` check.
+ */
+export type RenderingHint =
+  | 'task-plan-preamble'
+  | 'inline-thinking'
+  | 'lock-model-when-omitted'
+
 export interface Issue {
   id: string
   projectId: string
@@ -55,6 +82,15 @@ export interface Issue {
   statusUpdatedAt: string
   createdAt: string
   updatedAt: string
+  /**
+   * Resolved per-issue UI rendering hints (derived from engineType + ACP
+   * sub-agent at projection time). Frontend uses these to gate
+   * engine-specific UI behaviour (preamble splitting, model lock, etc.).
+   * Optional for backwards compat — older clients ignore the field;
+   * older servers that don't populate it leave the frontend in
+   * "no special behaviour" mode (safe default).
+   */
+  renderingHints?: RenderingHint[]
 }
 
 export type ApiResponse<T> = { success: true, data: T } | { success: false, error: string }
