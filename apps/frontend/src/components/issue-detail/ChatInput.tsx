@@ -9,7 +9,6 @@ import {
   Paperclip,
   Play,
   RefreshCw,
-  SlashSquare,
   Square,
   X,
 } from 'lucide-react'
@@ -28,13 +27,6 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Chip } from '@/components/ui/chip'
-import {
-  Command,
-  CommandEmpty,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from '@/components/ui/command'
 import { IconButton } from '@/components/ui/icon-button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import {
@@ -237,12 +229,6 @@ export function ChatInput({
       'queue' :
       busyAction :
     undefined
-
-  // Normalized slash commands only (for CommandPicker button + command detection)
-  const normalizedSlashCommands = useMemo(
-    () => slashCommands.map(cmd => (cmd.startsWith('/') ? cmd : `/${cmd}`)),
-    [slashCommands],
-  )
 
   // Build tagged command list with category labels (for inline menu)
   interface TaggedCommand {
@@ -503,11 +489,6 @@ export function ChatInput({
       isSendingRef.current = false
     }
   }
-
-  const selectSlashCommand = useCallback((cmd: string) => {
-    setInput(cmd)
-    textareaRef.current?.focus()
-  }, [])
 
   /** Resolve the text to insert for a tagged command item. */
   const resolveCommandInput = useCallback((item: TaggedCommand): string => {
@@ -919,8 +900,6 @@ export function ChatInput({
                 onOpenFileBrowser={() => projectId && issueId && openFileBrowser(projectId, issueId, changesRoot)}
                 onClearSession={() => setClearSessionOpen(true)}
                 clearSessionDisabled={!issueId || isSessionActive || clearSession.isPending}
-                slashCommands={normalizedSlashCommands.length > 0 ? normalizedSlashCommands : undefined}
-                onSlashCommand={selectSlashCommand}
                 compact
               />
               {isThinking && onCancel ? (
@@ -983,16 +962,6 @@ export function ChatInput({
           >
             <Paperclip className="size-5" />
           </label>
-          {normalizedSlashCommands.length > 0 ?
-              (
-                <div className="max-md:hidden">
-                  <CommandPicker
-                    commands={normalizedSlashCommands}
-                    onSelect={cmd => selectSlashCommand(cmd)}
-                  />
-                </div>
-              ) :
-            null}
           {/* Desktop overflow menu — refresh / files / clear session.
               Moves rarely-used controls off the visible row so the toolbar
               stays scannable. Mobile uses MobileMoreMenu below which already
@@ -1048,8 +1017,6 @@ export function ChatInput({
               onOpenFileBrowser={() => projectId && issueId && openFileBrowser(projectId, issueId, changesRoot)}
               onClearSession={() => setClearSessionOpen(true)}
               clearSessionDisabled={!issueId || isSessionActive || clearSession.isPending}
-              slashCommands={normalizedSlashCommands.length > 0 ? normalizedSlashCommands : undefined}
-              onSlashCommand={selectSlashCommand}
             />
           </div>
 
@@ -1280,50 +1247,10 @@ function BusyActionSelect({
   )
 }
 
-// ─── CommandPicker ────────────────────────────────────────────────────────────
-// Replaced custom popover + search with shadcn Popover + Command
-
-function CommandPicker({
-  commands,
-  onSelect,
-}: {
-  commands: string[]
-  onSelect: (cmd: string) => void
-}) {
-  const { t } = useTranslation()
-  const [open, setOpen] = useState(false)
-
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger render={<Button variant="ghost" size="icon" title={t('chat.commands')} className="size-11" />}>
-        <SlashSquare className="size-5" />
-      </PopoverTrigger>
-      <PopoverContent side="top" align="start" className="w-[260px] p-0">
-        <Command>
-          <CommandInput placeholder={t('chat.commandSearch')} className="text-xs h-8" />
-          <CommandList className="max-h-[240px]">
-            <CommandEmpty className="text-xs text-muted-foreground/50 px-3 py-2">
-              {t('chat.noCommands')}
-            </CommandEmpty>
-            {commands.map(cmd => (
-              <CommandItem
-                key={cmd}
-                value={cmd}
-                onSelect={() => {
-                  onSelect(cmd)
-                  setOpen(false)
-                }}
-                className="text-xs px-3 py-1.5"
-              >
-                <code className="font-mono text-foreground/80">{cmd}</code>
-              </CommandItem>
-            ))}
-          </CommandList>
-        </Command>
-      </PopoverContent>
-    </Popover>
-  )
-}
+// ─── (removed) CommandPicker ──────────────────────────────────────────────────
+// The desktop "/" command-list button and the mobile more-menu command chips
+// were removed: they surfaced the full plugin/skill command list, which is noisy
+// and redundant. The inline "/" autocomplete menu still covers command entry.
 
 // ─── MobileMoreMenu ──────────────────────────────────────────────────────────
 // Avoids nested DropdownMenu inside Popover by using simple button lists.
@@ -1344,8 +1271,6 @@ function MobileMoreMenu({
   onOpenFileBrowser,
   onClearSession,
   clearSessionDisabled,
-  slashCommands,
-  onSlashCommand,
   compact = false,
 }: {
   engineType?: string
@@ -1363,8 +1288,6 @@ function MobileMoreMenu({
   onOpenFileBrowser: () => void
   onClearSession: () => void
   clearSessionDisabled: boolean
-  slashCommands?: string[]
-  onSlashCommand?: (cmd: string) => void
   /** Compact trigger size for the collapsed reading-mode input strip. */
   compact?: boolean
 }) {
@@ -1397,28 +1320,6 @@ function MobileMoreMenu({
               <span className="font-medium">{t(`createIssue.engineLabel.${engineType}`, engineType)}</span>
             </div>
           </div>
-        ) : null}
-
-        {/* Slash commands */}
-        {slashCommands && slashCommands.length > 0 && onSlashCommand ? (
-          <>
-            <div className="px-2">
-              <div className="text-[10px] text-muted-foreground/60 mb-1">{t('chat.commands')}</div>
-              <div className="flex flex-wrap gap-1">
-                {slashCommands.map(cmd => (
-                  <button
-                    key={cmd}
-                    type="button"
-                    onClick={() => onSlashCommand(cmd)}
-                    className="px-2 py-1 rounded text-[11px] font-mono bg-muted/40 text-muted-foreground hover:bg-muted/60 transition-colors"
-                  >
-                    {cmd}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="h-px bg-border/30 my-1" />
-          </>
         ) : null}
 
         {/* Mode selector */}

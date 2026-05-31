@@ -22,6 +22,7 @@ vi.mock('react-i18next', () => ({
 const followUpMutateAsync = vi.fn().mockResolvedValue({ messageId: 'm1' })
 vi.mock('@/hooks/use-kanban', () => ({
   useRoles: () => ({ data: [], isLoading: false }),
+  useIssueRoles: () => ({ data: [], isLoading: false }),
   useCreateRole: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useUpdateRole: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useDeleteRole: () => ({ mutateAsync: vi.fn(), isPending: false }),

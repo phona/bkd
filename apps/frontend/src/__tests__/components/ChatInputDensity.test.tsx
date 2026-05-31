@@ -40,6 +40,7 @@ vi.mock('@/hooks/use-kanban', () => ({
   useClearIssueSession: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useRestartIssue: () => ({ mutate: vi.fn(), isPending: false }),
   useRoles: () => ({ data: [], isLoading: false }),
+  useIssueRoles: () => ({ data: [], isLoading: false }),
   useCreateRole: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useUpdateRole: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useDeleteRole: () => ({ mutateAsync: vi.fn(), isPending: false }),
@@ -163,10 +164,17 @@ describe('chatInput density refactor (PLAN-012)', () => {
     expect(true).toBe(true)
   })
 
-  it('keeps Paperclip and Commands as visible high-frequency buttons', () => {
+  it('keeps Paperclip as a visible high-frequency button', () => {
     renderChat({ slashCommands: ['build', 'review'] })
     expect(screen.getByTitle(/chat\.attach/)).toBeInTheDocument()
-    expect(screen.getByTitle('chat.commands')).toBeInTheDocument()
+  })
+
+  // The dedicated "/" command-list button was removed; the slash-command list
+  // now only surfaces via the inline "/" autocomplete menu. The button must
+  // not render even when commands are available.
+  it('does not render a dedicated command-list button', () => {
+    renderChat({ slashCommands: ['build', 'review'] })
+    expect(screen.queryByTitle('chat.commands')).not.toBeInTheDocument()
   })
 
   // Sanity: the toolbar must not double-render the diff badge (legacy left+right).
