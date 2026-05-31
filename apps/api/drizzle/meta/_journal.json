@@ -169,6 +169,41 @@
       "when": 1779241951219,
       "tag": "0023_cultured_trauma",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1779321486779,
+      "tag": "0024_sudden_robin_chapel",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "6",
+      "when": 1779325149069,
+      "tag": "0025_early_morg",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "6",
+      "when": 1779605416204,
+      "tag": "0026_yellow_black_queen",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "6",
+      "when": 1779655416204,
+      "tag": "0027_add_issue_roles",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "6",
+      "when": 1780198705733,
+      "tag": "0028_peaceful_marvex",
+      "breakpoints": true
     }
   ]
 }

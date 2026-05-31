@@ -97,10 +97,13 @@ const StreamingThinking = memo(({ entry }: { entry: NormalizedLogEntry }) => {
   )
 })
 
-/** Completed thinking block — collapsed by default, click to expand. */
+/**
+ * Completed thinking block — expanded by default so switching out of
+ *  streaming mode doesn't visually collapse all thinking content.
+ */
 const CompletedThinking = memo(({ entry }: { entry: NormalizedLogEntry }) => {
   const { t } = useTranslation()
-  const [isOpen, setIsOpen] = useState(false)
+  const [isOpen, setIsOpen] = useState(true)
 
   return (
     <div className="animate-message-enter my-1">
@@ -154,7 +157,7 @@ export function AcpTimeline({
     const el = scrollRef?.current
     if (!el) return
     const handler = () => {
-      nearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 150
+      nearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40
     }
     el.addEventListener('scroll', handler, { passive: true })
     return () => el.removeEventListener('scroll', handler)
@@ -192,6 +195,10 @@ export function AcpTimeline({
     if (wasOlderPrepend && prevScrollHeightRef.current > 0) {
       const delta = el.scrollHeight - prevScrollHeightRef.current
       if (delta > 0) el.scrollTop = el.scrollTop + delta
+      requestAnimationFrame(() => {
+        const finalDelta = el.scrollHeight - prevScrollHeightRef.current
+        if (finalDelta > 0) el.scrollTop = el.scrollTop + (finalDelta - delta)
+      })
     }
     prevScrollHeightRef.current = el.scrollHeight
   }, [firstItemId, items.length, scrollRef])
@@ -275,7 +282,16 @@ export function AcpTimeline({
       {items.map((item) => {
         switch (item.type) {
           case 'tool-group':
-            return <ToolGroupMessage key={item.id} message={item.message} />
+            return (
+              <div key={item.id} className="group">
+                {item.thinking && (
+                  <div className="mb-1.5">
+                    <CompletedThinking entry={item.thinking} />
+                  </div>
+                )}
+                <ToolGroupMessage message={item.message} />
+              </div>
+            )
           case 'plan':
             return (
               <AcpPlanCard
@@ -290,7 +306,16 @@ export function AcpTimeline({
                 <StreamingThinking key={item.id} entry={item.entry} /> :
                 <CompletedThinking key={item.id} entry={item.entry} />
           case 'entry':
-            return <LogEntry key={item.id} entry={item.entry} />
+            return (
+              <div key={item.id} className="group">
+                {item.thinking && (
+                  <div className="mb-1.5">
+                    <CompletedThinking entry={item.thinking} />
+                  </div>
+                )}
+                <LogEntry entry={item.entry} />
+              </div>
+            )
           default:
             return null
         }

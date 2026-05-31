@@ -1,6 +1,13 @@
 // @bkd/shared — Types shared between @bkd/api and @bkd/frontend
 // Re-exported from packages/shared for cross-workspace consumption.
 
+// ── Error codes ────────────────────────────────────────
+// Machine-readable error codes returned in the `error` field of a failed
+// ApiResponse. The frontend maps these to localized messages.
+
+/** Returned when an execution is rejected because the server is draining for an upgrade restart. */
+export const UPGRADE_DRAINING_CODE = 'UPGRADE_DRAINING'
+
 export interface Project {
   id: string
   alias: string
@@ -13,6 +20,21 @@ export interface Project {
   sortOrder: string
   isArchived: boolean
   isGitRepo: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export interface WorkspaceRepo {
+  url: string
+  defaultBranch: string
+  role: string
+}
+
+export interface Workspace {
+  id: string
+  name: string
+  description?: string
+  repos: WorkspaceRepo[]
   createdAt: string
   updatedAt: string
 }
@@ -71,25 +93,30 @@ export interface IssueForkRef {
 }
 
 /**
- * Fork mode (PLAN-021):
- * - `independent` — new worktree off main, runs immediately.
- * - `snapshot` — new worktree + parent's uncommitted changes, runs immediately.
- * - `dependent` — waits in `todo`, auto-runs when the parent issue settles.
+ * Fork timing (PLAN-021 / FORK-002):
+ * - `now` — runs immediately, in parallel with the parent.
+ * - `after-parent` — waits in `todo`, auto-runs when the parent issue settles.
+ *
+ * In both cases the child worktree branches from the parent worktree's
+ * current HEAD and carries the parent's uncommitted changes.
  */
-export type ForkMode = 'independent' | 'snapshot' | 'dependent'
+export type ForkRunWhen = 'now' | 'after-parent'
 
 export interface ForkIssuePayload {
   instruction: string
-  mode: ForkMode
-  includeHistory?: boolean
+  runWhen: ForkRunWhen
+  /**
+   * Optional log entry to fork from — the new issue's context is the parent
+   * conversation up to and including this entry. Omitted = whole conversation.
+   */
+  fromLogId?: string
   inheritEngine?: boolean
-  autoExecute?: boolean
 }
 
 export interface ForkIssueResult {
   issue: Issue
   parentIssueId: string
-  mode: ForkMode
+  runWhen: ForkRunWhen
   carryWarning?: string
 }
 
@@ -437,15 +464,21 @@ export interface CockpitTimelineAction {
   id: string
   label: string
   /**
-   * 'proposal'    — invoke a cockpit proposal type with payload.
-   * 'navigate'    — open an issue in the UI.
-   * 'snooze'      — snooze this message until `untilMs`.
-   * 'dismiss'     — permanently dismiss this message.
-   * 'reply-input' — show an inline textarea; submitting sends a
-   *                 `send_reply` proposal with the typed body.
+   * 'proposal'     — invoke a cockpit proposal type with payload.
+   * 'navigate'     — open an issue in the UI.
+   * 'snooze'       — snooze this message until `untilMs`.
+   * 'dismiss'      — permanently dismiss this message.
+   * 'reply-input'  — show an inline textarea; submitting sends a
+   *                  `send_reply` proposal with the typed body.
+   * 'reply-preset' — a one-click candidate reply drafted by the cockpit
+   *                  secretary; clicking sends `send_reply` with
+   *                  `payload.text` as the body (no typing needed).
    */
-  kind: 'proposal' | 'navigate' | 'snooze' | 'dismiss' | 'reply-input'
-  /** For 'proposal': { type, params }. For 'navigate': { projectAlias, issueNumber }. */
+  kind: 'proposal' | 'navigate' | 'snooze' | 'dismiss' | 'reply-input' | 'reply-preset'
+  /**
+   * For 'proposal': { type, params }. For 'navigate': { projectAlias, issueNumber }.
+   * For 'reply-preset': { issueId, text }.
+   */
   payload?: Record<string, unknown>
   /** Visual tone hint for the button. */
   tone?: 'primary' | 'default' | 'danger'
@@ -464,9 +497,42 @@ export interface CockpitTimelineMessage {
   signalKey: string
   status: CockpitTimelineMessageStatus
   snoozedUntil: number | null
+  /**
+   * Secretary's recommended action for this card, with a one-line
+   * rationale. `actionId` points at one of the `actions` entries.
+   * Null until the card has been enriched (or if enrichment failed).
+   */
+  recommendation: CockpitTimelineRecommendation | null
+  /** ISO timestamp of when the secretary enriched this card; null = not enriched. */
+  enrichedAt: string | null
+  /** Which rung of the degradation chain this card is on. */
+  enrichmentStatus: CockpitEnrichmentStatus
+  /**
+   * If AI enrichment was attempted and failed, the short reason
+   * (`no_engine` | `timeout` | `parse_failed` | `run_failed`); null
+   * otherwise. Lets the UI explain *why* a card did not reach `enriched`.
+   */
+  enrichmentError: string | null
   createdAt: string
   updatedAt: string
 }
+
+/** Secretary's recommendation attached to an enriched decision card. */
+export interface CockpitTimelineRecommendation {
+  /** Id of the recommended action within `CockpitTimelineMessage.actions`. */
+  actionId: string
+  /** One short sentence: why the secretary recommends this action. */
+  reasoning: string
+}
+
+/**
+ * Which rung of the decision-card degradation chain a card is on:
+ * - `template`   — rule template only (level 3, the floor).
+ * - `structured` — built from the agent's own `AskUserQuestion` options,
+ *                  no AI (level 2, the non-AI floor).
+ * - `enriched`   — AI secretary enrichment applied (level 1, the best).
+ */
+export type CockpitEnrichmentStatus = 'template' | 'structured' | 'enriched'
 
 export interface CockpitTimelineDelta {
   op: 'append' | 'update'
@@ -500,6 +566,7 @@ export interface AppEventMap {
   }
   'log-updated': { issueId: string, entry: NormalizedLogEntry }
   'log-removed': { issueId: string, messageIds: string[] }
+  'log-added': { issueId: string, logId: string }
   /**
    * Emitted by the timeline-emit pipeline stage (order 90) after running the
    * raw NormalizedLogEntry through the per-issue stateful TimelineConverter.

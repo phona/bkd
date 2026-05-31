@@ -93,7 +93,10 @@ function mergeChunk(buffer: Buffer, entry: NormalizedLogEntry): void {
   if (text.length > buffer.content.length && text.startsWith(buffer.content)) {
     buffer.content = text
   } else if (buffer.content.length > text.length && buffer.content.startsWith(text)) {
-    // keep old
+    // keep old — out-of-order delivery with shorter content, drop
+  } else if (text === buffer.content) {
+    // identical — avoid doubling the content when the engine re-emits the
+    // same cumulative chunk without new text
   } else {
     buffer.content += text
   }
@@ -248,6 +251,11 @@ export class TimelineConverter {
     state.currentTurn = turn
 
     if (type === 'thinking') {
+      // Drop empty thinking chunks — some engines (Claude via ACP) emit
+      // agent_thought_chunk entries with no content. Without this filter
+      // they create empty thinking segments that clutter the timeline.
+      if (!entry.content.trim()) return []
+
       // Thinking after assistant in same turn → close assistant segment first,
       // bump assistantFlushCount so the NEXT assistant chunk opens a new segment.
       if (state.assistantBuffer) {

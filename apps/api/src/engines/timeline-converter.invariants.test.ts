@@ -4,6 +4,10 @@ import { describe, expect, it } from 'bun:test'
 import { TimelineConverter, toTimeline } from './timeline-converter'
 import type { NormalizedLogEntry, TimelineEntry } from './types'
 
+// ─── Regression: mergeStreamingParts identical-content guard ─────────────────
+
+import { mergeStreamingParts } from '@/engines/executors/acp/normalizer'
+
 // ────────────────────────────────────────────────────────────────────────────
 // Invariants — properties that must hold for ANY input sequence.
 //
@@ -523,5 +527,35 @@ describe('invariant: real-data shape integrity', () => {
     for (let i = 1; i < seqs.length; i++) {
       expect(seqs[i]).toBeGreaterThan(seqs[i - 1])
     }
+  })
+})
+
+describe('mergeStreamingParts — identical-content guard', () => {
+  it('skips identical parts (prevents doubling)', () => {
+    const result = mergeStreamingParts(['Hello', 'Hello', 'Hello world'])
+    expect(result).toBe('Hello world')
+  })
+
+  it('handles delta-style concatenation correctly', () => {
+    const result = mergeStreamingParts(['Hello', ' world'])
+    expect(result).toBe('Hello world')
+  })
+
+  it('handles cumulative-style parts correctly', () => {
+    const result = mergeStreamingParts(['He', 'Hello', 'Hello world'])
+    expect(result).toBe('Hello world')
+  })
+
+  it('drops out-of-order shorter parts', () => {
+    const result = mergeStreamingParts(['Hello world', 'Hello'])
+    expect(result).toBe('Hello world')
+  })
+
+  it('handles empty input', () => {
+    expect(mergeStreamingParts([])).toBe('')
+  })
+
+  it('single element', () => {
+    expect(mergeStreamingParts(['Hello'])).toBe('Hello')
   })
 })

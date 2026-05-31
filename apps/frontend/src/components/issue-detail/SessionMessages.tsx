@@ -231,7 +231,7 @@ function LegacySessionMessages({
     const el = scrollRef?.current
     if (!el) return
     const handler = () => {
-      nearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 150
+      nearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40
     }
     el.addEventListener('scroll', handler, { passive: true })
     return () => el.removeEventListener('scroll', handler)
@@ -296,6 +296,11 @@ function LegacySessionMessages({
     if (wasOlderPrepend && prevScrollHeightRef.current > 0) {
       const delta = el.scrollHeight - prevScrollHeightRef.current
       if (delta > 0) el.scrollTop = el.scrollTop + delta
+      // Correct after virtualizer finishes measuring in the next frame
+      requestAnimationFrame(() => {
+        const finalDelta = el.scrollHeight - prevScrollHeightRef.current
+        if (finalDelta > 0) el.scrollTop = el.scrollTop + (finalDelta - delta)
+      })
     }
     prevScrollHeightRef.current = el.scrollHeight
   }, [firstMessageId, messages.length, scrollRef])
@@ -384,7 +389,7 @@ function LegacySessionMessages({
   if (messages.length === 0 && pendingMessages.length === 0 && !isRunning) return null
 
   return (
-    <div className={`flex flex-col py-3 px-4 max-md:gap-3 md:py-2 md:px-5${fullWidthChat ? '' : ' max-w-4xl'}`}>
+    <div className={`flex flex-col py-3 px-4 gap-3 md:py-2 md:px-5${fullWidthChat ? '' : ' max-w-4xl'}`}>
       {/* IntersectionObserver sentinel — auto-loads older history when
           the top of the list nears the viewport. Replaces the previous
           explicit "Load earlier messages" button (universal mobile chat
@@ -467,6 +472,7 @@ function VirtualMessageList({
             key={msg.id}
             data-index={item.index}
             ref={virtualizer.measureElement}
+            className="pb-3"
             style={{
               position: 'absolute',
               top: 0,

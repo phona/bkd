@@ -7,6 +7,7 @@
 import { createRoute } from '@hono/zod-openapi'
 import * as z from 'zod'
 import {
+  AssignRoleSchema,
   BulkUpdateSchema,
   BulkUpdateWhiteboardNodeSchema,
   CategorizedCommandsSchema,
@@ -14,8 +15,10 @@ import {
   CreateIssueSchema,
   CreateNoteSchema,
   CreateProjectSchema,
+  CreateRoleSchema,
   CreateWebhookSchema,
   CreateWhiteboardNodeSchema,
+  CreateWorkspaceSchema,
   CronJobSchema,
   EngineDiscoveryResultSchema,
   EngineModelSchema,
@@ -31,6 +34,7 @@ import {
   GenerateIssuesFromNodesSchema,
   IssueChangesResponseSchema,
   IssueLogsResponseSchema,
+  IssueRoleSchema,
   IssueSchema,
   NoteSchema,
   ParseWhiteboardResponseSchema,
@@ -39,18 +43,22 @@ import {
   ProcessCapacitySchema,
   ProcessInfoSchema,
   ProjectSchema,
+  RoleSchema,
   SortProjectSchema,
   successResponse,
   UpdateIssueSchema,
   UpdateNoteSchema,
   UpdateProjectSchema,
+  UpdateRoleSchema,
   UpdateWebhookSchema,
   UpdateWhiteboardNodeSchema,
+  UpdateWorkspaceSchema,
   WebhookDeliverySchema,
   WebhookSchema,
   WhiteboardAskResponseSchema,
   WhiteboardAskSchema,
   WhiteboardNodeSchema,
+  WorkspaceSchema,
   WorktreeEntrySchema,
   WriteFilterRuleSchema,
 } from './schemas'
@@ -225,6 +233,126 @@ export const unarchiveProject = createRoute({
   },
 })
 
+// ── Roles ──────────────────────────────────────────────
+
+export const listRoles = createRoute({
+  method: 'get',
+  path: '/',
+  tags: ['Roles'],
+  summary: 'List project roles',
+  operationId: 'listRoles',
+  request: { params: z.object({ projectId: z.string() }) },
+  responses: {
+    200: successResponse(z.array(RoleSchema), 'List of roles'),
+  },
+})
+
+export const createRole = createRoute({
+  method: 'post',
+  path: '/',
+  tags: ['Roles'],
+  summary: 'Create a role',
+  operationId: 'createRole',
+  request: {
+    params: z.object({ projectId: z.string() }),
+    body: { content: { 'application/json': { schema: CreateRoleSchema } }, required: true },
+  },
+  responses: {
+    201: successResponse(RoleSchema, 'Role created'),
+    409: errorResponse('Role name already exists'),
+  },
+})
+
+export const getRole = createRoute({
+  method: 'get',
+  path: '/{roleId}',
+  tags: ['Roles'],
+  summary: 'Get role details',
+  operationId: 'getRole',
+  request: { params: z.object({ projectId: z.string(), roleId: z.string() }) },
+  responses: {
+    200: successResponse(RoleSchema, 'Role details'),
+    404: errorResponse('Role not found'),
+  },
+})
+
+export const updateRole = createRoute({
+  method: 'patch',
+  path: '/{roleId}',
+  tags: ['Roles'],
+  summary: 'Update a role',
+  operationId: 'updateRole',
+  request: {
+    params: z.object({ projectId: z.string(), roleId: z.string() }),
+    body: { content: { 'application/json': { schema: UpdateRoleSchema } }, required: true },
+  },
+  responses: {
+    200: successResponse(RoleSchema, 'Role updated'),
+    404: errorResponse('Role not found'),
+  },
+})
+
+export const deleteRole = createRoute({
+  method: 'delete',
+  path: '/{roleId}',
+  tags: ['Roles'],
+  summary: 'Delete a role',
+  operationId: 'deleteRole',
+  request: { params: z.object({ projectId: z.string(), roleId: z.string() }) },
+  responses: {
+    200: successResponse(z.null(), 'Role deleted'),
+    404: errorResponse('Role not found'),
+  },
+})
+
+export const assignRole = createRoute({
+  method: 'post',
+  path: '/{issueId}/roles',
+  tags: ['Issues'],
+  summary: 'Assign role to issue',
+  operationId: 'assignRole',
+  request: {
+    params: z.object({ projectId: z.string(), issueId: z.string() }),
+    body: {
+      content: { 'application/json': { schema: AssignRoleSchema } },
+      required: true,
+    },
+  },
+  responses: {
+    201: successResponse(IssueRoleSchema, 'Role assigned'),
+    409: errorResponse('Role already assigned'),
+  },
+})
+
+export const removeRole = createRoute({
+  method: 'delete',
+  path: '/{issueId}/roles/{roleId}',
+  tags: ['Issues'],
+  summary: 'Remove role from issue',
+  operationId: 'removeRole',
+  request: {
+    params: z.object({ projectId: z.string(), issueId: z.string(), roleId: z.string() }),
+  },
+  responses: {
+    200: successResponse(z.null(), 'Role removed'),
+    404: errorResponse('Role not assigned'),
+  },
+})
+
+export const listIssueRoles = createRoute({
+  method: 'get',
+  path: '/{issueId}/roles',
+  tags: ['Issues'],
+  summary: 'List roles assigned to issue',
+  operationId: 'listIssueRoles',
+  request: {
+    params: z.object({ projectId: z.string(), issueId: z.string() }),
+  },
+  responses: {
+    200: successResponse(z.array(RoleSchema), 'List of roles'),
+  },
+})
+
 // ── Issues ─────────────────────────────────────────────
 
 const projectParam = z.object({ projectId: z.string() })
@@ -236,7 +364,12 @@ export const listIssues = createRoute({
   tags: ['Issues'],
   summary: 'List issues in project',
   operationId: 'listIssues',
-  request: { params: projectParam },
+  request: {
+    params: projectParam,
+    query: z.object({
+      tree: z.enum(['true']).optional(),
+    }),
+  },
   responses: {
     200: successResponse(z.array(IssueSchema), 'Issue list'),
     404: errorResponse('Project not found'),
@@ -300,6 +433,37 @@ export const deleteIssue = createRoute({
   responses: {
     200: successResponse(z.object({ id: z.string() }), 'Deleted'),
     404: errorResponse('Issue not found'),
+  },
+})
+
+export const invokeRole = createRoute({
+  method: 'post',
+  path: '/{issueId}/roles/{roleId}/invoke',
+  tags: ['Issues'],
+  summary: 'Invoke a role',
+  operationId: 'invokeRole',
+  request: {
+    params: z.object({ projectId: z.string(), issueId: z.string(), roleId: z.string() }),
+    body: { content: { 'application/json': { schema: z.object({ roleName: z.string(), message: z.string(), context: z.string().optional() }) } }, required: true },
+  },
+  responses: {
+    200: successResponse(z.object({ type: z.string(), roleId: z.string(), executionId: z.string().optional() }), 'Role invoked'),
+    400: errorResponse('Failed to invoke role'),
+  },
+})
+
+export const roleReply = createRoute({
+  method: 'post',
+  path: '/{issueId}/roles/reply',
+  tags: ['Issues'],
+  summary: 'Role reply callback',
+  operationId: 'roleReply',
+  request: {
+    params: z.object({ projectId: z.string(), issueId: z.string() }),
+    body: { content: { 'application/json': { schema: z.object({ role: z.string(), message: z.string() }) } }, required: true },
+  },
+  responses: {
+    200: successResponse(z.object({ id: z.string() }), 'Reply recorded'),
   },
 })
 
@@ -397,7 +561,19 @@ export const restartIssue = createRoute({
   tags: ['Issue Commands'],
   summary: 'Restart failed session',
   operationId: 'restartIssue',
-  request: { params: projectIssueParams },
+  request: {
+    params: projectIssueParams,
+    body: {
+      content: {
+        'application/json': {
+          schema: z.object({
+            engineType: z.string().optional(),
+          }),
+        },
+      },
+      required: false,
+    },
+  },
   responses: {
     200: successResponse(ExecuteIssueResponseSchema, 'Restarted'),
     400: errorResponse('Bad request'),
@@ -1232,5 +1408,112 @@ export const generateIssuesFromNodes = createRoute({
     200: successResponse(z.array(GeneratedIssueItemSchema), 'Recommended issues'),
     404: errorResponse('Project not found'),
     500: errorResponse('Internal error'),
+  },
+})
+
+// ── Workspaces ──────────────────────────────────────────
+
+export const listWorkspaces = createRoute({
+  method: 'get',
+  path: '/',
+  tags: ['Workspaces'],
+  summary: 'List workspaces',
+  operationId: 'listWorkspaces',
+  responses: {
+    200: successResponse(z.array(WorkspaceSchema), 'Workspace list'),
+  },
+})
+
+export const createWorkspace = createRoute({
+  method: 'post',
+  path: '/',
+  tags: ['Workspaces'],
+  summary: 'Create workspace',
+  operationId: 'createWorkspace',
+  request: { body: { content: { 'application/json': { schema: CreateWorkspaceSchema } } } },
+  responses: {
+    201: successResponse(WorkspaceSchema, 'Created workspace'),
+    400: errorResponse('Validation error'),
+  },
+})
+
+export const getWorkspace = createRoute({
+  method: 'get',
+  path: '/{workspaceId}',
+  tags: ['Workspaces'],
+  summary: 'Get workspace',
+  operationId: 'getWorkspace',
+  request: { params: z.object({ workspaceId: z.string() }) },
+  responses: {
+    200: successResponse(WorkspaceSchema, 'Workspace'),
+    404: errorResponse('Workspace not found'),
+  },
+})
+
+export const updateWorkspace = createRoute({
+  method: 'patch',
+  path: '/{workspaceId}',
+  tags: ['Workspaces'],
+  summary: 'Update workspace',
+  operationId: 'updateWorkspace',
+  request: {
+    params: z.object({ workspaceId: z.string() }),
+    body: { content: { 'application/json': { schema: UpdateWorkspaceSchema } } },
+  },
+  responses: {
+    200: successResponse(WorkspaceSchema, 'Updated workspace'),
+    404: errorResponse('Workspace not found'),
+  },
+})
+
+export const deleteWorkspace = createRoute({
+  method: 'delete',
+  path: '/{workspaceId}',
+  tags: ['Workspaces'],
+  summary: 'Soft-delete workspace',
+  operationId: 'deleteWorkspace',
+  request: { params: z.object({ workspaceId: z.string() }) },
+  responses: {
+    200: successResponse(z.object({ id: z.string() }), 'Deleted'),
+    404: errorResponse('Workspace not found'),
+  },
+})
+
+export const getWorkspaceProjects = createRoute({
+  method: 'get',
+  path: '/{workspaceId}/projects',
+  tags: ['Workspaces'],
+  summary: 'List projects in workspace',
+  operationId: 'getWorkspaceProjects',
+  request: { params: z.object({ workspaceId: z.string() }) },
+  responses: {
+    200: successResponse(z.array(ProjectSchema), 'Project list'),
+    404: errorResponse('Workspace not found'),
+  },
+})
+
+export const linkProjectToWorkspace = createRoute({
+  method: 'put',
+  path: '/{workspaceId}/projects/{projectId}',
+  tags: ['Workspaces'],
+  summary: 'Link project to workspace',
+  operationId: 'linkProjectToWorkspace',
+  request: { params: z.object({ workspaceId: z.string(), projectId: z.string() }) },
+  responses: {
+    200: successResponse(ProjectSchema, 'Linked project'),
+    404: errorResponse('Workspace or project not found'),
+  },
+})
+
+export const unlinkProjectFromWorkspace = createRoute({
+  method: 'delete',
+  path: '/{workspaceId}/projects/{projectId}',
+  tags: ['Workspaces'],
+  summary: 'Unlink project from workspace',
+  operationId: 'unlinkProjectFromWorkspace',
+  request: { params: z.object({ workspaceId: z.string(), projectId: z.string() }) },
+  responses: {
+    200: successResponse(ProjectSchema, 'Unlinked project'),
+    404: errorResponse('Workspace or project not found'),
   },
 })

@@ -90,12 +90,12 @@ function rebuildAcpTimeline(logs: NormalizedLogEntry[]) {
 }
 
 describe('useAcpTimeline rendering', () => {
-  it('renders thinking and assistant as independent items (no frontend dedup)', () => {
-    // Contract change (2026-05-10): backend TimelineConverter splits
-    // thinking/assistant into segment-aware entries with distinct ids.
-    // The frontend renders BOTH — no more "discard thinking if assistant
-    // contains same prefix" heuristic, which was the source of flicker
-    // during streaming and lost-content bugs.
+  it('keeps thinking when assistant starts with the same prefix (no startsWith dedup)', () => {
+    // Models routinely open the reply with the same sentence as the reasoning
+    // ("让我看看 X" → "让我看看 X，发现..."). The old startsWith-based dedup
+    // silently removed the thinking block in that case, which users perceived
+    // as "刷新后思考没了". Thinking is its own surface — keep it. If users
+    // dislike the duplicated opener they can collapse the thinking <details>.
     const logs: NormalizedLogEntry[] = [
       {
         entryType: 'thinking',
@@ -115,13 +115,50 @@ describe('useAcpTimeline rendering', () => {
 
     const { items } = rebuildAcpTimeline(logs)
 
+    expect(items).toHaveLength(1)
+    expect(items[0]!.type).toBe('entry')
+    expect((items[0] as any).thinking).toBeDefined()
+    expect((items[0] as any).thinking!.content).toBe('用户问为什么测试兜不住')
+  })
+
+  it('keeps thinking across tool groups when assistant has different content', () => {
+    // When the assistant does NOT repeat the thinking prefix, both should be
+    // preserved — the thinking block shows the reasoning process, and the
+    // assistant shows the final reply.
+    const logs: NormalizedLogEntry[] = [
+      {
+        entryType: 'thinking',
+        content: 'Let me check the imports first',
+        timestamp: '2026-01-01T00:00:00Z',
+        turnIndex: 0,
+        metadata: { streaming: true },
+      },
+      {
+        entryType: 'tool-use',
+        content: 'Read src/app.ts',
+        timestamp: '2026-01-01T00:00:01Z',
+        turnIndex: 0,
+        messageId: 't1',
+        metadata: { toolCallId: 't1', isResult: false },
+        toolDetail: { kind: 'file-read', toolName: 'Read', toolCallId: 't1', isResult: false },
+      },
+      {
+        entryType: 'assistant-message',
+        content: 'I found the issue in the type definitions',
+        timestamp: '2026-01-01T00:00:02Z',
+        turnIndex: 0,
+        metadata: { streaming: true },
+      },
+    ]
+
+    const { items } = rebuildAcpTimeline(logs)
+
+    // 2 items: tool-group (with attached thinking) + assistant
     expect(items).toHaveLength(2)
-    expect(items[0]!.type).toBe('thinking')
-    expect((items[0] as { entry: NormalizedLogEntry }).entry.content).toBe(
-      '用户问为什么测试兜不住',
-    )
+    expect(items[0]!.type).toBe('tool-group')
+    expect((items[0] as any).thinking).toBeDefined()
     expect(items[1]!.type).toBe('entry')
-    expect((items[1] as { entry: NormalizedLogEntry }).entry.entryType).toBe('assistant-message')
+    expect((items[1] as any).thinking).toBeUndefined()
   })
 
   it('keeps standalone thinking when assistant does NOT overlap', () => {
@@ -144,20 +181,19 @@ describe('useAcpTimeline rendering', () => {
 
     const { items } = rebuildAcpTimeline(logs)
 
-    // Thinking comes before assistant in items
-    expect(items).toHaveLength(2)
-    expect(items[0]!.type).toBe('thinking')
-    expect((items[0] as { entry: NormalizedLogEntry }).entry.entryType).toBe('thinking')
-    expect((items[0] as { entry: NormalizedLogEntry }).entry.content).toBe('Let me check the imports first')
+    // 1 item: entry with attached thinking
+    expect(items).toHaveLength(1)
+    expect(items[0]!.type).toBe('entry')
+    expect((items[0] as any).thinking).toBeDefined()
+    expect((items[0] as any).thinking!.content).toBe('Let me check the imports first')
 
-    expect(items[1]!.type).toBe('entry')
-    expect((items[1] as { entry: NormalizedLogEntry }).entry.entryType).toBe('assistant-message')
+    expect((items[0] as { entry: NormalizedLogEntry }).entry.entryType).toBe('assistant-message')
   })
 
-  it('keeps thinking, tool group, and assistant inline (Cursor-style)', () => {
-    // Real-world OpenCode pattern: thinking → tool → assistant. Each segment
-    // is its own entry — no overlapping content discards. This is what makes
-    // multi-step reasoning visible to users.
+  it('keeps thinking across tool groups when assistant starts with same prefix', () => {
+    // Same scenario as above but with a tool burst between thinking and the
+    // assistant reply. Thinking still preserved — see the no-startsWith-dedup
+    // rationale above.
     const logs: NormalizedLogEntry[] = [
       {
         entryType: 'thinking',
@@ -186,13 +222,53 @@ describe('useAcpTimeline rendering', () => {
 
     const { items } = rebuildAcpTimeline(logs)
 
-    // 3 items: thinking, tool-group, assistant — all inline.
-    expect(items).toHaveLength(3)
-    expect(items[0]!.type).toBe('thinking')
-    expect(items[1]!.type).toBe('tool-group')
-    expect(items[2]!.type).toBe('entry')
-    const assistantItem = items[2] as { entry: NormalizedLogEntry }
-    expect(assistantItem.entry.entryType).toBe('assistant-message')
+    // 2 items: tool-group (with attached thinking) + entry
+    expect(items).toHaveLength(2)
+    expect(items[0]!.type).toBe('tool-group')
+    expect((items[0] as any).thinking).toBeDefined()
+    expect(items[1]!.type).toBe('entry')
+  })
+})
+
+describe('useAcpTimeline — thinking preservation', () => {
+  // Regression guard for the startsWith-dedup bug: models routinely open the
+  // reply with the same sentence as the reasoning, so a heuristic that drops
+  // thinking whenever assistant.startsWith(thinking) silently killed the
+  // thinking block in real-world conversations. Now thinking is always kept.
+  it('keeps short thinking when assistant happens to start with the same opening sentence', () => {
+    const logs: NormalizedLogEntry[] = [
+      {
+        // Short thinking burst — engine emits one chunk before transitioning
+        // to the actual reply. Common with OpenCode / Codex reasoning items.
+        entryType: 'thinking',
+        content: '让我看看这个 SQL 查询',
+        timestamp: '2026-01-01T00:00:00Z',
+        turnIndex: 0,
+      },
+      {
+        entryType: 'tool-use',
+        content: 'Read db/schema.ts',
+        timestamp: '2026-01-01T00:00:01Z',
+        turnIndex: 0,
+        messageId: 't1',
+        metadata: { toolCallId: 't1', isResult: false },
+        toolDetail: { kind: 'file-read', toolName: 'Read', toolCallId: 't1', isResult: false },
+      },
+      {
+        // Final assistant content happens to lead with the same opener.
+        // After this entry arrives (live tail OR /logs refresh), dedup fires.
+        entryType: 'assistant-message',
+        content: '让我看看这个 SQL 查询的具体问题。JOIN 条件写反了，应该用 inner join',
+        timestamp: '2026-01-01T00:00:02Z',
+        turnIndex: 0,
+      },
+    ]
+
+    const { items } = rebuildAcpTimeline(logs)
+    expect(items).toHaveLength(2)
+    expect(items[0]!.type).toBe('tool-group')
+    expect((items[0] as any).thinking).toBeDefined()
+    expect(items[1]!.type).toBe('entry')
   })
 })
 
@@ -275,10 +351,10 @@ describe('useAcpTimeline streaming merge regression', () => {
     const { items } = rebuildAcpTimeline(logs)
 
     // Both thinking and assistant should be present
-    expect(items).toHaveLength(2)
-    expect(items[0]!.type).toBe('thinking')
-    expect(items[1]!.type).toBe('entry')
-    const assistant = items[1] as { entry: NormalizedLogEntry }
+    expect(items).toHaveLength(1)
+    expect(items[0]!.type).toBe('entry')
+    expect((items[0] as any).thinking).toBeDefined()
+    const assistant = items[0] as { entry: NormalizedLogEntry }
     expect(assistant.entry.entryType).toBe('assistant-message')
   })
 
@@ -310,13 +386,13 @@ describe('useAcpTimeline streaming merge regression', () => {
 
     const { items } = rebuildAcpTimeline(logs)
 
-    // Should have 3 items: 2 thinking + 1 assistant
-    expect(items).toHaveLength(3)
+    // Should have 2 items: 1 thinking (orphan flushed) + 1 entry (with second thinking attached)
+    expect(items).toHaveLength(2)
     expect(items[0]!.type).toBe('thinking')
     expect((items[0] as { entry: NormalizedLogEntry }).entry.content).toBe('Let me check the imports first')
-    expect(items[1]!.type).toBe('thinking')
-    expect((items[1] as { entry: NormalizedLogEntry }).entry.content).toBe('Now let me read the actions file')
-    expect(items[2]!.type).toBe('entry')
+    expect(items[1]!.type).toBe('entry')
+    expect((items[1] as any).thinking).toBeDefined()
+    expect((items[1] as any).thinking!.content).toBe('Now let me read the actions file')
   })
 
   it('stable order regardless of event arrival order', () => {
@@ -356,5 +432,46 @@ describe('useAcpTimeline streaming merge regression', () => {
     const order2 = rebuildAcpTimeline(shuffled).items.map(i => i.type)
 
     expect(order1).toEqual(order2)
+  })
+})
+
+describe('useAcpTimeline — thinking attachment edge cases', () => {
+  it('flushes orphan thinking as standalone when no subsequent item', () => {
+    const logs: NormalizedLogEntry[] = [
+      {
+        entryType: 'thinking',
+        content: 'Orphan thought',
+        timestamp: '2026-01-01T00:00:00Z',
+        turnIndex: 0,
+      },
+    ]
+    const { items } = rebuildAcpTimeline(logs)
+    expect(items).toHaveLength(1)
+    expect(items[0]!.type).toBe('thinking')
+  })
+
+  it('attaches thinking to tool-group when followed by tools', () => {
+    const logs: NormalizedLogEntry[] = [
+      {
+        entryType: 'thinking',
+        content: 'Let me read the file',
+        timestamp: '2026-01-01T00:00:00Z',
+        turnIndex: 0,
+      },
+      {
+        entryType: 'tool-use',
+        content: 'Read src/app.ts',
+        timestamp: '2026-01-01T00:00:01Z',
+        turnIndex: 0,
+        messageId: 't1',
+        metadata: { toolCallId: 't1', isResult: false },
+        toolDetail: { kind: 'file-read', toolName: 'Read', toolCallId: 't1', isResult: false },
+      },
+    ]
+    const { items } = rebuildAcpTimeline(logs)
+    expect(items).toHaveLength(1)
+    expect(items[0]!.type).toBe('tool-group')
+    expect((items[0] as any).thinking).toBeDefined()
+    expect((items[0] as any).thinking!.content).toBe('Let me read the file')
   })
 })

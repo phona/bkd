@@ -22,7 +22,7 @@ import {
   Timer,
   Wrench,
 } from 'lucide-react'
-import { memo, useState } from 'react'
+import { Component, memo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useParams } from 'react-router-dom'
 import { useFilePreview } from '@/hooks/use-file-preview'
@@ -31,6 +31,7 @@ import { getCommandPreview } from '@/lib/command-preview'
 import { formatFileSize } from '@/lib/format'
 import type { NormalizedLogEntry, ToolAction } from '@/types/kanban'
 import { MarkdownContent } from './MarkdownContent'
+import { MessageForkButton } from './MessageForkButton'
 
 interface AttachmentMeta {
   id: string
@@ -270,7 +271,81 @@ function LogEntryImpl({
   inToolGroup?: boolean
 }) {
   const { t } = useTranslation()
-  const { projectId = '', issueId = '' } = useParams<{ projectId: string, issueId: string }>()
+  // On the cockpit `/review/:projectAlias/:issueId` route the param is the
+  // project *alias*, not `projectId`. Fall back to it — the API resolves
+  // projects by id or alias — so attachment URLs and the fork action don't
+  // end up with an empty `/api/projects//...` segment.
+  const params = useParams<{ projectId: string, projectAlias: string, issueId: string }>()
+  const projectId = params.projectId || params.projectAlias || ''
+  const issueId = params.issueId || ''
+
+  // Role message rendering (execution context)
+  if (entry.metadata?.role) {
+    const role = entry.metadata.role as string
+    const roleColors: Record<string, string> = {
+      frontend: 'bg-blue-50/80 border-l-2 border-blue-400',
+      backend: 'bg-green-50/80 border-l-2 border-green-400',
+      host: 'bg-purple-50/80 border-l-2 border-purple-400',
+    }
+
+    return (
+      <div className={`p-3 rounded-lg my-2 ${roleColors[role] || 'bg-gray-50/80 border-l-2 border-gray-400'}`}>
+        <div className="flex items-center gap-2 mb-1.5">
+          <span className="text-base">{(entry.metadata.roleAvatar as string) || '🤖'}</span>
+          <span className="text-sm font-semibold text-foreground/90">{role}</span>
+          {entry.metadata.isRunning === true && (
+            <span className="text-xs text-muted-foreground animate-pulse ml-1">
+              [正在执行...]
+            </span>
+          )}
+        </div>
+        <div className="text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed">
+          {entry.content}
+        </div>
+      </div>
+    )
+  }
+
+  // Role reply message rendering
+  const isRoleMessage = entry.metadata?.isRoleReply === true
+  if (isRoleMessage) {
+    const roleName = (entry.metadata?.roleDisplayName as string) || (entry.metadata?.role as string) || t('role.unknown', 'Unknown')
+    const roleColor = (entry.metadata?.roleColor as string) || '#3b82f6'
+    const roleAvatar = (entry.metadata?.roleAvatar as string) || '🤖'
+    return (
+      <div className="group py-1.5 animate-message-enter">
+        <div
+          className="relative px-3 py-2 border-l-[3px] rounded-r-md bg-muted"
+          style={{ borderLeftColor: roleColor }}
+        >
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-lg">{roleAvatar}</span>
+            <span className="font-medium text-sm">{roleName}</span>
+            <span className="text-xs bg-muted-foreground/10 px-2 py-0.5 rounded">
+              {t('role.reply', 'Reply')}
+            </span>
+          </div>
+          <div className="pl-7">
+            {entry.entryType === 'assistant-message' ? (
+              <AssistantMessage
+                content={entry.content}
+                timestamp={entry.timestamp}
+                durationMs={durationMs}
+                isStreaming={entry.metadata?.streaming === true}
+                messageId={entry.messageId}
+                projectId={projectId}
+                issueId={issueId}
+              />
+            ) : (
+              <div className="text-[15px] whitespace-pre-wrap break-words text-foreground leading-[1.7]">
+                {entry.content}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   switch (entry.entryType) {
     case 'user-message': {
@@ -304,7 +379,17 @@ function LogEntryImpl({
           className="group py-1.5 animate-message-enter"
           data-user-turn={anchorTurn}
         >
-          <div className={`px-3 py-2 border-l-[3px] rounded-r-md ${barColor}`}>
+          <div className={`relative px-3 py-2 border-l-[3px] rounded-r-md ${barColor}`}>
+            {entry.messageId
+              ? (
+                  <MessageForkButton
+                    projectId={projectId}
+                    issueId={issueId}
+                    logId={entry.messageId}
+                    className="absolute right-1 top-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity"
+                  />
+                )
+              : null}
             {displayContent ?
                 (
                   <div className="text-[15px] whitespace-pre-wrap break-words text-foreground leading-[1.7]">
@@ -384,6 +469,9 @@ function LogEntryImpl({
           timestamp={entry.timestamp}
           durationMs={durationMs}
           isStreaming={entry.metadata?.streaming === true}
+          messageId={entry.messageId}
+          projectId={projectId}
+          issueId={issueId}
         />
       )
 
@@ -497,15 +585,15 @@ function LogEntryImpl({
     case 'thinking': {
       const preview = entry.content.length > 80 ? `${entry.content.slice(0, 80)}…` : entry.content
       return (
-        <div className="my-0.5 animate-message-enter">
-          <details className="bg-violet-500/[0.04] border border-violet-300/20 dark:border-violet-500/15 transition-all duration-200 open:bg-violet-500/[0.06]">
-            <summary className="cursor-pointer list-none px-3 py-1.5 text-xs text-violet-500/70 dark:text-violet-400/70 hover:bg-violet-500/[0.06] transition-colors">
+        <div className="my-1 animate-message-enter">
+          <details className="rounded-lg bg-violet-500/[0.04] border border-violet-300/15 dark:border-violet-500/12 transition-all duration-200 open:bg-violet-500/[0.06]">
+            <summary className="cursor-pointer list-none px-3 py-2 text-xs text-violet-500/70 dark:text-violet-400/70 hover:bg-violet-500/[0.05] transition-colors rounded-lg open:rounded-b-none">
               <span className="italic">
                 Thinking:
                 {preview}
               </span>
             </summary>
-            <div className="px-3 pb-2 pt-1 border-t border-violet-300/15 dark:border-violet-500/10">
+            <div className="px-3 pb-2.5 pt-1.5 border-t border-violet-300/10 dark:border-violet-500/8">
               <pre className="text-xs text-violet-600/70 dark:text-violet-300/60 whitespace-pre-wrap font-mono leading-relaxed overflow-x-auto">
                 {entry.content}
               </pre>
@@ -552,16 +640,53 @@ export const LogEntry = memo(LogEntryImpl, (prev, next) => {
   )
 })
 
-function AssistantMessage({
+// ── MarkdownErrorBoundary ──────────────────────────────────────────
+// react-markdown is tolerant of incomplete input, but certain edge cases
+// (e.g. malformed GFM tables, nested inline syntax at chunk boundaries)
+// can throw during streaming. Without this boundary, the error propagates
+// to the route-level ErrorBoundary, unmounting the entire chat, killing
+// the SSE subscription, and silently truncating the response.
+class MarkdownErrorBoundary extends Component<
+  { fallbackContent: string, className?: string, children?: React.ReactNode },
+  { hasError: boolean }
+> {
+  constructor(props: { fallbackContent: string, className?: string }) {
+    super(props)
+    this.state = { hasError: false }
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true }
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className={`${this.props.className ?? ''} whitespace-pre-wrap break-words`}>
+          {this.props.fallbackContent}
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
+
+export function AssistantMessage({
   content,
   timestamp,
   durationMs,
   isStreaming = false,
+  messageId,
+  projectId = '',
+  issueId = '',
 }: {
   content: string
   timestamp?: string
   durationMs?: number
   isStreaming?: boolean
+  messageId?: string
+  projectId?: string
+  issueId?: string
 }) {
   const { t } = useTranslation()
   const [copied, setCopied] = useState(false)
@@ -576,6 +701,10 @@ function AssistantMessage({
   // message. Users perceive this as "thinking content mixed into the reply".
   // Detect and split: render preamble as a collapsed block, reply normally.
   const { preamble, reply } = splitAssistantPreamble(content)
+  // During streaming the preamble accumulates before the reply begins.
+  // If we wait for reply, users see a blank bubble for seconds — show the
+  // preamble text inline while `reply` is still being generated.
+  const streamingPreview = isStreaming && preamble && !reply ? preamble : null
 
   const handleCopy = () => {
     navigator.clipboard
@@ -590,6 +719,16 @@ function AssistantMessage({
   return (
     <div className={`group py-1 ${isStreaming ? '' : 'animate-message-enter'}`}>
       <div className="relative min-w-0">
+        {messageId
+          ? (
+              <MessageForkButton
+                projectId={projectId}
+                issueId={issueId}
+                logId={messageId}
+                className="absolute right-7 top-0 z-10 opacity-0 group-hover:opacity-100 transition-opacity"
+              />
+            )
+          : null}
         <button
           type="button"
           onClick={handleCopy}
@@ -641,22 +780,25 @@ function AssistantMessage({
 
         {reply
           ? (
-              isStreaming
-                ? (
-                    <div className="text-[15px] leading-[1.7] md:text-[14px] md:leading-[1.65] whitespace-pre-wrap break-words">
-                      {reply}
-                    </div>
-                  )
-                : (
-                    <MarkdownContent
-                      content={reply}
-                      className="text-[15px] leading-[1.7] md:text-[14px] md:leading-[1.65]"
-                      knownPaths={hasPreview ? knownPaths : undefined}
-                      onPathClick={hasPreview ? openPreview : undefined}
-                    />
-                  )
+              <MarkdownErrorBoundary fallbackContent={reply} className="text-[15px] leading-[1.7] md:text-[14px] md:leading-[1.65]">
+                <MarkdownContent
+                  content={reply}
+                  className="text-[15px] leading-[1.7] md:text-[14px] md:leading-[1.65]"
+                  knownPaths={hasPreview ? knownPaths : undefined}
+                  onPathClick={hasPreview ? openPreview : undefined}
+                />
+              </MarkdownErrorBoundary>
             )
-          : null}
+          : streamingPreview
+            ? (
+                <MarkdownErrorBoundary fallbackContent={streamingPreview} className="text-[15px] leading-[1.7] md:text-[14px] md:leading-[1.65] animate-pulse">
+                  <MarkdownContent
+                    content={streamingPreview}
+                    className="text-[15px] leading-[1.7] md:text-[14px] md:leading-[1.65] animate-pulse"
+                  />
+                </MarkdownErrorBoundary>
+              )
+            : null}
       </div>
       <div className="flex items-center gap-2 mt-0.5">
         {timestamp ?

@@ -64,3 +64,7 @@ Each task is a single line linking to its detail file. All detailed information 
 - [-] [**COCKPIT-007 Replace cockpit Overview with always-on bot timeline**](COCKPIT-007.md) `P1`
 - [x] [**FORK-001 One-click fork current issue into a new spawned issue**](FORK-001.md) `P1`
 - [x] [**BUG-002 Worktree creation fails on repos without main/master**](BUG-002.md) `P1`
+- [x] [**UPGRADE-001 Graceful drain before upgrade restart**](UPGRADE-001.md) `P1`
+- [x] [**UPGRADE-002 Apply a locally-installed app package via the graceful drain path**](UPGRADE-002.md) `P1`
+- [-] [**COCKPIT-008 Cockpit secretary — AI-enriched decision cards + decision-stream UI**](COCKPIT-008.md) `P1`
+- [x] [**BUG-003 Fix create issue and process manager access in cockpit (ReviewPage)**](BUG-003.md) `P0`

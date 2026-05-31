@@ -21,7 +21,7 @@ export type {
   FileListingResult,
   ForkIssuePayload,
   ForkIssueResult,
-  ForkMode,
+  ForkRunWhen,
   Issue,
   IssueChangedFile,
   IssueChangesResponse,
@@ -45,4 +45,6 @@ export type {
   WebhookDelivery,
   WebhookEventType,
   WhiteboardNode,
+  Workspace,
+  WorkspaceRepo,
 } from '@bkd/shared'

@@ -120,6 +120,10 @@ describe('acpTimeline', () => {
     // Should have exactly ONE assistant message rendered
     expect(screen.getByText(finalContent)).toBeInTheDocument()
 
+    // Tool call body is collapsed by default — expand it first
+    const toolHeader = screen.getByRole('button', { expanded: false })
+    fireEvent.click(toolHeader)
+
     // Tool call should be present
     expect(screen.queryAllByText('Read src/config.ts').length).toBeGreaterThanOrEqual(1)
   })
@@ -175,6 +179,65 @@ describe('acpTimeline', () => {
 
     // Should show streaming thinking content (i18n label not loaded in tests)
     expect(screen.getByText(/Analyzing the codebase/)).toBeInTheDocument()
+  })
+
+  it('keeps thinking block even when assistant repeats the same prefix', () => {
+    // Models commonly open the reply with the same opening sentence as the
+    // reasoning. The old startsWith-dedup silently dropped the thinking
+    // block in that case — users perceived it as "thinking disappeared
+    // after refresh". Now thinking is its own surface; collapse it via the
+    // <details> element if visual duplication bothers you.
+    const logs: NormalizedLogEntry[] = [
+      {
+        entryType: 'thinking',
+        content: '让我分析这个问题',
+        timestamp: new Date().toISOString(),
+        turnIndex: 0,
+        metadata: { streaming: false },
+      },
+      {
+        entryType: 'assistant-message',
+        content: '让我分析这个问题\n\n答案是42',
+        timestamp: new Date(Date.now() + 100).toISOString(),
+        turnIndex: 0,
+        metadata: { streaming: false, completed: true },
+      },
+    ]
+
+    render(<AcpTimeline logs={toTimeline(logs)} />, { wrapper: createWrapper() })
+
+    // Thinking block is rendered (i18n label visible).
+    expect(screen.getByText('session.thoughtProcess')).toBeInTheDocument()
+    // Assistant body is rendered.
+    expect(screen.getByText(/答案是42/)).toBeInTheDocument()
+  })
+
+  it('preserves thinking block when assistant has different content', () => {
+    // Normal case: thinking and assistant are distinct — both should show.
+    const logs: NormalizedLogEntry[] = [
+      {
+        entryType: 'thinking',
+        content: 'Let me check the logs',
+        timestamp: new Date().toISOString(),
+        turnIndex: 0,
+        metadata: { streaming: false },
+      },
+      {
+        entryType: 'assistant-message',
+        content: 'The error is on line 42',
+        timestamp: new Date(Date.now() + 100).toISOString(),
+        turnIndex: 0,
+        metadata: { streaming: false, completed: true },
+      },
+    ]
+
+    render(<AcpTimeline logs={toTimeline(logs)} />, { wrapper: createWrapper() })
+
+    // Should show the thinking block
+    expect(screen.getByText('session.thoughtProcess')).toBeInTheDocument()
+
+    // Should show the assistant message
+    expect(screen.getByText(/The error is on line 42/)).toBeInTheDocument()
   })
 })
 

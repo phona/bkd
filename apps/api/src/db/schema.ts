@@ -37,8 +37,17 @@ export const projects = sqliteTable('projects', {
   repositoryUrl: text('repository_url'),
   systemPrompt: text('system_prompt'),
   envVars: text('env_vars'), // JSON: Record<string, string>
+  workspaceId: text('workspace_id').references(() => workspaces.id),
   sortOrder: text('sort_order').notNull().default('a0'),
   isArchived: integer('is_archived').notNull().default(0),
+  ...commonFields,
+})
+
+export const workspaces = sqliteTable('workspaces', {
+  id: shortId(),
+  name: text('name').notNull(),
+  description: text('description'),
+  repos: text('repos').notNull().default('[]'), // JSON: WorkspaceRepo[]
   ...commonFields,
 })
 
@@ -150,6 +159,47 @@ export const issueLogs = sqliteTable(
       table.visible,
       table.entryType,
     ),
+  ],
+)
+
+export const rolesTable = sqliteTable(
+  'roles',
+  {
+    id: text('id').primaryKey(),
+    projectId: text('project_id').notNull(),
+    name: text('name').notNull(),
+    displayName: text('display_name').notNull(),
+    description: text('description'),
+    avatar: text('avatar'),
+    type: text('type', { enum: ['internal', 'external'] }).notNull(),
+    issueId: text('issue_id'),
+    endpoint: text('endpoint'),
+    protocol: text('protocol', { enum: ['http', 'mcp'] }),
+    ...commonFields,
+  },
+  table => [
+    uniqueIndex('roles_project_name_idx').on(table.projectId, table.name),
+    index('roles_project_id_idx').on(table.projectId),
+    index('roles_issue_id_idx').on(table.issueId),
+  ],
+)
+
+export const issueRoles = sqliteTable(
+  'issue_roles',
+  {
+    id: id(),
+    issueId: text('issue_id')
+      .notNull()
+      .references(() => issues.id),
+    roleId: text('role_id')
+      .notNull()
+      .references(() => rolesTable.id),
+    ...commonFields,
+  },
+  table => [
+    uniqueIndex('issue_roles_issue_id_role_id_uniq').on(table.issueId, table.roleId),
+    index('issue_roles_issue_id_idx').on(table.issueId),
+    index('issue_roles_role_id_idx').on(table.roleId),
   ],
 )
 
@@ -283,6 +333,16 @@ export const cockpitTimelineMessages = sqliteTable(
     signalKey: text('signal_key').notNull(),
     status: text('status').notNull().default('open'),
     snoozedUntil: integer('snoozed_until'),
+    // Secretary enrichment (PLAN-022 / COCKPIT-008). `recommendation` is a
+    // JSON string `{ actionId, reasoning }`; `enrichedAt` is a unix-ms
+    // timestamp. Both null until the card has been AI-enriched.
+    recommendation: text('recommendation'),
+    enrichedAt: integer('enriched_at'),
+    // Degradation-chain rung: 'template' | 'structured' | 'enriched'.
+    // `enrichmentError` holds the failure reason when AI enrichment was
+    // attempted but did not succeed (null otherwise).
+    enrichmentStatus: text('enrichment_status').notNull().default('template'),
+    enrichmentError: text('enrichment_error'),
     ...commonFields,
   },
   table => [

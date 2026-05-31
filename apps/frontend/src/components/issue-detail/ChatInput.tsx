@@ -46,12 +46,15 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Textarea } from '@/components/ui/textarea'
 import { useChangesSummary } from '@/hooks/use-changes-summary'
-import { useClearIssueSession, useEngineAvailability, useEngineSettings, useFollowUpIssue, useOmitModel, useRestartIssue } from '@/hooks/use-kanban'
+import { useClearIssueSession, useEngineAvailability, useEngineSettings, useFollowUpIssue, useIssueRoles, useOmitModel, useRestartIssue } from '@/hooks/use-kanban'
 import { useIsMobile } from '@/hooks/use-mobile'
+import { apiErrorMessage } from '@/lib/api-error'
 import { formatFileSize, formatModelName } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { useFileBrowserStore } from '@/stores/file-browser-store'
 import type { BusyAction, EngineModel, SessionStatus } from '@/types/kanban'
+import { RoleMentionPicker } from './RoleMentionPicker'
+import { RoleCreatorModal } from './RoleCreatorModal'
 
 // Mirrors apps/api/src/uploads.ts. Keep both sides in sync — backend
 // rejects via validateFiles() so any drift would surface as a confusing
@@ -196,6 +199,7 @@ export function ChatInput({
   const followUp = useFollowUpIssue(projectId ?? '')
   const clearSession = useClearIssueSession(projectId ?? '')
   const restartIssue = useRestartIssue(projectId ?? '')
+  const { data: issueRoles } = useIssueRoles(projectId ?? '', issueId ?? '')
   const [clearSessionOpen, setClearSessionOpen] = useState(false)
   const changesSummary = useChangesSummary(projectId, issueId ?? undefined)
   const changedCount = changesSummary?.fileCount ?? 0
@@ -263,6 +267,51 @@ export function ChatInput({
     if (trimmed.includes(' ')) return null
     return trimmed.slice(1).toLowerCase()
   }, [input])
+
+  // @ mention detection: show picker when user types @ followed by word characters
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null)
+  const [showRoleCreator, setShowRoleCreator] = useState(false)
+  const mentionPickerRef = useRef<HTMLDivElement>(null)
+
+  // Detect @ mention query from current input
+  const detectMentionQuery = useCallback((value: string, cursorPos: number) => {
+    // Find the text before cursor
+    const beforeCursor = value.slice(0, cursorPos)
+    // Match @ followed by word characters at the end
+    const match = beforeCursor.match(/@(\w*)$/)
+    if (match) {
+      return match[1]
+    }
+    return null
+  }, [])
+
+  const handleMentionSelect = useCallback((role: import('@/lib/kanban-api').Role | null) => {
+    if (role === null) {
+      setMentionQuery(null)
+      return
+    }
+    const textarea = textareaRef.current
+    if (!textarea) return
+    const cursorPos = textarea.selectionStart
+    const beforeCursor = input.slice(0, cursorPos)
+    const afterCursor = input.slice(cursorPos)
+    // Replace @query with @name + space
+    const newBefore = beforeCursor.replace(/@\w*$/, `@${role.name} `)
+    const newValue = newBefore + afterCursor
+    setInput(newValue)
+    setMentionQuery(null)
+    // Focus and set cursor position after the inserted mention
+    setTimeout(() => {
+      textarea.focus()
+      const newPos = newBefore.length
+      textarea.setSelectionRange(newPos, newPos)
+    }, 0)
+  }, [input])
+
+  const handleMentionCreateNew = useCallback(() => {
+    setMentionQuery(null)
+    setShowRoleCreator(true)
+  }, [])
 
   const filteredCommands = useMemo(() => {
     if (commandQuery === null || allCommands.length === 0) return [] as TaggedCommand[]
@@ -347,7 +396,7 @@ export function ChatInput({
       await clearSession.mutateAsync(issueId)
       setClearSessionOpen(false)
     } catch (err) {
-      setSendError(err instanceof Error ? err.message : String(err))
+      setSendError(apiErrorMessage(err, t))
       setTimeout(setSendError, 5000, null)
     }
   }
@@ -438,7 +487,7 @@ export function ChatInput({
         })
       }, 100)
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = apiErrorMessage(err, t)
       setSendError(msg)
       setUploadProgress(null)
       // Restore input on failure — only if still on the same issue.
@@ -466,6 +515,11 @@ export function ChatInput({
   }, [])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Block keyboard events when mention picker is active (it handles its own keyboard)
+    if (mentionQuery !== null) {
+      return
+    }
+
     if (showCommandMenu) {
       if (e.key === 'ArrowDown') {
         e.preventDefault()
@@ -517,8 +571,13 @@ export function ChatInput({
   }
 
   const handleInput = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setInput(e.target.value)
-  }, [])
+    const value = e.target.value
+    const cursorPos = e.target.selectionStart
+    setInput(value)
+    // Detect @ mention
+    const query = detectMentionQuery(value, cursorPos)
+    setMentionQuery(query)
+  }, [detectMentionQuery])
 
   const handlePaste = useCallback(
     (e: React.ClipboardEvent) => {
@@ -716,6 +775,19 @@ export function ChatInput({
             ) :
           null}
 
+        {/* @ mention picker */}
+        {mentionQuery !== null && projectId ? (
+          <div className="mx-2 mt-1 relative" ref={mentionPickerRef}>
+            <RoleMentionPicker
+              projectId={projectId}
+              query={mentionQuery}
+              onSelect={handleMentionSelect}
+              onCreateNew={handleMentionCreateNew}
+              allowedRoles={issueRoles}
+            />
+          </div>
+        ) : null}
+
         {/* File preview bar — above the textarea row when files are attached */}
         {attachedFiles.length > 0 ?
             (
@@ -793,8 +865,11 @@ export function ChatInput({
             ) :
           null}
 
-        {/* Hidden file input */}
+        {/* Hidden file input — id="chat-file-input" is used by the label below so
+            the file picker opens on HarmonyOS / iOS Safari without relying on
+            programmatic element.click() which those browsers block. */}
         <input
+          id="chat-file-input"
           ref={fileInputRef}
           type="file"
           multiple
@@ -853,6 +928,7 @@ export function ChatInput({
                   type="button"
                   size="icon"
                   disabled={isCancelling}
+                  onMouseDown={e => e.preventDefault()}
                   onClick={onCancel}
                   title={isCancelling ? t('session.cancellingBtn') : t('common.cancel')}
                   className="rounded-full size-8 shadow-sm transition-transform hover:scale-105 disabled:hover:scale-100 bg-destructive text-destructive-foreground hover:bg-destructive/90"
@@ -864,6 +940,7 @@ export function ChatInput({
                   type="button"
                   size="icon"
                   disabled={!canSend || followUp.isPending}
+                  onMouseDown={e => e.preventDefault()}
                   onClick={handleSend}
                   title={t('chat.send')}
                   className="rounded-full size-8 shadow-sm transition-transform hover:scale-105 disabled:hover:scale-100"
@@ -874,6 +951,7 @@ export function ChatInput({
                 <Button
                   type="button"
                   size="icon"
+                  onMouseDown={e => e.preventDefault()}
                   onClick={() => textareaRef.current?.focus()}
                   title={t('chat.placeholder')}
                   className="rounded-full size-8 opacity-60 hover:opacity-100 bg-muted text-muted-foreground hover:bg-muted/80"
@@ -890,20 +968,21 @@ export function ChatInput({
             Center: combined engine·mode·model chip (replaces 3 separate chips).
             Right:  diff status + restart + send.
             Hidden in mobile collapsed reading mode (mobileCollapsed). */}
-        <div data-testid="chat-toolbar" className={`flex items-center gap-1 px-2 pb-2 pt-0.5 ${mobileCollapsed ? 'hidden' : ''}`}>
+        <div data-testid="chat-toolbar" className={`flex flex-wrap items-center gap-1 px-2 pb-2 pt-0.5 ${mobileCollapsed ? 'hidden' : ''}`}>
           {/* Left group */}
-          <Button
-            variant="ghost"
-            size="icon"
-            // Surface the seed-capable hint on hover. The button label
-            // stays short ('chat.attach'); the longer copy lives in
-            // `chat.attachHint` and renders as a multi-line tooltip.
+          {/* Use <label htmlFor> instead of Button + element.click() so the
+              file picker works on HarmonyOS and iOS Safari where programmatic
+              clicks on file inputs are blocked. onMouseDown preventsDefault
+              stops the textarea from losing focus (which would collapse the
+              toolbar and hide the virtual keyboard). */}
+          <label
+            htmlFor="chat-file-input"
             title={`${t('chat.attach')} — ${t('chat.attachHint')}`}
-            onClick={() => fileInputRef.current?.click()}
-            className="size-11"
+            onMouseDown={e => e.preventDefault()}
+            className="inline-flex items-center justify-center size-11 rounded-md hover:bg-accent cursor-pointer"
           >
             <Paperclip className="size-5" />
-          </Button>
+          </label>
           {normalizedSlashCommands.length > 0 ?
               (
                 <div className="max-md:hidden">
@@ -974,80 +1053,86 @@ export function ChatInput({
             />
           </div>
 
-          {/* Spacer pushes the action group to the right edge */}
-          <div className="flex-1" />
-
-          {/* Right group: diff status (when relevant) + restart + send */}
-          {hasChanges ?
-              (
-                <button
-                  type="button"
-                  onClick={onToggleDiff}
-                  data-active={diffOpen || undefined}
-                  className="chip-surface px-2 mr-0.5"
-                  title={t('diff.changes')}
-                >
-                  <FileText className="size-3 shrink-0" />
-                  <span className="font-mono tabular-nums">{changedCount}</span>
-                  <span className="font-mono tabular-nums text-emerald-600 dark:text-emerald-400">
-                    +
-                    {additions}
-                  </span>
-                  <span className="font-mono tabular-nums text-red-600 dark:text-red-400">
-                    -
-                    {deletions}
-                  </span>
-                </button>
-              ) :
-            null}
-          {sessionStatus === 'failed' || sessionStatus === 'cancelled' ?
-              (
-                <Button
-                  type="button"
-                  size="icon"
-                  disabled={!issueId || restartIssue.isPending || isSendingRef.current || !input.trim()}
-                  onClick={() => {
-                    if (!issueId) return
-                    restartIssue.mutate(issueId)
-                  }}
-                  title={t('chat.restart')}
-                  className="rounded-full size-9 shadow-sm transition-transform hover:scale-105 disabled:hover:scale-100 bg-primary text-primary-foreground hover:bg-primary/90"
-                >
-                  {isSendingRef.current ?
-                      <Loader2 className="size-4 animate-spin" /> :
-                      <Play className="size-4" strokeWidth={2.5} />}
-                </Button>
-              ) :
-            null}
-          {isThinking && onCancel ?
-              (
-                <Button
-                  type="button"
-                  size="icon"
-                  disabled={isCancelling}
-                  onClick={onCancel}
-                  title={isCancelling ? t('session.cancellingBtn') : t('common.cancel')}
-                  className="rounded-full size-9 shadow-sm transition-transform hover:scale-105 disabled:hover:scale-100 bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                >
-                  {isCancelling ?
-                      <Loader2 className="size-4 animate-spin" /> :
-                      <Square className="size-4" strokeWidth={2.5} />}
-                </Button>
-              ) :
-              (
-                <Button
-                  type="button"
-                  size="icon"
-                  disabled={!canSend || followUp.isPending}
-                  onClick={handleSend}
-                  title={t('chat.send')}
-                  className="rounded-full size-9 shadow-sm transition-transform hover:scale-105 disabled:hover:scale-100"
-                >
-                  {followUp.isPending ?
-                      <Loader2 className="size-4 animate-spin" /> :
-                      <ArrowUp className="size-4" strokeWidth={2.5} />}
-                </Button>
-              )}
+          {/* Right group: diff status (when relevant) + restart + send.
+              Wrapped + ml-auto so it stays together and hugs the right edge;
+              on a narrow panel the whole toolbar wraps instead of the row
+              overflowing horizontally. */}
+          <div className="flex items-center gap-1 ml-auto">
+            {hasChanges ?
+                (
+                  <button
+                    type="button"
+                    onMouseDown={e => e.preventDefault()}
+                    onClick={onToggleDiff}
+                    data-active={diffOpen || undefined}
+                    className="chip-surface px-2 mr-0.5"
+                    title={t('diff.changes')}
+                  >
+                    <FileText className="size-3 shrink-0" />
+                    <span className="font-mono tabular-nums">{changedCount}</span>
+                    <span className="font-mono tabular-nums text-emerald-600 dark:text-emerald-400">
+                      +
+                      {additions}
+                    </span>
+                    <span className="font-mono tabular-nums text-red-600 dark:text-red-400">
+                      -
+                      {deletions}
+                    </span>
+                  </button>
+                ) :
+              null}
+            {sessionStatus === 'failed' || sessionStatus === 'cancelled' ?
+                (
+                  <Button
+                    type="button"
+                    size="icon"
+                    disabled={!issueId || restartIssue.isPending || isSendingRef.current || !input.trim()}
+                    onMouseDown={e => e.preventDefault()}
+                    onClick={() => {
+                      if (!issueId) return
+                      restartIssue.mutate(issueId)
+                    }}
+                    title={t('chat.restart')}
+                    className="rounded-full size-9 shadow-sm transition-transform hover:scale-105 disabled:hover:scale-100 bg-primary text-primary-foreground hover:bg-primary/90"
+                  >
+                    {isSendingRef.current ?
+                        <Loader2 className="size-4 animate-spin" /> :
+                        <Play className="size-4" strokeWidth={2.5} />}
+                  </Button>
+                ) :
+              null}
+            {isThinking && onCancel ?
+                (
+                  <Button
+                    type="button"
+                    size="icon"
+                    disabled={isCancelling}
+                    onMouseDown={e => e.preventDefault()}
+                    onClick={onCancel}
+                    title={isCancelling ? t('session.cancellingBtn') : t('common.cancel')}
+                    className="rounded-full size-9 shadow-sm transition-transform hover:scale-105 disabled:hover:scale-100 bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  >
+                    {isCancelling ?
+                        <Loader2 className="size-4 animate-spin" /> :
+                        <Square className="size-4" strokeWidth={2.5} />}
+                  </Button>
+                ) :
+                (
+                  <Button
+                    type="button"
+                    size="icon"
+                    disabled={!canSend || followUp.isPending}
+                    onMouseDown={e => e.preventDefault()}
+                    onClick={handleSend}
+                    title={t('chat.send')}
+                    className="rounded-full size-9 shadow-sm transition-transform hover:scale-105 disabled:hover:scale-100"
+                  >
+                    {followUp.isPending ?
+                        <Loader2 className="size-4 animate-spin" /> :
+                        <ArrowUp className="size-4" strokeWidth={2.5} />}
+                  </Button>
+                )}
+          </div>
         </div>
       </div>
 
@@ -1081,6 +1166,15 @@ export function ChatInput({
             <FilePreviewModal file={previewFile} onClose={() => setPreviewFile(null)} />
           ) :
         null}
+
+      {/* Role creator modal */}
+      {projectId && (
+        <RoleCreatorModal
+          projectId={projectId}
+          isOpen={showRoleCreator}
+          onClose={() => setShowRoleCreator(false)}
+        />
+      )}
     </div>
   )
 }
@@ -1283,6 +1377,7 @@ function MobileMoreMenu({
           <button
             type="button"
             className={`inline-flex items-center justify-center rounded-md text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors ${compact ? 'size-8' : 'size-11'}`}
+            onMouseDown={e => e.preventDefault()}
           >
             <MoreHorizontal className={compact ? 'size-4' : 'size-5'} />
           </button>
@@ -1453,7 +1548,7 @@ function DesktopMoreMenu({
     <Popover>
       <PopoverTrigger
         render={(
-          <IconButton size="sm" title={t('chat.more')} aria-label={t('chat.more')} />
+          <IconButton size="sm" title={t('chat.more')} aria-label={t('chat.more')} onMouseDown={e => e.preventDefault()} />
         )}
       >
         <MoreHorizontal className="size-3.5" />

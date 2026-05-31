@@ -12,6 +12,7 @@ export interface AcpTimelineEntryItem {
   type: 'entry'
   id: string
   entry: NormalizedLogEntry
+  thinking?: NormalizedLogEntry // Attached preceding thinking
 }
 
 export interface AcpTimelinePlanItem {
@@ -26,6 +27,7 @@ export interface AcpTimelineToolGroupItem {
   type: 'tool-group'
   id: string
   message: ToolGroupChatMessage
+  thinking?: NormalizedLogEntry // Attached preceding thinking
 }
 
 export interface AcpTimelineThinkingItem {
@@ -49,6 +51,23 @@ export interface AcpTimelineResult {
 function isHiddenEntry(entry: TimelineEntry): boolean {
   if (entry.entryType === 'loading' || entry.entryType === 'token-usage') return true
   if (entry.entryType === 'user-message' && entry.metadata?.type === 'system') return true
+  if (entry.entryType === 'system-message' && entry.metadata?.subtype === 'thinking_tokens') return true
+  return false
+}
+
+export const SKILL_PATH_PATTERNS = ['.agents/skills/', '.claude/skills/', 'superpowers']
+
+function isSkillTool(entry: TimelineEntry): boolean {
+  if (entry.type !== 'tool') return false
+  return isSkillEntry(entry)
+}
+
+export function isSkillEntry(entry: { metadata?: Record<string, unknown> | null, toolDetail?: { toolName?: string, raw?: Record<string, unknown> } | null }): boolean {
+  const locations = (entry.metadata?.locations ?? entry.toolDetail?.raw?.locations) as Array<{ path?: string }> | undefined
+  const firstPath = locations?.[0]?.path
+  if (firstPath && SKILL_PATH_PATTERNS.some(p => firstPath.includes(p))) return true
+  const toolName = entry.toolDetail?.toolName
+  if (toolName && SKILL_PATH_PATTERNS.some(p => toolName.includes(p))) return true
   return false
 }
 
@@ -153,11 +172,25 @@ function rebuildAcpTimeline(entries: TimelineEntry[]): AcpTimelineResult {
   }
 
   let toolBuffer: ToolGroupItem[] = []
+  let pendingThinking: TimelineEntry | null = null
 
-  function flushToolBuffer() {
+  function flushPendingThinking(): void {
+    if (!pendingThinking) return
+    items.push({
+      type: 'thinking',
+      id: pendingThinking.id,
+      entry: pendingThinking,
+      isStreaming: pendingThinking.metadata?.streaming === true,
+    })
+    pendingThinking = null
+  }
+
+  function flushToolBuffer(): void {
     if (toolBuffer.length === 0) return
+    const toolGroupThinking = pendingThinking ?? undefined
+    if (toolGroupThinking) pendingThinking = null
     const group = buildToolGroup(toolBuffer)
-    items.push({ type: 'tool-group', id: group.id, message: group })
+    items.push({ type: 'tool-group', id: group.id, message: group, thinking: toolGroupThinking })
     toolBuffer = []
   }
 
@@ -171,23 +204,28 @@ function rebuildAcpTimeline(entries: TimelineEntry[]): AcpTimelineResult {
 
     if (entry.type === 'thinking') {
       flushToolBuffer()
-      items.push({
-        type: 'thinking',
-        id: entry.id,
-        entry,
-        isStreaming: entry.metadata?.streaming === true,
-      })
+      // Skip empty thinking chunks (Claude/ACP adapter sometimes emits
+      // agent_thought_chunk with no content). Backend filter is the
+      // primary guard; this is a safety net for edge cases.
+      if (entry.content.trim().length > 0) {
+        pendingThinking = entry
+      }
       continue
     }
 
     if (entry.type === 'tool') {
       if (entry.metadata?.isResult) {
-        // Results are attached to actions in the action branch below.
         continue
       }
+      if (isSkillTool(entry)) continue
       const callId = entry.metadata?.toolCallId as string | undefined
       const result = callId ? resultMap.get(callId) ?? null : null
       toolBuffer.push({ action: entry, result })
+      // Don't flush yet — adjacent tools accumulate into one group so a
+      // burst of N actions renders as one card with N items. Streaming
+      // still feels real-time because rebuild runs on every log change
+      // and the end-of-loop flushToolBuffer() emits the in-flight group
+      // on every render.
       continue
     }
 
@@ -207,10 +245,23 @@ function rebuildAcpTimeline(entries: TimelineEntry[]): AcpTimelineResult {
     }
 
     flushToolBuffer()
-    items.push({ type: 'entry', id: entry.id, entry })
+
+    // Note: previously we deleted a preceding thinking block when the
+    // assistant content started with the same text, on the assumption that
+    // the assistant was just a richer repeat of the thinking. That heuristic
+    // fires constantly because models commonly open the reply with the same
+    // sentence as the reasoning ("让我看看 X" → "让我看看 X，发现..."),
+    // so the whole thinking block silently vanished. Thinking is its own
+    // surface — keep it; if the duplication bothers users, they can collapse
+    // the thinking <details> block.
+
+    const attachedThinking = pendingThinking ?? undefined
+    pendingThinking = null
+    items.push({ type: 'entry', id: entry.id, entry, thinking: attachedThinking })
   }
 
   flushToolBuffer()
+  flushPendingThinking()
   return { items, pendingMessages }
 }
 

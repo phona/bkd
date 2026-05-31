@@ -86,7 +86,7 @@ export const CreateProjectSchema = z.object({
   description: z.string().max(5000).optional(),
   directory: z.string().max(1000).optional(),
   repositoryUrl: z.string().url().optional().or(z.literal('')),
-  systemPrompt: z.string().max(32768).optional(),
+  systemPrompt: z.string().optional(),
   envVars: envVarsSchema,
 }).openapi('CreateProject')
 
@@ -96,7 +96,7 @@ export const UpdateProjectSchema = z.object({
   description: z.string().max(5000).optional(),
   directory: z.string().max(1000).optional(),
   repositoryUrl: z.string().url().optional().or(z.literal('')),
-  systemPrompt: z.string().max(32768).optional(),
+  systemPrompt: z.string().optional(),
   envVars: envVarsSchema,
   sortOrder: z.string().min(1).max(50).regex(/^[a-z0-9]+$/i).optional(),
 }).openapi('UpdateProject')
@@ -145,16 +145,15 @@ export const IssueSchema = z.object({
 
 export const ForkIssueSchema = z.object({
   instruction: z.string().min(1).max(8000),
-  mode: z.enum(['independent', 'snapshot', 'dependent']),
-  includeHistory: z.boolean().optional(),
+  runWhen: z.enum(['now', 'after-parent']),
+  fromLogId: z.string().optional(),
   inheritEngine: z.boolean().optional(),
-  autoExecute: z.boolean().optional(),
 }).openapi('ForkIssue')
 
 export const ForkIssueResponseSchema = z.object({
   issue: IssueSchema,
   parentIssueId: z.string(),
-  mode: z.enum(['independent', 'snapshot', 'dependent']),
+  runWhen: z.enum(['now', 'after-parent']),
   carryWarning: z.string().optional(),
 }).openapi('ForkIssueResponse')
 
@@ -201,13 +200,13 @@ export const BulkUpdateSchema = z.object({
 
 export const ExecuteIssueSchema = z.object({
   engineType: z.string().regex(/^(claude-code|claude-code-sdk|codex|acp(:.+)?)$/).openapi({ description: 'claude-code | claude-code-sdk | codex | acp | acp:<agent>:<model>' }),
-  prompt: z.string().min(1).max(32768),
+  prompt: z.string().min(1),
   model: z.string().regex(/^[\w./:\-[\]]{1,160}$/).optional(),
   permissionMode: z.enum(['auto', 'supervised', 'plan']).optional(),
 }).openapi('ExecuteIssue')
 
 export const FollowUpSchema = z.object({
-  prompt: z.string().min(1).max(32768),
+  prompt: z.string().min(1),
   model: z.string().regex(/^[\w./:\-[\]]{1,160}$/).optional(),
   permissionMode: z.enum(['auto', 'supervised', 'plan']).optional(),
   busyAction: z.enum(['queue', 'cancel']).optional(),
@@ -220,6 +219,58 @@ export const ExecuteIssueResponseSchema = z.object({
   messageId: z.string().optional(),
   queued: z.boolean().optional(),
 }).openapi('ExecuteIssueResponse')
+
+// ── Role schemas ───────────────────────────────────────
+
+export const RoleSchema = z.object({
+  id: z.string(),
+  projectId: z.string(),
+  name: z.string(),
+  displayName: z.string(),
+  description: z.string().optional(),
+  avatar: z.string().optional(),
+  type: z.enum(['internal', 'external']),
+  issueId: z.string().optional(),
+  endpoint: z.string().optional(),
+  protocol: z.enum(['http', 'mcp']).optional(),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+}).openapi('Role')
+
+export const IssueRoleSchema = z.object({
+  id: z.string(),
+  issueId: z.string(),
+  roleId: z.string(),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+}).openapi('IssueRole')
+
+export const AssignRoleSchema = z.object({
+  roleId: z.string(),
+}).openapi('AssignRole')
+
+export const CreateRoleSchema = z.object({
+  name: z.string().min(1).max(50),
+  displayName: z.string().min(1).max(100),
+  description: z.string().optional(),
+  avatar: z.string().optional(),
+  type: z.enum(['internal', 'external']),
+  issueId: z.string().optional(),
+  endpoint: z.string().optional(),
+  protocol: z.enum(['http', 'mcp']).optional(),
+}).openapi('CreateRole')
+
+export const UpdateRoleSchema = CreateRoleSchema.partial().openapi('UpdateRole')
+
+export const RoleListResponseSchema = z.object({
+  success: z.literal(true),
+  data: z.array(RoleSchema),
+}).openapi('RoleListResponse')
+
+export const RoleResponseSchema = z.object({
+  success: z.literal(true),
+  data: RoleSchema,
+}).openapi('RoleResponse')
 
 // ── Log schemas ────────────────────────────────────────
 
@@ -539,7 +590,7 @@ export const WhiteboardAskSchema = z.object({
   // Optional "active" node — provides focal context for the user's request.
   // If omitted, the AI operates on the whole tree without a specific focus.
   nodeId: z.string().optional(),
-  prompt: z.string().min(1).max(32768),
+  prompt: z.string().min(1),
   engineType: z.string().regex(/^(claude-code|claude-code-sdk|codex|acp(:.+)?)$/).optional(),
   model: z.string().regex(/^[\w./:\-[\]]{1,160}$/).optional(),
 }).openapi('WhiteboardAsk')
@@ -570,3 +621,32 @@ export const GeneratedIssueItemSchema = z.object({
   title: z.string(),
   prompt: z.string(),
 }).openapi('GeneratedIssueItem')
+
+// ── Workspace schemas ───────────────────────────────────
+
+export const WorkspaceRepoSchema = z.object({
+  url: z.string().min(1),
+  defaultBranch: z.string().min(1),
+  role: z.string().min(1),
+}).openapi('WorkspaceRepo')
+
+export const WorkspaceSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string().optional(),
+  repos: z.array(WorkspaceRepoSchema),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+}).openapi('Workspace')
+
+export const CreateWorkspaceSchema = z.object({
+  name: z.string().min(1).max(200),
+  description: z.string().max(5000).optional(),
+  repos: z.array(WorkspaceRepoSchema).default([]),
+}).openapi('CreateWorkspace')
+
+export const UpdateWorkspaceSchema = z.object({
+  name: z.string().min(1).max(200).optional(),
+  description: z.string().max(5000).optional(),
+  repos: z.array(WorkspaceRepoSchema).optional(),
+}).openapi('UpdateWorkspace')

@@ -1,8 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { kanbanApi } from '@/lib/kanban-api'
+import { ApiError, kanbanApi } from '@/lib/kanban-api'
 import { STALE_TIME } from '@/lib/query-config'
 import { useBoardStore } from '@/stores/board-store'
 import { useFileBrowserStore } from '@/stores/file-browser-store'
+import type { CreateRolePayload } from '@/lib/kanban-api'
 import type { ExecuteIssueRequest, ForkIssuePayload, Issue, WebhookEventType } from '@/types/kanban'
 
 export const queryKeys = {
@@ -40,6 +41,7 @@ export const queryKeys = {
   upgradeEnabled: () => ['upgrade', 'enabled'] as const,
   upgradeCheck: () => ['upgrade', 'check'] as const,
   upgradeDownloadStatus: () => ['upgrade', 'downloadStatus'] as const,
+  upgradeLocalVersions: () => ['upgrade', 'localVersions'] as const,
   systemLogs: () => ['settings', 'systemLogs'] as const,
   cleanupStats: () => ['settings', 'cleanupStats'] as const,
   deletedIssues: () => ['settings', 'deletedIssues'] as const,
@@ -62,6 +64,11 @@ export const queryKeys = {
   cronJobLogs: (jobId: string) => ['cron', 'jobs', jobId, 'logs'] as const,
   pendingMessages: (projectId: string, issueId: string) =>
     ['projects', projectId, 'issues', issueId, 'pending'] as const,
+  roles: (projectId: string) => ['projects', projectId, 'roles'] as const,
+  workspaces: () => ['workspaces'] as const,
+  workspace: (id: string) => ['workspaces', id] as const,
+  workspaceProjects: (id: string) => ['workspaces', id, 'projects'] as const,
+  issueTree: (projectId: string) => ['projects', projectId, 'issues', 'tree'] as const,
 }
 
 export function useProjects() {
@@ -925,35 +932,64 @@ export function useDownloadStatus(enabled = false) {
   })
 }
 
+// Server is restarting — poll /version until it answers, then reload the page.
+// The graceful drain can hold the old process for several minutes, so the
+// timeout is generous; on timeout we reload anyway and let the user retry.
+async function pollServerBackAndReload() {
+  const start = Date.now()
+  const timeout = 6 * 60_000
+  const interval = 1_500
+  // Wait for the server to fully shut down before polling.
+  await new Promise(r => setTimeout(r, 2_000))
+  while (Date.now() - start < timeout) {
+    try {
+      const res = await fetch('/api/settings/upgrade/version')
+      if (res.ok) {
+        window.location.reload()
+        return
+      }
+    } catch {
+      // Server still down — keep polling.
+    }
+    await new Promise(r => setTimeout(r, interval))
+  }
+  // Timeout — reload anyway.
+  window.location.reload()
+}
+
 export function useRestartWithUpgrade() {
   return useMutation({
     mutationFn: () => kanbanApi.restartWithUpgrade(),
     // Use onSettled (not onSuccess) because the server typically shuts down
     // before the HTTP response is sent, causing a network error on the client.
     onSettled: () => {
-      // Server is restarting — poll until it comes back, then reload.
-      const poll = async () => {
-        const start = Date.now()
-        const timeout = 60_000
-        const interval = 1_500
-        // Wait for the server to fully shut down
-        await new Promise(r => setTimeout(r, 2_000))
-        while (Date.now() - start < timeout) {
-          try {
-            const res = await fetch('/api/settings/upgrade/version')
-            if (res.ok) {
-              window.location.reload()
-              return
-            }
-          } catch {
-            // Server still down — keep polling
-          }
-          await new Promise(r => setTimeout(r, interval))
-        }
-        // Timeout — reload anyway
-        window.location.reload()
-      }
-      void poll()
+      void pollServerBackAndReload()
+    },
+  })
+}
+
+export function useLocalVersions(enabled = false) {
+  return useQuery({
+    queryKey: queryKeys.upgradeLocalVersions(),
+    queryFn: () => kanbanApi.listLocalVersions(),
+    enabled,
+    staleTime: STALE_TIME.STANDARD,
+  })
+}
+
+export function useApplyLocalVersion() {
+  return useMutation({
+    mutationFn: (version: string) => kanbanApi.applyLocalVersion(version),
+    // On success the server shuts down before responding, so poll until back.
+    onSuccess: () => {
+      void pollServerBackAndReload()
+    },
+    onError: (err) => {
+      // A real 4xx rejection (bad version / not package mode) means the server
+      // never restarted — surface the error, don't poll/reload. A network-level
+      // failure means the server is already going down: poll for it to return.
+      if (err instanceof ApiError && err.isUserError) return
+      void pollServerBackAndReload()
     },
   })
 }
@@ -1115,5 +1151,143 @@ export function useCronJobLogs(jobId: string | null, opts?: { limit?: number }) 
     queryFn: () => kanbanApi.getCronJobLogs(jobId!, { limit: opts?.limit }),
     enabled: !!jobId,
     staleTime: STALE_TIME.STANDARD,
+  })
+}
+
+// --- Role hooks ---
+
+export function useRoles(projectId: string) {
+  return useQuery({
+    queryKey: queryKeys.roles(projectId),
+    queryFn: () => kanbanApi.getRoles(projectId),
+    enabled: !!projectId,
+    staleTime: STALE_TIME.STANDARD,
+  })
+}
+
+export function useCreateRole(projectId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (data: CreateRolePayload) => kanbanApi.createRole(projectId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.roles(projectId) })
+    },
+  })
+}
+
+export function useUpdateRole(projectId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ roleId, ...data }: { roleId: string } & Partial<CreateRolePayload>) =>
+      kanbanApi.updateRole(projectId, roleId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.roles(projectId) })
+    },
+  })
+}
+
+export function useDeleteRole(projectId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (roleId: string) => kanbanApi.deleteRole(projectId, roleId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.roles(projectId) })
+    },
+  })
+}
+
+export function useIssueRoles(projectId: string, issueId: string) {
+  return useQuery({
+    queryKey: ['projects', projectId, 'issues', issueId, 'roles'],
+    queryFn: () => kanbanApi.getIssueRoles(projectId, issueId),
+    enabled: !!(projectId && issueId),
+    staleTime: STALE_TIME.STANDARD,
+  })
+}
+
+export function useAssignRole(projectId: string, issueId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (roleId: string) => kanbanApi.assignRole(projectId, issueId, roleId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'issues', issueId, 'roles'] })
+      queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'issues', issueId, 'participants'] })
+    },
+  })
+}
+
+export function useRemoveRole(projectId: string, issueId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (roleId: string) => kanbanApi.removeRole(projectId, issueId, roleId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'issues', issueId, 'roles'] })
+      queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'issues', issueId, 'participants'] })
+    },
+  })
+}
+
+export function useIssueParticipants(projectId: string, issueId: string) {
+  return useQuery({
+    queryKey: ['projects', projectId, 'issues', issueId, 'participants'],
+    queryFn: () => kanbanApi.getIssueParticipants(projectId, issueId),
+    enabled: !!(projectId && issueId),
+    staleTime: STALE_TIME.STANDARD,
+  })
+}
+
+export function useWorkspaces() {
+  return useQuery({
+    queryKey: queryKeys.workspaces(),
+    queryFn: () => kanbanApi.getWorkspaces(),
+    staleTime: STALE_TIME.STANDARD,
+  })
+}
+
+export function useWorkspace(id: string) {
+  return useQuery({
+    queryKey: queryKeys.workspace(id),
+    queryFn: () => kanbanApi.getWorkspace(id),
+    enabled: !!id,
+    staleTime: STALE_TIME.STANDARD,
+  })
+}
+
+export function useWorkspaceProjects(id: string) {
+  return useQuery({
+    queryKey: queryKeys.workspaceProjects(id),
+    queryFn: () => kanbanApi.getWorkspaceProjects(id),
+    enabled: !!id,
+    staleTime: STALE_TIME.STANDARD,
+  })
+}
+
+export function useIssueTree(projectId: string) {
+  return useQuery({
+    queryKey: queryKeys.issueTree(projectId),
+    queryFn: () => kanbanApi.getIssueTree(projectId),
+    enabled: !!projectId,
+    staleTime: STALE_TIME.STANDARD,
+  })
+}
+
+export function useCreateWorkspace() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (data: { name: string, description?: string, repos: { url: string, defaultBranch: string, role: string }[] }) =>
+      kanbanApi.createWorkspace(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.workspaces() })
+    },
+  })
+}
+
+export function useDeleteWorkspace() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => kanbanApi.deleteWorkspace(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.workspaces() })
+    },
   })
 }

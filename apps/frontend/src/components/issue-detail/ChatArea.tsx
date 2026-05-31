@@ -11,6 +11,8 @@ import { useFileBrowserStore } from '@/stores/file-browser-store'
 import { getIssueUrl } from '@/stores/server-store'
 import { MiniMatrix } from '@/components/cockpit/MiniMatrix'
 import { ChatBody } from './ChatBody'
+import { ParticipantPanel } from './ParticipantPanel'
+import { RoleCreatorModal } from './RoleCreatorModal'
 import {
   createAutoHideState,
   DEFAULT_AUTO_HIDE_THRESHOLDS,
@@ -76,30 +78,25 @@ export function ChatArea({
   const [copied, setCopied] = useState(false)
   const [editingTitle, setEditingTitle] = useState(false)
   const [titleDraft, setTitleDraft] = useState('')
+  const [showRoleCreator, setShowRoleCreator] = useState(false)
   const isMobile = useIsMobile()
   const showFileBrowser = useFileBrowserStore(s => s.isOpen && !s.isDrawer && s.issueId === issueId)
   const closeFileBrowser = useFileBrowserStore(s => s.close)
 
-  // Auto-hide title bar (mobile only) to maximise reading area. The chat
-  // lands at the bottom by default, so the OLD heuristic ("hide on
-  // scrollTop-increasing scroll") could never trigger — the user starts at
-  // scrollTop=max and the only way to go is back up. Reversed semantics:
+  // Auto-hide title bar (mobile only) to maximise reading area.
+  // Semantics align with Safari / Twitter / Instagram:
   //
-  //   – scroll UP toward history  (scrollTop ↓)  →  HIDE  (give the
-  //     reader as much vertical space as possible while skimming history)
-  //   – scroll DOWN toward latest (scrollTop ↑)  →  SHOW  (re-anchor the
-  //     reader as they return to the live conversation)
-  //   – at the top OR within 80px of the bottom →  always SHOW
-  //   – any scroll motion idle for IDLE_HIDE_MS away from the bottom
-  //     anchor →  HIDE (reader has settled on a passage to read; the bar
-  //     is just chrome at that point)
+  //   – scroll DOWN (scrollTop ↑ toward bottom) → HIDE  (reading, the
+  //     bar is just chrome — give it up for more space)
+  //   – scroll UP   (scrollTop ↓ toward history) → SHOW  (navigating,
+  //     user wants controls back)
+  //   – at the top OR within 80px of the bottom → always SHOW
   //
   // Hysteresis: accumulate per-direction distance and only flip once a
   // minimum continuous scroll is reached. Resets the opposite accumulator
   // on every direction change so a hesitant nudge the other way doesn't
   // flap the bar. Bottom chrome (status bar + chat input) intentionally
   // stays pinned — same pattern as Telegram / WhatsApp / iMessage.
-  const IDLE_HIDE_MS = 1500
   const [titleVisible, setTitleVisible] = useState(true)
   useEffect(() => {
     if (!isMobile) {
@@ -111,31 +108,6 @@ export function ChatArea({
     let lastTop = el?.scrollTop ?? 0
     let state = createAutoHideState()
     let cleanup: (() => void) | undefined
-    let idleTimer: ReturnType<typeof setTimeout> | null = null
-
-    const clearIdle = () => {
-      if (idleTimer !== null) {
-        clearTimeout(idleTimer)
-        idleTimer = null
-      }
-    }
-
-    // After the user stops scrolling away from the live conversation,
-    // collapse the title so the passage they're reading isn't framed by
-    // chrome. Skipped when we're already at the top home anchor or near
-    // the bottom (live anchor) — those positions always show.
-    const armIdle = (sample: { scrollTop: number, scrollHeight: number, clientHeight: number }) => {
-      clearIdle()
-      const distanceFromBottom = sample.scrollHeight - sample.scrollTop - sample.clientHeight
-      const atTop = sample.scrollTop < 8
-      const atBottom = distanceFromBottom < DEFAULT_AUTO_HIDE_THRESHOLDS.bottomAnchor
-      if (atTop || atBottom) return
-      idleTimer = setTimeout(() => {
-        idleTimer = null
-        state = { ...state, visible: false, upAccum: 0, downAccum: 0 }
-        setTitleVisible(false)
-      }, IDLE_HIDE_MS)
-    }
 
     const onScroll = () => {
       if (!el) return
@@ -147,7 +119,6 @@ export function ChatArea({
       state = nextAutoHideState(state, lastTop, sample, DEFAULT_AUTO_HIDE_THRESHOLDS)
       lastTop = sample.scrollTop
       setTitleVisible(state.visible)
-      armIdle(sample)
     }
 
     const attach = () => {
@@ -157,7 +128,6 @@ export function ChatArea({
       el.addEventListener('scroll', onScroll, { passive: true })
       cleanup = () => {
         el?.removeEventListener('scroll', onScroll)
-        clearIdle()
       }
       return true
     }
@@ -170,7 +140,6 @@ export function ChatArea({
           const timeoutId = setTimeout(attach, 100)
           cleanup = () => {
             clearTimeout(timeoutId)
-            clearIdle()
           }
         }
       })
@@ -372,18 +341,42 @@ export function ChatArea({
             the TopBar ⊞ button (toggleMiniMatrix). */}
         {!isMobile ? <MiniMatrix /> : null}
 
-        {/* Shared chat body: messages + metadata bar + input */}
-        <ChatBody
+        {/* Shared chat body: messages + metadata bar + input.
+            Inner wrapper MUST be `flex flex-col` — ChatBody returns a fragment
+            of three siblings (messages, metadata bar, input) that rely on a
+            flex column parent so the messages region takes `flex-1` and the
+            input stays pinned at the bottom. Without `flex flex-col` here,
+            the messages region collapses to content height and the input is
+            clipped off-screen by the wrapper's overflow-hidden. */}
+        <div className="flex flex-1 overflow-hidden">
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <ChatBody
+              projectId={projectId}
+              issueId={issueId}
+              issue={issue}
+              showDiff={showDiff}
+              onToggleDiff={onToggleDiff}
+              scrollRef={scrollRef}
+              onAfterDelete={handleAfterDelete}
+              titleVisible={titleVisible}
+              searchOpen={searchOpen}
+              onCloseSearch={() => setSearchOpen(false)}
+            />
+          </div>
+          {/* Participant panel — desktop only */}
+          {!isMobile && (
+            <ParticipantPanel
+              projectId={projectId}
+              issueId={issueId}
+            />
+          )}
+        </div>
+
+        {/* Role creator modal */}
+        <RoleCreatorModal
           projectId={projectId}
-          issueId={issueId}
-          issue={issue}
-          showDiff={showDiff}
-          onToggleDiff={onToggleDiff}
-          scrollRef={scrollRef}
-          onAfterDelete={handleAfterDelete}
-          titleVisible={titleVisible}
-          searchOpen={searchOpen}
-          onCloseSearch={() => setSearchOpen(false)}
+          isOpen={showRoleCreator}
+          onClose={() => setShowRoleCreator(false)}
         />
       </div>
 

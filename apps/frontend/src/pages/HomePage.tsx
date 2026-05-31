@@ -28,7 +28,7 @@ import {
 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { AppLogo } from '@/components/AppLogo'
 import { AppSettingsDialog } from '@/components/AppSettingsDialog'
 import { CreateProjectDialog } from '@/components/CreateProjectDialog'
@@ -38,7 +38,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
-import { useArchivedProjects, useProjects, useSortProject, useUnarchiveProject } from '@/hooks/use-kanban'
+import { useArchivedProjects, useProjects, useSortProject, useUnarchiveProject, useWorkspaces } from '@/hooks/use-kanban'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { useProjectStats } from '@/hooks/use-project-stats'
 import { getProjectInitials } from '@/lib/format'
@@ -514,8 +514,10 @@ export default function HomePage() {
   const navigate = useNavigate()
   const { t } = useTranslation()
   const { data: projects, isLoading } = useProjects()
+  const { data: workspaces } = useWorkspaces()
   const [showCreate, setShowCreate] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
+  const [tab, setTab] = useState<'workspaces' | 'projects'>('workspaces')
   const isMobile = useIsMobile()
   const globalProjectPath = useViewModeStore(s => s.projectPath)
   const sortProject = useSortProject()
@@ -617,41 +619,94 @@ export default function HomePage() {
               )}
         </div>
 
-        {isLoading ?
-            (
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <Card key={i} className="bg-card/30 animate-pulse min-h-[140px]">
-                    <CardHeader>
-                      <div className="flex items-start gap-3">
-                        <div className="h-10 w-10 rounded-lg bg-muted" />
-                        <div className="flex-1 space-y-2">
-                          <div className="h-4 w-24 rounded bg-muted" />
-                          <div className="h-4 w-12 rounded bg-muted" />
-                        </div>
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="h-3 w-32 rounded bg-muted" />
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            ) :
-            (
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {projects?.map((project, index) => (
-                  <SortableProjectCard
-                    key={project.id}
-                    project={project}
-                    index={index}
-                    onClick={() => navigate(projectPath(project.alias))}
-                  />
-                ))}
-              </div>
-            )}
+        {/* Tab switcher */}
+        <div className="flex gap-1 mb-6 border-b">
+          <button
+            type="button"
+            onClick={() => setTab('workspaces')}
+            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+              tab === 'workspaces' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            Workspaces
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab('projects')}
+            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+              tab === 'projects' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            Projects
+          </button>
+        </div>
 
-        <ArchivedProjectsSection projectPath={projectPath} />
+        {tab === 'workspaces' && workspaces && workspaces.length > 0 && (
+          <section className="mb-6">
+            <div className="flex items-center justify-between mb-3">
+              <Link to="/workspace/new" className="text-sm text-blue-600 hover:text-blue-700">+ New Workspace</Link>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {workspaces.map(ws => (
+                <Link key={ws.id} to={`/workspace/${ws.id}`} className="p-4 border rounded-lg hover:shadow transition-shadow bg-white">
+                  <div className="font-medium text-gray-900">{ws.name}</div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    {ws.repos?.length || 0}
+                    {' repos · '}
+                    {ws.description || 'No description'}
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {tab === 'projects' && (
+          <>
+            <div className="flex items-center justify-between mb-3">
+              <Button variant="outline" size="sm" onClick={() => setShowCreate(true)}>
+                <Plus className="h-4 w-4" />
+                {t('project.newProject')}
+              </Button>
+            </div>
+
+            {isLoading ?
+                (
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {Array.from({ length: 6 }).map((_, i) => (
+                      <Card key={i} className="bg-card/30 animate-pulse min-h-[140px]">
+                        <CardHeader>
+                          <div className="flex items-start gap-3">
+                            <div className="h-10 w-10 rounded-lg bg-muted" />
+                            <div className="flex-1 space-y-2">
+                              <div className="h-4 w-24 rounded bg-muted" />
+                              <div className="h-4 w-12 rounded bg-muted" />
+                            </div>
+                          </div>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="h-3 w-32 rounded bg-muted" />
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                ) :
+                (
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {projects?.map((project, index) => (
+                      <SortableProjectCard
+                        key={project.id}
+                        project={project}
+                        index={index}
+                        onClick={() => navigate(projectPath(project.alias))}
+                      />
+                    ))}
+                  </div>
+                )}
+
+            <ArchivedProjectsSection projectPath={projectPath} />
+          </>
+        )}
       </section>
 
       <CreateProjectDialog open={showCreate} onOpenChange={setShowCreate} />

@@ -23,6 +23,7 @@ import type {
   WebhookDelivery,
   WebhookEventType,
   WhiteboardNode,
+  Workspace,
 } from '@/types/kanban'
 import { clearToken, getToken } from './auth'
 
@@ -95,6 +96,32 @@ export interface CronJobLogsResponse {
   logs: CronJobLog[]
   hasMore: boolean
   nextCursor: string | null
+}
+
+export interface Role {
+  id: string
+  projectId: string
+  name: string
+  displayName: string
+  description?: string
+  avatar?: string
+  type: 'internal' | 'external'
+  issueId?: string
+  endpoint?: string
+  protocol?: 'http' | 'mcp'
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface CreateRolePayload {
+  name: string
+  displayName: string
+  description?: string
+  avatar?: string
+  type: 'internal' | 'external'
+  issueId?: string
+  endpoint?: string
+  protocol?: 'http' | 'mcp'
 }
 
 function authHeaders(): Record<string, string> {
@@ -337,6 +364,15 @@ export const kanbanApi = {
   sortProject: (id: string, sortOrder: string) =>
     patch<null>('/api/projects/sort', { id, sortOrder }),
 
+  // Workspaces
+  getWorkspaces: () => get<Workspace[]>('/api/workspaces'),
+  getWorkspace: (id: string) => get<Workspace>(`/api/workspaces/${encodeURIComponent(id)}`),
+  createWorkspace: (data: { name: string, description?: string, repos: { url: string, defaultBranch: string, role: string }[] }) => post<Workspace>('/api/workspaces', data),
+  updateWorkspace: (id: string, data: { name?: string, description?: string }) => patch<Workspace>(`/api/workspaces/${encodeURIComponent(id)}`, data),
+  deleteWorkspace: (id: string) => del<{ id: string }>(`/api/workspaces/${encodeURIComponent(id)}`),
+  getWorkspaceProjects: (workspaceId: string) => get<Project[]>(`/api/workspaces/${encodeURIComponent(workspaceId)}/projects`),
+  getIssueTree: (projectId: string) => get<any[]>(`/api/projects/${encodeURIComponent(projectId)}/issues?tree=true`),
+
   // Worktrees
   getWorktrees: (projectId: string) =>
     get<Array<{ issueId: string, path: string, branch: string | null }>>(
@@ -503,6 +539,7 @@ export const kanbanApi = {
       issueId: string
       issueTitle: string
       projectAlias: string
+      projectName: string
       entryType: string
       content: string
       createdAt: string
@@ -661,6 +698,34 @@ export const kanbanApi = {
     get<IssueFilePatchResponse>(
       `/api/projects/${projectId}/issues/${issueId}/changes/file?path=${encodeURIComponent(path)}`,
     ),
+
+  // Role API
+  getRoles: (projectId: string) =>
+    get<Role[]>(`/api/projects/${projectId}/roles`),
+
+  createRole: (projectId: string, data: CreateRolePayload) =>
+    post<Role>(`/api/projects/${projectId}/roles`, data),
+
+  updateRole: (projectId: string, roleId: string, data: Partial<CreateRolePayload>) =>
+    patch<Role>(`/api/projects/${projectId}/roles/${roleId}`, data),
+
+  deleteRole: (projectId: string, roleId: string) =>
+    del<void>(`/api/projects/${projectId}/roles/${roleId}`),
+
+  invokeRole: (projectId: string, issueId: string, roleId: string, data: { roleName: string, message: string, context?: string }) =>
+    post<{ type: string, roleId: string, executionId?: string }>(`/api/projects/${projectId}/issues/${issueId}/roles/${roleId}/invoke`, data),
+
+  getIssueRoles: (projectId: string, issueId: string) =>
+    get<Role[]>(`/api/projects/${projectId}/issues/${issueId}/roles`),
+
+  assignRole: (projectId: string, issueId: string, roleId: string) =>
+    post<{ id: string }>(`/api/projects/${projectId}/issues/${issueId}/roles`, { roleId }),
+
+  removeRole: (projectId: string, issueId: string, roleId: string) =>
+    del<void>(`/api/projects/${projectId}/issues/${issueId}/roles/${roleId}`),
+
+  getIssueParticipants: (projectId: string, issueId: string) =>
+    get<{ humans: unknown[], roles: Role[] }>(`/api/projects/${projectId}/issues/${issueId}/participants`),
 
   // Engines
   getEngineAvailability: () => get<EngineDiscoveryResult>('/api/engines/available'),
@@ -838,6 +903,14 @@ export const kanbanApi = {
       checksumMatch: boolean | null
     }>('/api/settings/upgrade/download/status'),
   restartWithUpgrade: () => post<{ status: string }>('/api/settings/upgrade/restart', {}),
+  listLocalVersions: () =>
+    get<Array<{ version: string, isCurrent: boolean }>>(
+      '/api/settings/upgrade/local-versions',
+    ),
+  applyLocalVersion: (version: string) =>
+    post<{ status: string, version: string }>('/api/settings/upgrade/apply-local', {
+      version,
+    }),
 
   // File Browser
   listFiles: (root: string, path?: string, hideIgnored?: boolean) => {
