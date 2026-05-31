@@ -109,16 +109,41 @@ export function ChatArea({
     let state = createAutoHideState()
     let cleanup: (() => void) | undefined
 
+    // Toggling the bar swaps the chat content's top padding (44px ↔ 8px,
+    // see ChatBody), which animates over ~200ms and reflows scrollHeight.
+    // That reflow can nudge scrollTop and fire scroll events — which, left
+    // unguarded, the state machine reads as a real gesture and flips the bar
+    // straight back, flapping indefinitely. After each flip we suppress the
+    // handler until the transition settles and re-baseline lastTop so the
+    // self-induced delta is never counted.
+    let ignoring = false
+    let settleTimer: ReturnType<typeof setTimeout> | null = null
+
     const onScroll = () => {
       if (!el) return
+      if (ignoring) {
+        // Absorb the reflow our own toggle caused without changing state.
+        lastTop = el.scrollTop
+        return
+      }
       const sample = {
         scrollTop: el.scrollTop,
         scrollHeight: el.scrollHeight,
         clientHeight: el.clientHeight,
       }
+      const prevVisible = state.visible
       state = nextAutoHideState(state, lastTop, sample, DEFAULT_AUTO_HIDE_THRESHOLDS)
       lastTop = sample.scrollTop
-      setTitleVisible(state.visible)
+      if (state.visible !== prevVisible) {
+        setTitleVisible(state.visible)
+        ignoring = true
+        if (settleTimer) clearTimeout(settleTimer)
+        settleTimer = setTimeout(() => {
+          ignoring = false
+          settleTimer = null
+          if (el) lastTop = el.scrollTop
+        }, 280)
+      }
     }
 
     const attach = () => {
@@ -128,6 +153,7 @@ export function ChatArea({
       el.addEventListener('scroll', onScroll, { passive: true })
       cleanup = () => {
         el?.removeEventListener('scroll', onScroll)
+        if (settleTimer) clearTimeout(settleTimer)
       }
       return true
     }

@@ -880,7 +880,7 @@ export function ChatInput({
             }
             disabled={isDoneIssue}
             rows={1}
-            className="w-full bg-transparent text-base md:text-sm resize-none outline-none border-none shadow-none placeholder:text-muted-foreground/40 leading-relaxed focus-visible:ring-0 overflow-y-auto min-h-[36px] px-3 py-2 [field-sizing:fixed]"
+            className="w-full bg-transparent text-base md:text-sm resize-none outline-none border-none shadow-none placeholder:text-muted-foreground/40 leading-relaxed focus-visible:ring-0 overflow-y-auto min-h-[36px] px-3 py-2 field-sizing-fixed"
           />
           {mobileCollapsed ? (
             <div data-testid="mobile-collapsed-actions" className="flex items-center gap-0.5 shrink-0 mb-1">
