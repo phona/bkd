@@ -661,21 +661,39 @@ async function main() {
 
   console.log(`[launcher] Starting version ${version}`)
 
-  // 6. Init engine framework (migrations, reconciliation, cron, etc.)
-  const stops = initLauncher()
-
   // 7. Load Hono app
   const publicDir = resolve(appDir, 'public')
   const indexHtml = resolve(publicDir, 'index.html')
   let currentServerPath = serverPath
   let currentApp: any = null
 
-  async function loadApp(sp: string): Promise<any> {
-    const mod = await import(sp)
+  async function loadModule(sp: string): Promise<any> {
+    return import(sp)
+  }
+  function appFromMod(mod: any): any {
     return typeof mod.createApp === 'function' ? mod.createApp() : mod.default
   }
+  async function loadApp(sp: string): Promise<any> {
+    return appFromMod(await loadModule(sp))
+  }
 
-  currentApp = await loadApp(currentServerPath)
+  const bundleMod = await loadModule(currentServerPath)
+  currentApp = appFromMod(bundleMod)
+
+  // 6. Init engine framework (migrations, reconciliation, cron, etc.) on the
+  // SAME issueEngine instance the bundle uses. The launcher binary and the
+  // dynamically-imported bundle are separate module graphs, each with its own
+  // issueEngine singleton. Running the launcher's own initLauncher() would start
+  // the reconciler/cron on an engine that NEVER executes issues (its
+  // ProcessManager stays empty), so it would mark every actively-running issue
+  // as failed. Prefer the bundle's initLauncher so lifecycle runs on the engine
+  // that actually runs issues. Fall back to the launcher-local copy only for old
+  // bundles that don't export it.
+  const initFromBundle = typeof bundleMod.initLauncher === 'function'
+  if (!initFromBundle) {
+    console.warn('[launcher] bundle has no initLauncher export — using launcher-local lifecycle (reconciler may mis-reconcile)')
+  }
+  const stops = initFromBundle ? bundleMod.initLauncher() : initLauncher()
 
   // 8. HTTP server
   const listenHost = process.env.HOST ?? flags.host
@@ -720,8 +738,12 @@ async function main() {
 
   console.log(`[launcher] Listening on http://${listenHost}:${http.port} (version ${version})`)
 
-  // 9. Register upgrade callback (needs http reference)
-  registerUpgradeShutdown(stops, http)
+  // 9. Register upgrade callback (needs http reference). Use the bundle's copy
+  // so drain/cancelAll on shutdown also operate on the bundle's engine.
+  const regUpgradeShutdown = typeof bundleMod.registerUpgradeShutdown === 'function'
+    ? bundleMod.registerUpgradeShutdown
+    : registerUpgradeShutdown
+  regUpgradeShutdown(stops, http)
 
   // 10. Hot-reload hook — called by upgrade/apply.ts
   ;(globalThis as any).hotReloadApp = async (newVersionDir: string) => {
