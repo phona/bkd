@@ -118,3 +118,19 @@ export async function isRoleAssigned(issueId: string, roleName: string): Promise
 
   return !!assignment
 }
+
+/**
+ * True if the issue has at least one (non-deleted) assigned role — i.e. it is a
+ * Command Room chatroom. Normal issues have no roles and must NOT route through
+ * the host/role invocation path: doing so runs a second executeIssue on the same
+ * issue that `followUpIssue` already started, which trips ensureNoActiveProcess
+ * (logged as host_execution_failed) and makes the issue bounce working↔review.
+ */
+export async function issueHasAssignedRole(issueId: string): Promise<boolean> {
+  const [assignment] = await db
+    .select()
+    .from(issueRoles)
+    .where(and(eq(issueRoles.issueId, issueId), eq(issueRoles.isDeleted, 0)))
+    .limit(1)
+  return !!assignment
+}
