@@ -25,6 +25,15 @@ function readActiveVersion(): string | null {
 
 let registeredShutdownFn: (() => Promise<void>) | null = null
 
+/**
+ * Whether this process should self-fork a replacement when applying an upgrade.
+ * False under an external supervisor (BKD_SUPERVISED=1), which owns restarts —
+ * self-forking there races the supervisor for the port and orphans a launcher.
+ */
+export function shouldSelfRespawnOnUpgrade(): boolean {
+  return process.env.BKD_SUPERVISED !== '1'
+}
+
 /** Register a callback that performs graceful shutdown (stop server, cancel engines, etc.) */
 export function registerShutdownForUpgrade(fn: () => Promise<void>): void {
   registeredShutdownFn = fn
@@ -100,6 +109,16 @@ async function shutdownAndRespawn(target: string): Promise<void> {
     await registeredShutdownFn()
   } else {
     logger.warn('upgrade_no_shutdown_fn_registered')
+  }
+
+  // Under an external supervisor (bkd-supervisor.sh sets BKD_SUPERVISED=1) the
+  // supervisor's while-loop relaunches the launcher on exit. Self-forking a
+  // replacement here would race it for the port / pid-lock and leave an
+  // orphaned launcher (the bug that crash-looped 0.0.181). Just exit and let
+  // the supervisor relaunch a single clean instance.
+  if (!shouldSelfRespawnOnUpgrade()) {
+    logger.info('upgrade_shutting_down_for_supervisor_restart')
+    process.exit(0)
   }
 
   // Write upgrade token so the new process can take over the PID lock.
