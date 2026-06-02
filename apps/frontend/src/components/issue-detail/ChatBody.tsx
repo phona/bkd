@@ -28,6 +28,7 @@ import { useChatFilterStore } from '@/stores/chat-filter-store'
 import { useScrollPositionStore } from '@/stores/scroll-position-store'
 import type { Issue, NormalizedLogEntry } from '@/types/kanban'
 import { ChatInput } from './ChatInput'
+import { markProgrammaticScroll } from './scroll-coordination'
 import { ChatSearchBar } from './ChatSearchBar'
 import { CurrentPromptHover } from './CurrentPromptHover'
 import { IssueDetail } from './IssueDetail'
@@ -326,6 +327,7 @@ export function ChatBody({
       timer = setTimeout(() => {
         const delta = el.clientHeight - stableHeight
         if (delta !== 0 && !isLoadingOlderRef.current && el.scrollTop > 0) {
+          markProgrammaticScroll(el)
           el.scrollTop = Math.max(0, el.scrollTop - delta)
         }
         stableHeight = el.clientHeight
@@ -392,17 +394,24 @@ export function ChatBody({
     }
     const el = scrollRef.current
     if (!el) return
+    markProgrammaticScroll(el)
     el.scrollTop = savedScroll
     restoredForIssueRef.current = issueId
   }, [issueId, logs.length, savedScroll, scrollRef])
 
   const scrollToTop = useCallback(() => {
-    scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
+    const el = scrollRef.current
+    if (!el) return
+    // Smooth scroll emits events across the whole animation — mark generously.
+    markProgrammaticScroll(el, 800)
+    el.scrollTo({ top: 0, behavior: 'smooth' })
   }, [scrollRef])
 
   const scrollToBottom = useCallback(() => {
     const el = scrollRef.current
-    if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+    if (!el) return
+    markProgrammaticScroll(el, 800)
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
   }, [scrollRef])
 
   return (

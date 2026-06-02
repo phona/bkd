@@ -13,6 +13,7 @@ import { MiniMatrix } from '@/components/cockpit/MiniMatrix'
 import { ChatBody } from './ChatBody'
 import { ParticipantPanel } from './ParticipantPanel'
 import { RoleCreatorModal } from './RoleCreatorModal'
+import { isProgrammaticScroll } from './scroll-coordination'
 import {
   createAutoHideState,
   DEFAULT_AUTO_HIDE_THRESHOLDS,
@@ -106,43 +107,40 @@ export function ChatArea({
 
     let el = scrollRef.current
     let lastTop = el?.scrollTop ?? 0
+    let lastHeight = el?.scrollHeight ?? 0
+    let lastClientHeight = el?.clientHeight ?? 0
     let state = createAutoHideState()
     let cleanup: (() => void) | undefined
 
-    // Toggling the bar swaps the chat content's top padding (44px ↔ 8px,
-    // see ChatBody), which animates over ~200ms and reflows scrollHeight.
-    // That reflow can nudge scrollTop and fire scroll events — which, left
-    // unguarded, the state machine reads as a real gesture and flips the bar
-    // straight back, flapping indefinitely. After each flip we suppress the
-    // handler until the transition settles and re-baseline lastTop so the
-    // self-induced delta is never counted.
-    let ignoring = false
-    let settleTimer: ReturnType<typeof setTimeout> | null = null
-
+    // The bar must flip only on genuine user gestures. Two self-induced scroll
+    // sources would otherwise feed back and flap it indefinitely:
+    //   1. PROGRAMMATIC scrolls — chiefly ChatBody's ResizeObserver
+    //      counter-scroll (~80px) that compensates when toggling the bar
+    //      collapses the metadata bar. These are stamped via
+    //      `markProgrammaticScroll`; skip them.
+    //   2. REFLOW scrolls — the content's top-padding (44px↔8px) and metadata
+    //      bar animate on a flip, clamping scrollTop and firing scroll events.
+    //      These coincide with a scrollHeight/clientHeight change, so a delta
+    //      while dimensions are unstable is reflow, not a gesture — re-baseline.
     const onScroll = () => {
       if (!el) return
-      if (ignoring) {
-        // Absorb the reflow our own toggle caused without changing state.
-        lastTop = el.scrollTop
-        return
-      }
       const sample = {
         scrollTop: el.scrollTop,
         scrollHeight: el.scrollHeight,
         clientHeight: el.clientHeight,
+      }
+      const reflow = sample.scrollHeight !== lastHeight || sample.clientHeight !== lastClientHeight
+      lastHeight = sample.scrollHeight
+      lastClientHeight = sample.clientHeight
+      if (isProgrammaticScroll(el) || reflow) {
+        lastTop = sample.scrollTop
+        return
       }
       const prevVisible = state.visible
       state = nextAutoHideState(state, lastTop, sample, DEFAULT_AUTO_HIDE_THRESHOLDS)
       lastTop = sample.scrollTop
       if (state.visible !== prevVisible) {
         setTitleVisible(state.visible)
-        ignoring = true
-        if (settleTimer) clearTimeout(settleTimer)
-        settleTimer = setTimeout(() => {
-          ignoring = false
-          settleTimer = null
-          if (el) lastTop = el.scrollTop
-        }, 280)
       }
     }
 
@@ -150,10 +148,11 @@ export function ChatArea({
       el = scrollRef.current
       if (!el) return false
       lastTop = el.scrollTop
+      lastHeight = el.scrollHeight
+      lastClientHeight = el.clientHeight
       el.addEventListener('scroll', onScroll, { passive: true })
       cleanup = () => {
         el?.removeEventListener('scroll', onScroll)
-        if (settleTimer) clearTimeout(settleTimer)
       }
       return true
     }
