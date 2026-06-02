@@ -17,7 +17,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import type { NormalizedLogEntry } from '@bkd/shared'
 import { handleStderrEntry, handleStreamEntry } from '@/engines/issue/streams/handlers'
 import { TimelineConverter } from '@/engines/timeline-converter'
-import { appEvents } from '@/events'
+import { getBus } from '@/events'
 
 const ISSUE_ID = 'iss_trim_test'
 const EXEC_ID = 'exec_trim_test'
@@ -32,7 +32,7 @@ let unsubscribe: () => void
 
 beforeEach(() => {
   captured = []
-  unsubscribe = appEvents.on('log', (data) => {
+  unsubscribe = getBus().on('log', (data) => {
     if (data.issueId !== ISSUE_ID) return
     captured.push({ entry: data.entry, streaming: data.streaming })
   })

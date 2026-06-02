@@ -4,7 +4,7 @@ import { startCockpitDigestBridge } from '@/cockpit/digest-bridge'
 import { listMessages } from '@/cockpit/timeline'
 import { db } from '@/db'
 import { cockpitTimelineMessages, issueLogs, issues as issuesTable } from '@/db/schema'
-import { appEvents } from '@/events'
+import { getBus } from '@/events'
 import { createTestProject, expectSuccess, post, waitFor } from './helpers'
 import './setup'
 
@@ -55,7 +55,7 @@ beforeEach(async () => {
 describe('digest-bridge — issue-updated wiring', () => {
   test('engine-driven review transition posts a suggest_merge', async () => {
     const issueId = await makeReviewIssue()
-    appEvents.emit('issue-updated', {
+    getBus().emit('issue-updated', {
       issueId,
       changes: { statusId: 'review' },
       source: 'engine',
@@ -67,7 +67,7 @@ describe('digest-bridge — issue-updated wiring', () => {
 
   test('user-driven review transition is ignored (no row)', async () => {
     const issueId = await makeReviewIssue()
-    appEvents.emit('issue-updated', {
+    getBus().emit('issue-updated', {
       issueId,
       changes: { statusId: 'review' },
       source: 'user',
@@ -79,7 +79,7 @@ describe('digest-bridge — issue-updated wiring', () => {
 
   test('transition out of review supersedes an open row', async () => {
     const issueId = await makeReviewIssue()
-    appEvents.emit('issue-updated', {
+    getBus().emit('issue-updated', {
       issueId,
       changes: { statusId: 'review' },
       source: 'engine',
@@ -87,7 +87,7 @@ describe('digest-bridge — issue-updated wiring', () => {
     await waitFor(async () => (await openMessagesFor(issueId)).length > 0, 3000)
 
     // Engine moves it back to working (e.g. restart) → row must clear.
-    appEvents.emit('issue-updated', {
+    getBus().emit('issue-updated', {
       issueId,
       changes: { statusId: 'working' },
       source: 'engine',
@@ -101,7 +101,7 @@ describe('digest-bridge — done wiring', () => {
   test('three failed runs surface an alert_repeat_fail', async () => {
     const issueId = await makeReviewIssue(false)
     for (let i = 0; i < 3; i++) {
-      appEvents.emit('done', {
+      getBus().emit('done', {
         issueId,
         executionId: `exec-${i}`,
         finalStatus: 'failed',
@@ -118,7 +118,7 @@ describe('digest-bridge — done wiring', () => {
 
   test('a single failure does not trip the alert', async () => {
     const issueId = await makeReviewIssue(false)
-    appEvents.emit('done', { issueId, executionId: 'x', finalStatus: 'failed' })
+    getBus().emit('done', { issueId, executionId: 'x', finalStatus: 'failed' })
     await Bun.sleep(300)
     const msgs = await openMessagesFor(issueId)
     expect(msgs.some(m => m.kind === 'alert_repeat_fail')).toBe(false)
@@ -128,7 +128,7 @@ describe('digest-bridge — done wiring', () => {
 describe('digest-bridge — changes-summary wiring', () => {
   test('wide diff on a review issue posts alert_off_track', async () => {
     const issueId = await makeReviewIssue()
-    appEvents.emit('changes-summary', {
+    getBus().emit('changes-summary', {
       issueId,
       fileCount: 25,
       additions: 400,

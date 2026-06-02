@@ -1,5 +1,7 @@
 import { IssueEngine } from '@/engines/issue/engine'
 import { setEngine } from '@/engines/issue/engine-ref'
+import { setBus } from '@/events/bus-ref'
+import { AppEventBus } from '@/events/event-bus'
 import type { LauncherStops } from '@/launcher-init'
 import { initEngineLifecycle, initProcessGuards } from '@/launcher-init'
 
@@ -13,6 +15,8 @@ export interface Core { stops: LauncherStops }
  */
 export function createCore(): Core {
   initProcessGuards()
+  // Bus before the engine: engine construction may emit events.
+  setBus(new AppEventBus())
   setEngine(new IssueEngine())
   const stops = initEngineLifecycle()
   return { stops }

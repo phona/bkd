@@ -8,7 +8,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import app from '@/app'
-import { appEvents } from '@/events'
+import { getBus } from '@/events'
 import './setup'
 
 function entry(content: string) {
@@ -42,7 +42,7 @@ describe('SSE HTTP streaming — no buffering', () => {
     const decoder = new TextDecoder()
 
     // Emit first event
-    appEvents.emit('timeline-entry', entry('chunk one'))
+    getBus().emit('timeline-entry', entry('chunk one'))
 
     // Read first chunk — must be available immediately
     const r1 = await reader.read()
@@ -50,7 +50,7 @@ describe('SSE HTTP streaming — no buffering', () => {
     expect(decoder.decode(r1.value)).toContain('chunk one')
 
     // Emit second event
-    appEvents.emit('timeline-entry', entry('chunk two'))
+    getBus().emit('timeline-entry', entry('chunk two'))
 
     // Read second chunk — must be available immediately
     const r2 = await reader.read()
@@ -66,7 +66,7 @@ describe('SSE HTTP streaming — no buffering', () => {
     const decoder = new TextDecoder()
 
     // Heartbeat interval is 15s in prod but we can emit a manual event
-    appEvents.emit('timeline-entry', entry('heartbeat probe'))
+    getBus().emit('timeline-entry', entry('heartbeat probe'))
 
     const { value } = await reader.read()
     expect(decoder.decode(value)).toContain('heartbeat probe')
