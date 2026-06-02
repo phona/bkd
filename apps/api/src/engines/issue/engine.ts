@@ -1,8 +1,9 @@
 import { ProcessManager } from '@/engines/process-manager'
 import type { EngineAttachment, EngineType, PermissionPolicy } from '@/engines/types'
 import { logger } from '@/logger'
-import { AUTO_CLEANUP_DELAY_MS, GC_INTERVAL_MS, MAX_CONCURRENT_EXECUTIONS } from './constants'
+import { AUTO_CLEANUP_DELAY_MS, GC_INTERVAL_MS } from './constants'
 import type { EngineContext } from './context'
+import { readInitialMaxConcurrent } from './max-concurrent'
 import { gcSweep } from './gc'
 import {
   cancelIssue,
@@ -36,7 +37,9 @@ export class IssueEngine {
 
   constructor() {
     const pm = new ProcessManager<ManagedProcess>('issue', {
-      maxConcurrent: MAX_CONCURRENT_EXECUTIONS,
+      // Read the persisted limit synchronously so the gate is correct from the
+      // first execution — no window at the default before initMaxConcurrent().
+      maxConcurrent: readInitialMaxConcurrent(),
       autoCleanupDelayMs: AUTO_CLEANUP_DELAY_MS,
       gcIntervalMs: 0, // IssueEngine keeps its own domain GC
       killTimeoutMs: 30_000,
