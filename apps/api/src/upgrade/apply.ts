@@ -8,6 +8,18 @@ import { isPathWithinDir, parseVersionFromFileName, VALID_VERSION_RE } from '@/u
 import { APP_BASE, isPackageMode, UPDATES_DIR, VERSION_FILE } from './constants'
 import { DRAIN_TIMEOUT_MS, setDraining } from './drain'
 import { getDownloadStatus } from './download'
+import { decideUpgradeStrategy } from './strategy'
+
+/** Read the currently-active version from VERSION_FILE, or null if unreadable. */
+function readActiveVersion(): string | null {
+  if (!existsSync(VERSION_FILE)) return null
+  try {
+    const data = JSON.parse(readFileSync(VERSION_FILE, 'utf8')) as { version?: unknown }
+    return typeof data.version === 'string' ? data.version : null
+  } catch {
+    return null
+  }
+}
 
 // --- Shutdown registration ---
 
@@ -249,6 +261,14 @@ export async function applyLocalVersion(version: string): Promise<void> {
       throw new Error(`Version ${version} is not installed (missing server.js)`)
     }
 
+    // Decide hot-reload vs restart BEFORE overwriting the version pointer, so we
+    // can compare the new bundle against the currently-active one. New DB
+    // migrations or engine-core changes force a graceful-drain restart; only
+    // route/frontend/API-only changes are hot-reloaded.
+    const currentVersion = readActiveVersion()
+    const currentVersionDir = currentVersion ? resolve(APP_BASE, `v${currentVersion}`) : null
+    const strategy = decideUpgradeStrategy(currentVersionDir, versionDir)
+
     writeFileSync(
       VERSION_FILE,
       JSON.stringify({ version, updatedAt: new Date().toISOString() }),
@@ -258,11 +278,12 @@ export async function applyLocalVersion(version: string): Promise<void> {
     const hotReload = (globalThis as any).hotReloadApp as
       ((versionDir: string) => Promise<void>) | undefined
 
-    if (typeof hotReload === 'function') {
+    if (strategy.hotReloadable && typeof hotReload === 'function') {
       await hotReload(versionDir)
-      logger.info({ version }, 'upgrade_hot_reloaded')
+      logger.info({ version, reason: strategy.reason }, 'upgrade_hot_reloaded')
     } else {
-      logger.warn('upgrade_hot_reload_unavailable_falling_back_to_restart')
+      const reason = strategy.hotReloadable ? 'hot-reload hook unavailable' : strategy.reason
+      logger.info({ version, reason }, 'upgrade_restart_required')
       await shutdownAndRespawn(process.execPath)
     }
   } finally {
