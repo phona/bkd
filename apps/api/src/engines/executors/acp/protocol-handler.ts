@@ -285,6 +285,21 @@ export class AcpProtocolHandler {
     try {
       const result = await this.runPromptWithTimeout(contentBlocks)
 
+      // Ordering guard: the ACP SDK's read loop reads stream messages in order
+      // but dispatches them via a non-awaited async `#processMessage`. The
+      // notification path (`session/update`) goes through several awaits (zod
+      // validation + async handler) before our `sessionUpdate` emit, while the
+      // response path (`session/prompt` result) resolves synchronously. So when
+      // the agent sends `[…, session/update(final chunk), prompt-response]`, the
+      // prompt promise can resolve — and we'd emit `acp-prompt-result` — before
+      // the already-read final chunk's emit runs. The normalizer then flushes
+      // the assistant message WITHOUT its tail, and the late chunk bleeds into
+      // the next turn's buffer (observed: truncated reply + cross-turn
+      // contamination). The final chunk is already read from the stream, so a
+      // single macrotask hop lets its pending microtask chain drain and emit
+      // before we mark the turn complete.
+      await new Promise<void>(resolve => setTimeout(resolve, 0))
+
       this.sink.emit({
         type: 'acp-prompt-result',
         timestamp: new Date().toISOString(),
