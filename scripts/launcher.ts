@@ -673,9 +673,6 @@ async function main() {
   function appFromMod(mod: any): any {
     return typeof mod.createApp === 'function' ? mod.createApp() : mod.default
   }
-  async function loadApp(sp: string): Promise<any> {
-    return appFromMod(await loadModule(sp))
-  }
 
   const bundleMod = await loadModule(currentServerPath)
   currentApp = appFromMod(bundleMod)
@@ -694,8 +691,16 @@ async function main() {
   // Fall back to the bundle's initLauncher (older bundles), then the
   // launcher-local copy (last resort). createCore() must be called exactly once.
   let stops
+  // The persistent engine + bus from the FIRST createCore() never change across
+  // route hot-reloads. Capture them so hotReloadApp can inject them into a new
+  // bundle's (fresh, empty) accessor holders before serving its routes.
+  let persistentEngine: any
+  let persistentBus: any
   if (typeof bundleMod.createCore === 'function') {
-    stops = bundleMod.createCore().stops
+    const core = bundleMod.createCore()
+    stops = core.stops
+    persistentEngine = core.engine
+    persistentBus = core.events
   } else if (typeof bundleMod.initLauncher === 'function') {
     console.warn('[launcher] bundle has no createCore export — falling back to initLauncher')
     stops = bundleMod.initLauncher()
@@ -758,10 +763,27 @@ async function main() {
   ;(globalThis as any).hotReloadApp = async (newVersionDir: string) => {
     const newPath = resolve(newVersionDir, 'server.js')
     if (!existsSync(newPath)) throw new Error(`server.js not found: ${newPath}`)
-    delete (Bun as any).importCache?.[currentServerPath]
-    currentApp = await loadApp(newPath)
-    currentServerPath = newPath
-    console.log(`[launcher] Hot-reloaded app from ${newVersionDir}`)
+    try {
+      const m = await loadModule(newPath)
+      if (typeof m.createApp !== 'function') throw new Error('new bundle has no createApp')
+      // Inject the PERSISTENT engine + bus into the new bundle's accessors so its
+      // routes' getEngine()/getBus() resolve to the SAME instances the core owns —
+      // engine, ProcessManager, in-flight subprocesses, reconciler, and SSE bus all
+      // persist; only the route object is swapped. DO NOT call createCore again.
+      if (persistentEngine && typeof m.setEngine === 'function') m.setEngine(persistentEngine)
+      if (persistentBus && typeof m.setBus === 'function') m.setBus(persistentBus)
+      currentApp = m.createApp()
+      currentServerPath = newPath
+      console.log(`[launcher] Hot-reloaded routes from ${newVersionDir} (engine + bus preserved)`)
+    } catch (err) {
+      console.error('[launcher] Hot-reload failed, falling back to drain+restart:', err)
+      const apply = await import('../apps/api/src/upgrade/apply')
+      if (typeof (apply as any).shutdownAndRespawn === 'function') {
+        await (apply as any).shutdownAndRespawn(process.execPath)
+      } else {
+        process.exit(1) // supervisor restarts → clean boot of the new version
+      }
+    }
   }
 }
 
