@@ -2,7 +2,7 @@ import { and, eq, max } from 'drizzle-orm'
 import { customAlphabet } from 'nanoid'
 import { db } from '@/db'
 import { issues as issuesTable } from '@/db/schema'
-import { appEvents } from '@/events'
+import { getBus } from '@/events'
 import { createEngineContext } from '@/engines/issue/context'
 import { followUpIssue } from '@/engines/issue/orchestration/follow-up'
 
@@ -132,7 +132,7 @@ export async function bkdNotifyRoom(params: {
   roomType: string
   message: string
 }): Promise<ToolText> {
-  appEvents.emit('room:notify', {
+  getBus().emit('room:notify', {
     roomType: params.roomType,
     message: params.message,
     timestamp: Date.now(),

@@ -1,7 +1,7 @@
 import type { AppEventMap } from '@bkd/shared'
 import { isVisible } from '@/engines/issue/utils/visibility'
 import { liveConverter } from '@/engines/timeline-converter'
-import { appEvents } from '@/events'
+import { getBus } from '@/events'
 import type { EngineContext } from '../context'
 
 /**
@@ -50,7 +50,7 @@ export function registerTimelineEmitStage(
 
       const produced = liveConverter.ingest(data.issueId, data.entry)
       for (const e of produced) {
-        appEvents.emit('timeline-entry', { issueId: data.issueId, entry: e })
+        getBus().emit('timeline-entry', { issueId: data.issueId, entry: e })
       }
     },
     { order: 90 },
@@ -65,7 +65,7 @@ export function registerTimelineEmitStage(
 export function flushTimelineConverter(issueId: string): void {
   const tail = liveConverter.flush(issueId)
   for (const e of tail) {
-    appEvents.emit('timeline-entry', { issueId, entry: e })
+    getBus().emit('timeline-entry', { issueId, entry: e })
   }
   liveConverter.reset(issueId)
 }

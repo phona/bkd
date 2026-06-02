@@ -8,7 +8,7 @@ import {
   ensureWorktreeAutoCleanupDefault,
 } from '@/db/helpers'
 import { issues as issuesTable, projects as projectsTable } from '@/db/schema'
-import { appEvents } from '@/events'
+import { getBus } from '@/events'
 import { emitIssueUpdated } from '@/events/issue-events'
 import { logger } from '@/logger'
 import { getEngine } from './issue'
@@ -238,7 +238,7 @@ export function stopPeriodicReconciliation(): void {
  * Returns an unsubscribe function to remove the event listener.
  */
 export function registerSettledReconciliation(): () => void {
-  const unsubscribe = appEvents.on('done', () => {
+  const unsubscribe = getBus().on('done', () => {
     // Run reconciliation after a short delay to allow the engine's own
     // autoMoveToReview to complete first. If it succeeded, the reconciler
     // will simply find zero stale issues.

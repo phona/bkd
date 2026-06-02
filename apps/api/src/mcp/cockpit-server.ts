@@ -1,6 +1,6 @@
 import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk'
 import * as z from 'zod'
-import { appEvents } from '@/events'
+import { getBus } from '@/events'
 import { proposalStore } from '@/cockpit/proposals'
 import type { CockpitProposalType } from '@/cockpit/proposals'
 import {
@@ -74,7 +74,7 @@ export function getCockpitMcpServer(): ReturnType<typeof createSdkMcpServer> {
         },
         async ({ type, summary, params }) => {
           const p = proposalStore.propose(type as CockpitProposalType, params as never, summary)
-          appEvents.emit('cockpit-proposal', { proposalId: p.id, status: 'pending' })
+          getBus().emit('cockpit-proposal', { proposalId: p.id, status: 'pending' })
           return {
             content: [{
               type: 'text' as const,

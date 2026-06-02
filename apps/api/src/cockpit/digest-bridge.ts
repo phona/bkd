@@ -1,4 +1,4 @@
-import { appEvents } from '@/events'
+import { getBus } from '@/events'
 import { logger } from '@/logger'
 import {
   classifyIssue,
@@ -46,7 +46,8 @@ const STALE_IDLE_THRESHOLD_MIN = 15
  * process restarts.
  */
 export function startCockpitDigestBridge(): () => void {
-  const unsubIssueUpdated = appEvents.on('issue-updated', (data) => {
+  const bus = getBus()
+  const unsubIssueUpdated = bus.on('issue-updated', (data) => {
     const next = data.changes?.statusId
     // Only react when the issue *just transitioned into* review, and only
     // when an engine drove the transition (manual user flips are noise).
@@ -70,7 +71,7 @@ export function startCockpitDigestBridge(): () => void {
       })
   })
 
-  const unsubChanges = appEvents.on('changes-summary', (data) => {
+  const unsubChanges = bus.on('changes-summary', (data) => {
     void classifyIssue(data.issueId, data, { trigger: 'changes-summary' })
       .then((res) => {
         if (res) return appendAndMaybeEnrich(res.message)
@@ -82,7 +83,7 @@ export function startCockpitDigestBridge(): () => void {
 
   // Track per-issue failure runs. A successful run resets the counter
   // so a single retry doesn't keep the alert sticky.
-  const unsubDone = appEvents.on('done', (data) => {
+  const unsubDone = bus.on('done', (data) => {
     if (data.finalStatus === 'completed') {
       clearFailures(data.issueId)
       return

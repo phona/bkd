@@ -1,7 +1,7 @@
 import { createOpenAPIRouter } from '@/openapi/hono'
 import { subscribeTimeline } from '@/cockpit/timeline'
 import { isVisible } from '@/engines/issue/utils/visibility'
-import { appEvents } from '@/events'
+import { getBus } from '@/events'
 import { logger } from '@/logger'
 
 const TERMINAL = new Set(['completed', 'failed', 'cancelled'])
@@ -43,24 +43,25 @@ events.get('/', (c) => {
       // Subscribe to 'timeline-entry' — already converted by the pipeline
       // stage at order 90, exactly once per emit regardless of how many
       // SSE clients are connected. We just forward the wire.
-      const unsubLog = appEvents.on(
+      const bus = getBus()
+      const unsubLog = bus.on(
         'timeline-entry',
         (data) => {
           writeEvent('log', { issueId: data.issueId, entry: data.entry })
         },
       )
 
-      const unsubLogUpdated = appEvents.on('log-updated', (data) => {
+      const unsubLogUpdated = bus.on('log-updated', (data) => {
         if (!isVisible(data.entry)) return
         writeEvent('log-updated', data)
       })
 
-      const unsubLogRemoved = appEvents.on('log-removed', (data) => {
+      const unsubLogRemoved = bus.on('log-removed', (data) => {
         writeEvent('log-removed', data)
       })
 
       // Non-terminal state changes
-      const unsubState = appEvents.on('state', (data) => {
+      const unsubState = bus.on('state', (data) => {
         if (TERMINAL.has(data.state)) return
         writeEvent('state', {
           issueId: data.issueId,
@@ -70,7 +71,7 @@ events.get('/', (c) => {
       })
 
       // Terminal state
-      const unsubDone = appEvents.on('done', (data) => {
+      const unsubDone = bus.on('done', (data) => {
         writeEvent('state', {
           issueId: data.issueId,
           executionId: data.executionId,
@@ -83,19 +84,19 @@ events.get('/', (c) => {
         })
       })
 
-      const unsubIssueUpdated = appEvents.on('issue-updated', (data) => {
+      const unsubIssueUpdated = bus.on('issue-updated', (data) => {
         writeEvent('issue-updated', data)
       })
 
-      const unsubChangesSummary = appEvents.on('changes-summary', (data) => {
+      const unsubChangesSummary = bus.on('changes-summary', (data) => {
         writeEvent('changes-summary', data)
       })
 
-      const unsubCockpitProposal = appEvents.on('cockpit-proposal', (data) => {
+      const unsubCockpitProposal = bus.on('cockpit-proposal', (data) => {
         writeEvent('cockpit-proposal', data)
       })
 
-      const unsubCockpitReset = appEvents.on('cockpit-reset', (data) => {
+      const unsubCockpitReset = bus.on('cockpit-reset', (data) => {
         writeEvent('cockpit-reset', data)
       })
 

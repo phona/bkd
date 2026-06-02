@@ -4,7 +4,7 @@ import { db } from '@/db'
 import { getAppSetting } from '@/db/helpers'
 import { issueLogs, issues as issuesTable } from '@/db/schema'
 import { getEngine } from '@/engines/issue/engine-ref'
-import { appEvents } from '@/events'
+import { getBus } from '@/events'
 import { logger } from '@/logger'
 import { ROOT_DIR } from '@/root'
 import { ensureCockpitProject, ensureSecretaryIssue } from '@/routes/cockpit/ensure-singleton'
@@ -309,7 +309,7 @@ function waitForDone(
       resolve(status)
     }
     timer = setTimeout(finish, timeoutMs, 'timeout')
-    unsub = appEvents.on('done', (d) => {
+    unsub = getBus().on('done', (d) => {
       if (d.issueId === issueId) finish(d.finalStatus)
     })
   })
