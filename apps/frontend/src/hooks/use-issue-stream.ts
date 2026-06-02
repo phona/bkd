@@ -113,6 +113,13 @@ function toTimelineEntry(entry: NormalizedLogEntry): TimelineEntry {
   } as TimelineEntry
 }
 
+// Initial history window. The server default page size (100) is heavy to
+// transfer + render on mobile (Shiki/markdown/tool cards) and shows as a long
+// blank wait when switching issues. We fetch a smaller first page for fast
+// first paint; SessionMessages' top-sentinel IntersectionObserver auto-loads
+// older pages (server default size) as the user scrolls up.
+const INITIAL_LOG_WINDOW = 40
+
 // ---- LRU cache ----
 const LOGS_CACHE_MAX = 20
 const logsCache = new Map<string, TimelineEntry[]>()
@@ -530,7 +537,10 @@ export function useIssueStream({
     let cancelled = false
 
     kanbanApi
-      .getIssueLogs(projectId, issueId, typesFilter ? { types: typesFilter } : undefined)
+      .getIssueLogs(projectId, issueId, {
+        limit: INITIAL_LOG_WINDOW,
+        ...(typesFilter ? { types: typesFilter } : {}),
+      })
       .then((data) => {
         if (cancelled || streamScopeRef.current !== scope) return
         // Normalize so every entry has a `sequence` (no-op for backend output;
