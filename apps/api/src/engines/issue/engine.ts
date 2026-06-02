@@ -263,9 +263,7 @@ export class IssueEngine {
 }
 
 // Singleton
-// Backed by the engine accessor (Stage 1 of engine-injection). The const is
-// retained ONLY as a temporary bridge for not-yet-migrated callers; it is
-// removed at the end of Stage 1 once every consumer uses getEngine().
+// Backed by the engine accessor (engine-injection). The instance is created and
+// seeded into the accessor via setEngine(); consumers reach it via getEngine().
 const issueEngineInstance = new IssueEngine()
 setEngine(issueEngineInstance)
-export const issueEngine = issueEngineInstance

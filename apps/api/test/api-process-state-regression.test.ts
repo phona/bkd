@@ -5,9 +5,11 @@ import { eq } from 'drizzle-orm'
 import { db } from '../src/db'
 import { issues as issuesTable } from '../src/db/schema'
 import { engineRegistry } from '../src/engines/executors'
-import { issueEngine } from '../src/engines/issue'
+import { getEngine } from '../src/engines/issue'
 import { api, createTestProject, expectSuccess, get, post, waitFor } from './helpers'
 import './setup'
+
+const issueEngine = getEngine()
 
 interface Issue {
   id: string

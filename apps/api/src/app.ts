@@ -4,7 +4,7 @@ import { compress } from 'hono/compress'
 import { cors } from 'hono/cors'
 import { secureHeaders } from 'hono/secure-headers'
 import { authMiddleware, authRoutes } from './auth'
-import { issueEngine } from './engines/issue'
+import { getEngine } from './engines/issue'
 import { getEngineDiscovery } from './engines/startup-probe'
 import { httpLogger, logger } from './logger'
 import { apiRoutes, engineRoutes, eventRoutes, settingsRoutes } from './routes'
@@ -25,7 +25,7 @@ export function createApp(_deps?: AppDeps): OpenAPIHono {
   // engine that actually executes issues — this bundle's — must reload the
   // saved value itself. Without this, every restart silently resets the cap to
   // the hardcoded default and ignores the user's configured "max sessions".
-  void issueEngine.initMaxConcurrent().catch(err =>
+  void getEngine().initMaxConcurrent().catch(err =>
     logger.error({ err }, 'init_max_concurrent_failed'),
   )
 

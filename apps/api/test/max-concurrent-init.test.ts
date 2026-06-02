@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'bun:test'
 import { setAppSetting } from '@/db/helpers'
-import { issueEngine } from '@/engines/issue'
+import { getEngine } from '@/engines/issue'
+
+const issueEngine = getEngine()
 
 const KEY = 'engine:maxConcurrentExecutions'
 

@@ -1,8 +1,10 @@
 import { UPGRADE_DRAINING_CODE } from '@bkd/shared'
 import { afterEach, describe, expect, it } from 'bun:test'
-import { issueEngine } from '../src/engines/issue'
+import { getEngine } from '../src/engines/issue'
 import { ensureWorking } from '../src/routes/issues/_shared'
 import { drainRunningIssues, isDraining, setDraining } from '../src/upgrade/drain'
+
+const issueEngine = getEngine()
 
 // The draining flag is process-global. Always clear it after every test —
 // even on assertion failure — so a stuck flag can't leak into other test
