@@ -10,6 +10,7 @@ import {
   stopPeriodicReconciliation,
 } from './engines/reconciler'
 import { refreshGlobalEnvCache } from './engines/safe-env'
+import { getEngineDiscovery } from './engines/startup-probe'
 import { startChangesSummaryWatcher, stopChangesSummaryWatcher } from './events/changes-summary'
 import { logger } from './logger'
 import { acquirePidLock, releasePidLock } from './pid-lock'
@@ -56,6 +57,8 @@ export function initEngineLifecycle(): LauncherStops {
   }).catch(err => logger.error({ err }, 'fts_rebuild_failed'))
 
   void getEngine().initMaxConcurrent().catch(err => logger.error({ err }, 'init_max_concurrent_failed'))
+
+  void getEngineDiscovery().catch(err => logger.error({ error: err instanceof Error ? err.message : String(err) }, 'probe_failed'))
 
   void startupReconciliation().catch(err => logger.error({ err }, 'startup_reconciliation_failed'))
 
@@ -105,7 +108,7 @@ export function registerUpgradeShutdown(
     logger.info('server_stopped_for_upgrade')
   })
 
-  void initUpgradeSystem().catch(err => {
+  void initUpgradeSystem().catch((err) => {
     logger.error({ err }, 'upgrade_system_init_failed')
   })
 }
