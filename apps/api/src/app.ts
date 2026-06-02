@@ -4,8 +4,6 @@ import { compress } from 'hono/compress'
 import { cors } from 'hono/cors'
 import { secureHeaders } from 'hono/secure-headers'
 import { authMiddleware, authRoutes } from './auth'
-import { issueEngine } from './engines/issue'
-import { getEngineDiscovery } from './engines/startup-probe'
 import { httpLogger, logger } from './logger'
 import { apiRoutes, engineRoutes, eventRoutes, settingsRoutes } from './routes'
 import cronRoute from './routes/cron'
@@ -18,16 +16,6 @@ export interface AppDeps {}
 
 export function createApp(_deps?: AppDeps): OpenAPIHono {
   const app = new OpenAPIHono()
-
-  // Restore the persisted max-concurrent setting onto THIS engine instance.
-  // In package/launcher mode the launcher's initLauncher() runs against a
-  // SEPARATE issueEngine instance (compiled into the launcher binary), so the
-  // engine that actually executes issues — this bundle's — must reload the
-  // saved value itself. Without this, every restart silently resets the cap to
-  // the hardcoded default and ignores the user's configured "max sessions".
-  void issueEngine.initMaxConcurrent().catch(err =>
-    logger.error({ err }, 'init_max_concurrent_failed'),
-  )
 
   // --- Security headers (CSP + HSTS) ---
   app.use(secureHeaders({
@@ -133,14 +121,6 @@ export function createApp(_deps?: AppDeps): OpenAPIHono {
       }
     }
     return c.json({ success: false, error: 'Internal server error' }, 500)
-  })
-
-  // Warm up engine discovery
-  void getEngineDiscovery().catch((err) => {
-    logger.error(
-      { error: err instanceof Error ? err.message : String(err) },
-      'probe_failed',
-    )
   })
 
   return app

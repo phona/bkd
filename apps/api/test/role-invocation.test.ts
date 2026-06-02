@@ -8,13 +8,19 @@ const mockExecuteIssue = mock((issueId: string, _opts: any) => ({
   messageId: `mock-msg-${issueId}`,
 }))
 
+const engineStub = {
+  executeIssue: mockExecuteIssue,
+  isTurnInFlight: mock(() => false),
+  getLogs: mock(() => ({ entries: [], hasMore: false })),
+  getMaxTurnIndex: mock(() => 0),
+  getLogsAround: mock(() => ({ entries: [], hasMore: false })),
+}
+let mockCurrentEngine: any = engineStub
 mock.module('@/engines/issue', () => ({
-  issueEngine: {
-    executeIssue: mockExecuteIssue,
-    isTurnInFlight: mock(() => false),
-    getLogs: mock(() => ({ entries: [], hasMore: false })),
-    getMaxTurnIndex: mock(() => 0),
-    getLogsAround: mock(() => ({ entries: [], hasMore: false })),
+  issueEngine: engineStub,
+  getEngine: () => mockCurrentEngine,
+  setEngine: (e: any) => {
+    mockCurrentEngine = e
   },
 }))
 

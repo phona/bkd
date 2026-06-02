@@ -1,6 +1,6 @@
 import { updateIssueSession } from '@/engines/engine-store'
 import type { EngineAttachment, NormalizedLogEntry } from '@/engines/types'
-import { appEvents } from '@/events'
+import { getBus } from '@/events'
 import { logger } from '@/logger'
 import type { EngineContext } from './context'
 import { emitStateChange } from './events'
@@ -34,7 +34,7 @@ export function persistUserMessage(
   // the synchronous emit completes (persist stage replaces data.entry, not the
   // local `entry` variable).
   const eventData = { issueId, executionId, entry, streaming: false as const }
-  appEvents.emit('log', eventData)
+  getBus().emit('log', eventData)
 
   // Store user message ID so agent responses in this turn can reference it
   const messageId = (eventData.entry as { messageId?: string }).messageId ?? null

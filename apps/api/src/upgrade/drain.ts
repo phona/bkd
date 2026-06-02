@@ -1,4 +1,4 @@
-import { issueEngine } from '@/engines/issue'
+import { getEngine } from '@/engines/issue'
 import { logger } from '@/logger'
 
 // ---------- Graceful upgrade drain ----------
@@ -37,11 +37,12 @@ export async function drainRunningIssues(
 ): Promise<{ drained: boolean, remaining: string[] }> {
   setDraining(true)
 
+  const engine = getEngine()
   const deadline = Date.now() + timeoutMs
   let lastLoggedCount = -1
 
   while (Date.now() < deadline) {
-    const active = issueEngine.getActiveProcesses()
+    const active = engine.getActiveProcesses()
     if (active.length === 0) {
       logger.info('upgrade_drain_complete')
       return { drained: true, remaining: [] }
@@ -56,7 +57,7 @@ export async function drainRunningIssues(
     await new Promise(r => setTimeout(r, DRAIN_POLL_MS))
   }
 
-  const remaining = [...new Set(issueEngine.getActiveProcesses().map(p => p.issueId))]
+  const remaining = [...new Set(engine.getActiveProcesses().map(p => p.issueId))]
   logger.warn({ remaining }, 'upgrade_drain_timeout')
   return { drained: false, remaining }
 }

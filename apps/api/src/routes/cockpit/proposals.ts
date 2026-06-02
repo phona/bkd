@@ -5,8 +5,8 @@ import type { CockpitProposalType } from '@/cockpit/proposals'
 import { STATUS_IDS } from '@/config'
 import { db } from '@/db'
 import { issues as issuesTable, projects as projectsTable } from '@/db/schema'
-import { issueEngine } from '@/engines/issue/engine'
-import { appEvents } from '@/events'
+import { getEngine } from '@/engines/issue/engine-ref'
+import { getBus } from '@/events'
 import { logger } from '@/logger'
 import { createOpenAPIRouter } from '@/openapi/hono'
 
@@ -57,12 +57,12 @@ proposals.post('/execute', async (c) => {
   try {
     const result = await dispatch(type as CockpitProposalType, params)
     proposalStore.markApproved(proposal.id, result)
-    appEvents.emit('cockpit-proposal', { proposalId: proposal.id, status: 'approved' })
+    getBus().emit('cockpit-proposal', { proposalId: proposal.id, status: 'approved' })
     return c.json({ success: true, data: { proposalId: proposal.id, status: 'approved', result } })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Dispatch failed'
     proposalStore.markFailed(proposal.id, message)
-    appEvents.emit('cockpit-proposal', { proposalId: proposal.id, status: 'failed' })
+    getBus().emit('cockpit-proposal', { proposalId: proposal.id, status: 'failed' })
     logger.warn({ type, err }, 'cockpit_inline_dispatch_failed')
     return c.json({ success: false, error: message }, 400)
   }
@@ -80,13 +80,13 @@ proposals.post('/:id/approve', async (c) => {
   try {
     const result = await dispatch(p.type, p.params)
     const updated = proposalStore.markApproved(id, result)
-    appEvents.emit('cockpit-proposal', { proposalId: id, status: 'approved' })
+    getBus().emit('cockpit-proposal', { proposalId: id, status: 'approved' })
     return c.json({ success: true, data: updated })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Dispatch failed'
     logger.warn({ id, type: p.type, err }, 'cockpit_proposal_dispatch_failed')
     proposalStore.markFailed(id, message)
-    appEvents.emit('cockpit-proposal', { proposalId: id, status: 'failed' })
+    getBus().emit('cockpit-proposal', { proposalId: id, status: 'failed' })
     return c.json({ success: false, error: message }, 400)
   }
 })
@@ -100,7 +100,7 @@ proposals.post('/:id/reject', (c) => {
     return c.json({ success: false, error: `Proposal already ${p.status}` }, 409)
   }
   const updated = proposalStore.markRejected(id)
-  appEvents.emit('cockpit-proposal', { proposalId: id, status: 'rejected' })
+  getBus().emit('cockpit-proposal', { proposalId: id, status: 'rejected' })
   return c.json({ success: true, data: updated })
 })
 
@@ -170,7 +170,7 @@ async function dispatchSendReply(p: { issueId: string, body: string }) {
     throw new Error('body is too long (max 8000 chars)')
   }
   await ensureIssueExists(p.issueId)
-  const result = await issueEngine.followUpIssue(
+  const result = await getEngine().followUpIssue(
     p.issueId,
     p.body,
     undefined,
@@ -203,13 +203,13 @@ async function dispatchMerge(p: { issueId: string }) {
 
 async function dispatchCancel(p: { issueId: string }) {
   await ensureIssueExists(p.issueId)
-  const status = await issueEngine.cancelIssue(p.issueId)
+  const status = await getEngine().cancelIssue(p.issueId)
   return { issueId: p.issueId, status }
 }
 
 async function dispatchRestart(p: { issueId: string }) {
   await ensureIssueExists(p.issueId)
-  const { executionId } = await issueEngine.restartIssue(p.issueId)
+  const { executionId } = await getEngine().restartIssue(p.issueId)
   return { issueId: p.issueId, executionId }
 }
 

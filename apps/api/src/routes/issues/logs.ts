@@ -1,6 +1,6 @@
 import type { Context } from 'hono'
 import { findProject, getAppSetting } from '@/db/helpers'
-import { issueEngine } from '@/engines/issue'
+import { getEngine } from '@/engines/issue'
 import { DEFAULT_LOG_PAGE_SIZE, LOG_PAGE_SIZE_KEY } from '@/engines/issue/constants'
 import type { LogQueryOpts } from '@/engines/issue/persistence/queries'
 import { toTimeline } from '@/engines/timeline-converter'
@@ -40,7 +40,7 @@ function parseEntryTypes(raw: string): { types: string[] } | { error: string } {
  *   "last3"   → last 3 turns
  */
 function parseTurn(raw: string, issueId: string): { start: number, end: number } | { error: string } {
-  const maxTurn = issueEngine.getMaxTurnIndex(issueId)
+  const maxTurn = getEngine().getMaxTurnIndex(issueId)
   if (maxTurn < 0) {
     return { error: 'No turns exist for this issue' }
   }
@@ -140,7 +140,7 @@ async function parsePagination(c: Context) {
 
 /** Execute log query and return JSON response. */
 function queryAndRespond(c: Context, issue: Awaited<ReturnType<typeof getProjectOwnedIssue>>, issueId: string, opts: LogQueryOpts) {
-  const result = issueEngine.getLogs(issueId, opts)
+  const result = getEngine().getLogs(issueId, opts)
   const isReverse = !opts.cursor
   const cursorEntry = isReverse ? result.entries[0] : result.entries.at(-1)
   const nextCursor = result.hasMore && cursorEntry?.messageId ? cursorEntry.messageId : null
@@ -186,7 +186,7 @@ logs.openapi(R.getIssueLogs, async (c) => {
     return c.json({ success: false, error: 'Issue not found' }, 404 as const)
   }
   const pagination = await parsePagination(c)
-  const result = issueEngine.getLogs(issueId, pagination)
+  const result = getEngine().getLogs(issueId, pagination)
   const isReverse = !pagination.cursor
   const cursorEntry = isReverse ? result.entries[0] : result.entries.at(-1)
   const nextCursor = result.hasMore && cursorEntry?.messageId ? cursorEntry.messageId : null
@@ -208,7 +208,7 @@ logs.get('/:id/logs/around/:logId', async (c) => {
   const logId = c.req.param('logId')!
   const windowRaw = c.req.query('window')
   const window = windowRaw ? Math.min(Math.max(Number.parseInt(windowRaw, 10) || 20, 1), 200) : 20
-  const result = issueEngine.getLogsAround(resolved.issueId, logId, window)
+  const result = getEngine().getLogsAround(resolved.issueId, logId, window)
   return c.json({
     success: true,
     data: {

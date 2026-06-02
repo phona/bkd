@@ -3,8 +3,8 @@ import { and, desc, eq } from 'drizzle-orm'
 import { db } from '@/db'
 import { getAppSetting } from '@/db/helpers'
 import { issueLogs, issues as issuesTable } from '@/db/schema'
-import { issueEngine } from '@/engines/issue/engine'
-import { appEvents } from '@/events'
+import { getEngine } from '@/engines/issue/engine-ref'
+import { getBus } from '@/events'
 import { logger } from '@/logger'
 import { ROOT_DIR } from '@/root'
 import { ensureCockpitProject, ensureSecretaryIssue } from '@/routes/cockpit/ensure-singleton'
@@ -262,7 +262,7 @@ async function runEnrichment(prompt: string): Promise<RunResult> {
 
     const waiter = waitForDone(issueId, ENRICH_TIMEOUT_MS)
     try {
-      await issueEngine.executeIssue(issueId, {
+      await getEngine().executeIssue(issueId, {
         engineType: engine,
         prompt,
         workingDir: ROOT_DIR,
@@ -309,7 +309,7 @@ function waitForDone(
       resolve(status)
     }
     timer = setTimeout(finish, timeoutMs, 'timeout')
-    unsub = appEvents.on('done', (d) => {
+    unsub = getBus().on('done', (d) => {
       if (d.issueId === issueId) finish(d.finalStatus)
     })
   })

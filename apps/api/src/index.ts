@@ -3,7 +3,7 @@ import { resolve } from 'node:path'
 import { serveStatic, websocket } from 'hono/bun'
 import app from './app'
 import { embeddedStatic } from './embedded-static'
-import { issueEngine } from './engines/issue'
+import { getEngine } from './engines/issue'
 import {
   stopPeriodicReconciliation,
 } from './engines/reconciler'
@@ -88,7 +88,8 @@ async function shutdown(signal: string) {
   }
   isShuttingDown = true
 
-  const activeProcesses = issueEngine.getActiveProcesses()
+  const engine = getEngine()
+  const activeProcesses = engine.getActiveProcesses()
   logger.warn(
     {
       signal,
@@ -107,7 +108,7 @@ async function shutdown(signal: string) {
   stops.stopDeliveryCleanup()
   stops.stopCockpitDigestBridge()
 
-  await issueEngine.cancelAll()
+  await engine.cancelAll()
 
   http.stop()
   releasePidLock()

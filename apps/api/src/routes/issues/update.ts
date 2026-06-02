@@ -3,7 +3,7 @@ import { cacheDel } from '@/cache'
 import { db } from '@/db'
 import { findProject } from '@/db/helpers'
 import { issues as issuesTable } from '@/db/schema'
-import { issueEngine } from '@/engines/issue'
+import { getEngine } from '@/engines/issue'
 import { emitIssueUpdated } from '@/events/issue-events'
 import { logger } from '@/logger'
 import { createOpenAPIRouter } from '@/openapi/hono'
@@ -154,8 +154,9 @@ update.openapi(R.bulkUpdateIssues, async (c) => {
     flushPendingAsFollowUp(issue.id, issue)
   }
   // Cancel active processes for issues that transitioned to done
+  const engine = getEngine()
   for (const id of toCancel) {
-    void issueEngine.cancelIssue(id).catch((err) => {
+    void engine.cancelIssue(id).catch((err) => {
       logger.error({ issueId: id, err }, 'done_transition_cancel_failed')
     })
   }
@@ -211,7 +212,7 @@ update.openapi(R.updateIssue, async (c) => {
   if (body.keepAlive !== undefined) {
     updates.keepAlive = body.keepAlive
     // Sync to in-memory process so GC picks up the change immediately
-    issueEngine.updateKeepAlive(issueId, body.keepAlive)
+    getEngine().updateKeepAlive(issueId, body.keepAlive)
   }
 
   if (Object.keys(updates).length === 0) {
@@ -267,7 +268,7 @@ update.openapi(R.updateIssue, async (c) => {
 
   // Fire-and-forget cancel for done transition
   if (transitioningToDone) {
-    void issueEngine.cancelIssue(issueId).catch((err) => {
+    void getEngine().cancelIssue(issueId).catch((err) => {
       logger.error({ issueId, err }, 'done_transition_cancel_failed')
     })
   }

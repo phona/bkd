@@ -4,7 +4,7 @@ import { eq } from 'drizzle-orm'
 import { db } from '@/db'
 import { findProject } from '@/db/helpers'
 import { issues as issuesTable } from '@/db/schema'
-import { appEvents } from '@/events'
+import { getBus } from '@/events'
 import { logger } from '@/logger'
 import { listChangedFiles, summarizeFileLines } from '@/routes/issues/changes'
 import { resolveIssueDir } from '@/utils/changes'
@@ -38,7 +38,7 @@ async function computeAndEmit(issueId: string): Promise<void> {
     const root = await resolveIssueDir(issue.projectId, issueId, issue.useWorktree, projectRoot)
 
     if (!await isGitRepo(root)) {
-      appEvents.emit('changes-summary', {
+      getBus().emit('changes-summary', {
         issueId,
         fileCount: 0,
         additions: 0,
@@ -54,7 +54,7 @@ async function computeAndEmit(issueId: string): Promise<void> {
     // the per-file numstat the panel computed).
     const { files, timedOut } = await listChangedFiles(root)
     if (timedOut) {
-      appEvents.emit('changes-summary', {
+      getBus().emit('changes-summary', {
         issueId,
         fileCount: 0,
         additions: 0,
@@ -71,7 +71,7 @@ async function computeAndEmit(issueId: string): Promise<void> {
       deletions += s.deletions
     }
 
-    appEvents.emit('changes-summary', {
+    getBus().emit('changes-summary', {
       issueId,
       fileCount: files.length,
       additions,
@@ -88,7 +88,7 @@ let unsubscribeDone: (() => void) | null = null
 
 export function startChangesSummaryWatcher(): void {
   // Only compute when session settles (completed/failed/cancelled)
-  unsubscribeDone = appEvents.on('done', (data) => {
+  unsubscribeDone = getBus().on('done', (data) => {
     void computeAndEmit(data.issueId)
   })
 

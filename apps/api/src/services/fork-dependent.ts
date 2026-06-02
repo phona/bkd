@@ -6,7 +6,7 @@ import { resolve } from 'node:path'
 import { and, eq } from 'drizzle-orm'
 import { db } from '@/db'
 import { issues as issuesTable } from '@/db/schema'
-import { issueEngine } from '@/engines/issue'
+import { getEngine } from '@/engines/issue'
 import { getProjectExecContext, resolveWorkingDir } from '@/engines/issue/utils/helpers'
 import {
   createWorktree,
@@ -106,7 +106,7 @@ export async function resumeDependentForks(
         ? `${projCtx.systemPrompt}\n\n${child.prompt ?? ''}`
         : (child.prompt ?? '')
 
-      await issueEngine.executeIssue(child.id, {
+      await getEngine().executeIssue(child.id, {
         engineType: (child.engineType ?? 'claude-code') as EngineType,
         prompt: basePrompt,
         workingDir: baseDir,

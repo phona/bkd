@@ -3,7 +3,7 @@ import { cacheDel, cacheDelByPrefix } from '@/cache'
 import { db } from '@/db'
 import { findProject, getServerUrl } from '@/db/helpers'
 import { issues as issuesTable } from '@/db/schema'
-import { issueEngine } from '@/engines/issue'
+import { getEngine } from '@/engines/issue'
 import { logger } from '@/logger'
 import { createOpenAPIRouter } from '@/openapi/hono'
 import * as R from '@/openapi/routes'
@@ -38,14 +38,15 @@ del.openapi(R.deleteIssue, async (c) => {
   // Use a short timeout (5s) so the DELETE request doesn't block on lock
   // contention. If termination fails or times out, proceed with deletion
   // anyway — the reconciler will clean up orphaned processes on its next run.
+  const engine = getEngine()
   const shouldTerminate =
     existing.sessionStatus === 'running' ||
     existing.sessionStatus === 'pending' ||
-    issueEngine.hasActiveProcessForIssue(issueId)
+    engine.hasActiveProcessForIssue(issueId)
   if (shouldTerminate) {
     try {
       await Promise.race([
-        issueEngine.terminateProcess(issueId),
+        engine.terminateProcess(issueId),
         new Promise<never>((_, reject) =>
           setTimeout(() => reject(new Error('terminate timeout')), 5_000),
         ),

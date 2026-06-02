@@ -1,7 +1,7 @@
 import { and, eq, inArray } from 'drizzle-orm'
 import { db } from '@/db'
 import { issues as issuesTable, projects as projectsTable } from '@/db/schema'
-import { issueEngine } from '@/engines/issue'
+import { getEngine } from '@/engines/issue'
 import { getPidFromManaged } from '@/engines/issue/utils/pid'
 import { logger } from '@/logger'
 import { createOpenAPIRouter } from '@/openapi/hono'
@@ -16,7 +16,7 @@ export interface ProcessSummary {
 }
 
 export async function buildProcessInfoList(): Promise<ProcessInfo[]> {
-  const activeProcesses = issueEngine.getActiveProcesses()
+  const activeProcesses = getEngine().getActiveProcesses()
   const issueIds = activeProcesses.map(p => p.issueId)
   if (issueIds.length === 0) return []
 
@@ -102,7 +102,7 @@ processes.openapi(R.listProcesses, async (c) => {
 processes.openapi(R.getProcessCapacity, async (c) => {
   const result = await buildProcessInfoList()
   const summary = buildProcessSummary(result)
-  const maxConcurrent = issueEngine.getMaxConcurrent()
+  const maxConcurrent = getEngine().getMaxConcurrent()
   const availableSlots = maxConcurrent > 0
     ? Math.max(0, maxConcurrent - summary.totalActive)
     : null
@@ -139,7 +139,7 @@ processes.openapi(R.terminateProcess, async (c) => {
   }
 
   try {
-    await issueEngine.terminateProcess(issueId)
+    await getEngine().terminateProcess(issueId)
     return c.json({ success: true, data: { issueId, status: 'terminated' } }, 200 as const)
   } catch (error) {
     logger.error({ issueId, error }, 'terminate_process_failed')

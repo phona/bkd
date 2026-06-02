@@ -1,1 +1,2 @@
-export { IssueEngine, issueEngine } from './engine'
+export { IssueEngine } from './engine'
+export { getEngine, setEngine } from './engine-ref'

@@ -1,6 +1,6 @@
 import type { EngineContext } from '@/engines/issue/context'
 import type { NormalizedLogEntry } from '@/engines/types'
-import { appEvents } from '@/events'
+import { getBus } from '@/events'
 
 // ---------- Stdout stream entry handler ----------
 
@@ -30,7 +30,7 @@ export function handleStreamEntry(
     const trimmed = entry.content.trim()
     if (trimmed !== entry.content) effectiveEntry = { ...entry, content: trimmed }
   }
-  appEvents.emit('log', {
+  getBus().emit('log', {
     issueId,
     executionId,
     entry: effectiveEntry,
@@ -47,7 +47,7 @@ export function handleStderrEntry(
 ): void {
   const trimmed = entry.content.trim()
   const effectiveEntry = trimmed === entry.content ? entry : { ...entry, content: trimmed }
-  appEvents.emit('log', {
+  getBus().emit('log', {
     issueId,
     executionId,
     entry: effectiveEntry,
@@ -73,7 +73,7 @@ export function handleStreamError(
     turnIndex: turnIdx,
     timestamp: new Date().toISOString(),
   }
-  appEvents.emit('log', {
+  getBus().emit('log', {
     issueId,
     executionId,
     entry: errorEntry,

@@ -5,8 +5,8 @@ import { db } from '@/db'
 import { getAppSetting, setAppSetting } from '@/db/helpers'
 import { issues as issuesTable, projects as projectsTable } from '@/db/schema'
 import { toISO } from '@/utils/date'
-import { issueEngine } from '@/engines/issue/engine'
-import { appEvents } from '@/events'
+import { getEngine } from '@/engines/issue/engine-ref'
+import { getBus } from '@/events'
 import { createOpenAPIRouter } from '@/openapi/hono'
 import { logger } from '@/logger'
 import {
@@ -78,7 +78,7 @@ assistant.post('/ask', zValidator('json', askSchema), async (c) => {
     if (firstTurn) {
       const systemPrompt = buildCockpitSystemPrompt(serverName)
       const fullPrompt = `${systemPrompt}\n\n## User request\n\n${body.prompt}`
-      const result = await issueEngine.executeIssue(issueId, {
+      const result = await getEngine().executeIssue(issueId, {
         engineType: currentEngineType as 'claude-code-sdk' | 'claude-code' | 'codex',
         prompt: fullPrompt,
         workingDir: undefined,
@@ -92,7 +92,7 @@ assistant.post('/ask', zValidator('json', askSchema), async (c) => {
       })
     }
 
-    const result = await issueEngine.followUpIssue(
+    const result = await getEngine().followUpIssue(
       issueId,
       body.prompt,
       body.model,
@@ -136,7 +136,7 @@ assistant.post('/engine', zValidator('json', engineSchema), async (c) => {
     })
     .where(eq(issuesTable.id, issueId))
 
-  appEvents.emit('cockpit-reset', { issueId })
+  getBus().emit('cockpit-reset', { issueId })
 
   return c.json({
     success: true,
@@ -244,7 +244,7 @@ assistant.post('/reset', async (c) => {
       .set({ isDeleted: 1, updatedAt: new Date() })
       .where(eq(issuesTable.id, storedId))
     await setAppSetting(ASSISTANT_ID_KEY, '')
-    appEvents.emit('cockpit-reset', { issueId: storedId })
+    getBus().emit('cockpit-reset', { issueId: storedId })
     return c.json({ success: true, data: { deletedIssueId: storedId } })
   } catch (err) {
     logger.error({ err, issueId: storedId }, 'cockpit_reset_failed')

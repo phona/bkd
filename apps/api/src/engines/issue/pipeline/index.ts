@@ -1,4 +1,4 @@
-import { appEvents } from '@/events'
+import { getBus } from '@/events'
 import type { EngineContext } from '../context'
 import { registerFailureDetectStage } from './failure-detect'
 import { registerPersistStage } from './persist'
@@ -26,8 +26,9 @@ import { registerTokenUsageStage } from './token-usage'
  * In particular, DB persistence failure no longer prevents SSE delivery.
  */
 export function registerLogPipeline(ctx: EngineContext): void {
-  const on = (cb: Parameters<typeof appEvents.on<'log'>>[1], opts: { order: number }) =>
-    appEvents.on('log', cb, opts)
+  const bus = getBus()
+  const on = (cb: Parameters<typeof bus.on<'log'>>[1], opts: { order: number }) =>
+    bus.on('log', cb, opts)
 
   registerPersistStage(ctx, on)
   registerTokenUsageStage(ctx, on)

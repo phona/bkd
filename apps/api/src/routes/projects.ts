@@ -7,7 +7,7 @@ import { cacheDelByPrefix } from '@/cache'
 import { db } from '@/db'
 import { findProject, invalidateProjectCache } from '@/db/helpers'
 import { issues as issuesTable, projects as projectsTable } from '@/db/schema'
-import { issueEngine } from '@/engines/issue'
+import { getEngine } from '@/engines/issue'
 import { logger } from '@/logger'
 import { createOpenAPIRouter } from '@/openapi/hono'
 import * as R from '@/openapi/routes'
@@ -227,12 +227,13 @@ projects.openapi(R.deleteProject, async (c) => {
     .from(issuesTable)
     .where(and(eq(issuesTable.projectId, existing.id), eq(issuesTable.isDeleted, 0)))
 
+  const engine = getEngine()
   const toTerminate = activeIssues
     .filter(
       issue =>
         issue.sessionStatus === 'running' ||
         issue.sessionStatus === 'pending' ||
-        issueEngine.hasActiveProcessForIssue(issue.id),
+        engine.hasActiveProcessForIssue(issue.id),
     )
     .map(issue => issue.id)
 
@@ -242,7 +243,7 @@ projects.openapi(R.deleteProject, async (c) => {
     const results = await Promise.allSettled(
       toTerminate.map(issueId =>
         Promise.race([
-          issueEngine.terminateProcess(issueId),
+          engine.terminateProcess(issueId),
           new Promise<never>((_, reject) =>
             setTimeout(() => reject(new Error('terminate timeout')), 5_000),
           ),

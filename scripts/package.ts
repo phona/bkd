@@ -173,10 +173,46 @@ step(`Copied ${migrationCount} migration files`)
 
 // --- 6. Write version.json ---
 
+/**
+ * Hash the "engine-core" source set — the files whose code is held by the
+ * persistent IssueEngine / AppEventBus / lifecycle instances and therefore does
+ * NOT take effect on a route-only hot-reload. The apply step compares this hash
+ * against the running version to decide hot-reload vs restart (see
+ * apps/api/src/upgrade/strategy.ts).
+ */
+async function computeEngineCoreHash(): Promise<string> {
+  const patterns = [
+    'apps/api/src/engines/**/*.ts',
+    'apps/api/src/events/**/*.ts',
+    'apps/api/src/app-core.ts',
+    'apps/api/src/launcher-init.ts',
+    'apps/api/src/db/schema.ts',
+  ]
+  const files = new Set<string>()
+  for (const pattern of patterns) {
+    for await (const rel of new Glob(pattern).scan({ cwd: ROOT, onlyFiles: true })) {
+      files.add(rel)
+    }
+  }
+  const sorted = [...files].sort()
+  const hasher = new Bun.CryptoHasher('sha256')
+  for (const rel of sorted) {
+    hasher.update(rel)
+    hasher.update('\0')
+    hasher.update(await Bun.file(resolve(ROOT, rel)).bytes())
+    hasher.update('\0')
+  }
+  return hasher.digest('hex')
+}
+
+const engineCoreHash = await computeEngineCoreHash()
+step(`Engine-core hash: ${engineCoreHash.slice(0, 12)}…`)
+
 const versionJson = {
   version,
   commit,
   builtAt: new Date().toISOString(),
+  engineCoreHash,
 }
 await atomicWrite(resolve(STAGE, 'version.json'), JSON.stringify(versionJson, null, 2))
 step('Generated version.json')

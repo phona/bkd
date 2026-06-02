@@ -9,7 +9,7 @@ import {
   webhookDeliveries,
   webhooks,
 } from '@/db/schema'
-import { appEvents } from '@/events'
+import { getBus } from '@/events'
 import { logger } from '@/logger'
 import { validateWebhookUrl } from '@/utils/url-safety'
 
@@ -423,8 +423,9 @@ export async function dispatch(
 // ── Event listeners ─────────────────────────────────────
 
 export function initWebhookDispatcher() {
+  const bus = getBus()
   // Issue lifecycle events — dispatch granular status events OR updated
-  appEvents.on(
+  bus.on(
     'issue-updated',
     (data) => {
       const changes = data.changes as Record<string, unknown>
@@ -482,7 +483,7 @@ export function initWebhookDispatcher() {
   )
 
   // Session completion events
-  appEvents.on(
+  bus.on(
     'done',
     (data) => {
       void (async () => {
@@ -523,7 +524,7 @@ export function initWebhookDispatcher() {
   )
 
   // Session started
-  appEvents.on(
+  bus.on(
     'state',
     (data) => {
       if (data.state === 'running') {

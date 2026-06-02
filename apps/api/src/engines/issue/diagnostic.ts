@@ -1,5 +1,5 @@
 import type { NormalizedLogEntry } from '@/engines/types'
-import { appEvents } from '@/events'
+import { getBus } from '@/events'
 
 // ---------- Diagnostic log entries ----------
 // Emits system-message entries into the issue log pipeline so they're persisted
@@ -21,7 +21,7 @@ export function emitDiagnosticLog(
       ...extra,
     },
   }
-  appEvents.emit('log', {
+  getBus().emit('log', {
     issueId,
     executionId,
     entry,
@@ -43,7 +43,7 @@ export function emitErrorLog(
     turnIndex: 0,
     timestamp: new Date().toISOString(),
   }
-  appEvents.emit('log', {
+  getBus().emit('log', {
     issueId,
     executionId,
     entry,

@@ -1,7 +1,7 @@
 import type { AppEventMap } from '@bkd/shared'
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { liveConverter } from '@/engines/timeline-converter'
-import { appEvents } from '@/events'
+import { getBus } from '@/events'
 import type { EngineContext } from '../context'
 import { registerTimelineEmitStage } from './timeline-emit'
 
@@ -36,9 +36,9 @@ describe('registerTimelineEmitStage — dbOnly skipping (CHAT-003)', () => {
     captured = []
     unregisterStage = registerTimelineEmitStage(
       makeStubContext(),
-      (cb, opts) => appEvents.on('log', cb, opts),
+      (cb, opts) => getBus().on('log', cb, opts),
     )
-    unregisterListener = appEvents.on('timeline-entry', (data) => {
+    unregisterListener = getBus().on('timeline-entry', (data) => {
       if (data.issueId === TEST_ISSUE_ID) captured.push(data)
     })
   })
@@ -50,7 +50,7 @@ describe('registerTimelineEmitStage — dbOnly skipping (CHAT-003)', () => {
   })
 
   test('drops entries flagged metadata.dbOnly === true (no timeline-entry emitted)', () => {
-    appEvents.emit('log', {
+    getBus().emit('log', {
       issueId: TEST_ISSUE_ID,
       executionId: 'exec-1',
       streaming: false,
@@ -67,7 +67,7 @@ describe('registerTimelineEmitStage — dbOnly skipping (CHAT-003)', () => {
   })
 
   test('drops dbOnly thinking entries the same way', () => {
-    appEvents.emit('log', {
+    getBus().emit('log', {
       issueId: TEST_ISSUE_ID,
       executionId: 'exec-1',
       streaming: false,
@@ -84,7 +84,7 @@ describe('registerTimelineEmitStage — dbOnly skipping (CHAT-003)', () => {
   })
 
   test('still emits timeline-entry for normal (non-dbOnly) assistant entries', () => {
-    appEvents.emit('log', {
+    getBus().emit('log', {
       issueId: TEST_ISSUE_ID,
       executionId: 'exec-1',
       streaming: true,
@@ -107,7 +107,7 @@ describe('registerTimelineEmitStage — dbOnly skipping (CHAT-003)', () => {
 
   test('does not advance liveConverter state for dbOnly entries (no segment opened)', () => {
     // First, a real streaming chunk opens a buffer.
-    appEvents.emit('log', {
+    getBus().emit('log', {
       issueId: TEST_ISSUE_ID,
       executionId: 'exec-1',
       streaming: true,
@@ -126,7 +126,7 @@ describe('registerTimelineEmitStage — dbOnly skipping (CHAT-003)', () => {
     // emissions. With the fix, the stage early-returns and no new
     // timeline-entry surfaces.
     captured.length = 0
-    appEvents.emit('log', {
+    getBus().emit('log', {
       issueId: TEST_ISSUE_ID,
       executionId: 'exec-1',
       streaming: false,

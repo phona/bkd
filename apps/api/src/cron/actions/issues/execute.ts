@@ -1,6 +1,6 @@
 import { resolve } from 'node:path'
 import { getAppSetting } from '@/db/helpers'
-import { issueEngine } from '@/engines/issue'
+import { getEngine } from '@/engines/issue'
 import type { EngineType } from '@/engines/types'
 import { ensureWorking, parseProjectEnvVars } from '@/routes/issues/_shared'
 import { registerAction } from '../registry'
@@ -40,7 +40,7 @@ registerAction('issue-execute', {
     const basePrompt = project.systemPrompt ? `${project.systemPrompt}\n\n${prompt}` : prompt
     const envVars = parseProjectEnvVars(project.envVars)
 
-    const result = await issueEngine.executeIssue(issue.id, {
+    const result = await getEngine().executeIssue(issue.id, {
       engineType,
       prompt: basePrompt,
       workingDir,

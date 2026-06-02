@@ -1,5 +1,5 @@
 import type { NormalizedLogEntry } from '@bkd/shared'
-import { appEvents } from './index'
+import { getBus } from './bus-ref'
 
 export function emitIssueUpdated(
   issueId: string,
@@ -8,18 +8,18 @@ export function emitIssueUpdated(
   projectAlias?: string,
   source?: string,
 ): void {
-  appEvents.emit('issue-updated', { issueId, changes, title, projectAlias, source })
+  getBus().emit('issue-updated', { issueId, changes, title, projectAlias, source })
 }
 
 export function emitIssueLogUpdated(issueId: string, entry: NormalizedLogEntry): void {
-  appEvents.emit('log-updated', { issueId, entry })
+  getBus().emit('log-updated', { issueId, entry })
 }
 
 export function emitIssueLogRemoved(issueId: string, messageIds: string[]): void {
   if (messageIds.length === 0) return
-  appEvents.emit('log-removed', { issueId, messageIds })
+  getBus().emit('log-removed', { issueId, messageIds })
 }
 
 export function emitIssueLogAdded(issueId: string, logId: string): void {
-  appEvents.emit('log-added', { issueId, logId })
+  getBus().emit('log-added', { issueId, logId })
 }

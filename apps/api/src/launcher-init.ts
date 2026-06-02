@@ -1,7 +1,7 @@
 import { authConfig, discoverOIDC } from './auth'
 import { startCockpitDigestBridge } from './cockpit/digest-bridge'
 import { startCron } from './cron'
-import { issueEngine } from './engines/issue'
+import { getEngine } from './engines/issue'
 import { migrateSlashCommandsKey, refreshSlashCommandsCache } from './engines/issue/queries'
 import {
   registerSettledReconciliation,
@@ -10,6 +10,7 @@ import {
   stopPeriodicReconciliation,
 } from './engines/reconciler'
 import { refreshGlobalEnvCache } from './engines/safe-env'
+import { getEngineDiscovery } from './engines/startup-probe'
 import { startChangesSummaryWatcher, stopChangesSummaryWatcher } from './events/changes-summary'
 import { logger } from './logger'
 import { acquirePidLock, releasePidLock } from './pid-lock'
@@ -25,7 +26,7 @@ export interface LauncherStops {
   stopChangesSummaryWatcher: () => void
 }
 
-export function initLauncher(): LauncherStops {
+export function initProcessGuards(): void {
   process.on('unhandledRejection', (reason, promise) => {
     logger.error({ reason, promise: String(promise) }, 'unhandled_rejection')
   })
@@ -37,7 +38,9 @@ export function initLauncher(): LauncherStops {
 
   acquirePidLock()
   process.on('exit', () => releasePidLock())
+}
 
+export function initEngineLifecycle(): LauncherStops {
   if (authConfig.enabled) {
     void discoverOIDC().catch(err => logger.error({ err }, 'oidc_discovery_warmup_failed'))
   }
@@ -53,7 +56,9 @@ export function initLauncher(): LauncherStops {
     ensureFtsTokenizerVersion()
   }).catch(err => logger.error({ err }, 'fts_rebuild_failed'))
 
-  void issueEngine.initMaxConcurrent().catch(err => logger.error({ err }, 'init_max_concurrent_failed'))
+  void getEngine().initMaxConcurrent().catch(err => logger.error({ err }, 'init_max_concurrent_failed'))
+
+  void getEngineDiscovery().catch(err => logger.error({ error: err instanceof Error ? err.message : String(err) }, 'probe_failed'))
 
   void startupReconciliation().catch(err => logger.error({ err }, 'startup_reconciliation_failed'))
 
@@ -74,6 +79,11 @@ export function initLauncher(): LauncherStops {
   }
 }
 
+export function initLauncher(): LauncherStops {
+  initProcessGuards()
+  return initEngineLifecycle()
+}
+
 export function registerUpgradeShutdown(
   stops: LauncherStops,
   http: { stop: () => void },
@@ -92,13 +102,13 @@ export function registerUpgradeShutdown(
     stopPeriodicReconciliation()
     stops.stopDeliveryCleanup()
     stops.stopCockpitDigestBridge()
-    await issueEngine.cancelAll()
+    await getEngine().cancelAll()
     http.stop()
     releasePidLock()
     logger.info('server_stopped_for_upgrade')
   })
 
-  void initUpgradeSystem().catch(err => {
+  void initUpgradeSystem().catch((err) => {
     logger.error({ err }, 'upgrade_system_init_failed')
   })
 }

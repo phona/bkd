@@ -3,7 +3,7 @@ import { db } from '@/db'
 import { issueRoles, issues, rolesTable } from '@/db/schema'
 import type { EngineType } from '@/engines/types'
 import { logger } from '@/logger'
-import { issueEngine } from './engine'
+import { getEngine } from './engine-ref'
 
 interface InvokeRoleOptions {
   projectId: string
@@ -42,7 +42,7 @@ export async function invokeRole({ projectId, issueId, roleName, message, contex
       ? `${context}\n\n请你：${message}`
       : message
 
-    const result = await issueEngine.executeIssue(role.issueId, {
+    const result = await getEngine().executeIssue(role.issueId, {
       engineType: (targetIssue.engineType ?? 'claude-code') as EngineType,
       prompt,
     })

@@ -3,7 +3,7 @@ import { db } from '@/db'
 import { findProject } from '@/db/helpers'
 import { getPendingMessages, upsertPendingMessage } from '@/db/pending-messages'
 import { attachments } from '@/db/schema'
-import { issueEngine } from '@/engines/issue'
+import { getEngine } from '@/engines/issue'
 import type { EngineAttachment } from '@/engines/types'
 import { emitIssueLogRemoved } from '@/events/issue-events'
 import { logger } from '@/logger'
@@ -243,7 +243,7 @@ message.post('/:id/follow-up', async (c) => {
 
   // When the engine is actively processing a turn, queue message as pending
   // so it won't be ignored mid-turn. It will be auto-flushed after the turn settles.
-  if (issue.statusId === 'working' && issueEngine.isTurnInFlight(issueId)) {
+  if (issue.statusId === 'working' && getEngine().isTurnInFlight(issueId)) {
     const messageId = await upsertAndNotify(issueId, prompt, pendingMeta('pending'), savedFiles)
     logger.debug(
       { issueId, promptChars: prompt.length, fileCount: files.length },
@@ -268,7 +268,7 @@ message.post('/:id/follow-up', async (c) => {
       return c.json({ success: false, error: guard.reason! }, 400)
     }
     const firstWord = prompt.split(/\s/)[0] ?? ''
-    const categorized = issueEngine.getCategorizedCommands(
+    const categorized = getEngine().getCategorizedCommands(
       issueId,
       (issue.engineType as import('@/engines/types').EngineType) ?? undefined,
     )
@@ -284,7 +284,7 @@ message.post('/:id/follow-up', async (c) => {
     }
     const hasFollowUpMeta = Object.keys(followUpMeta).length > 0
     const engineAttachments = savedFiles.length > 0 ? savedFiles.map(savedFileToAttachment) : undefined
-    const result = await issueEngine.followUpIssue(
+    const result = await getEngine().followUpIssue(
       issueId,
       fullPrompt,
       parsed.model,
