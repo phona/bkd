@@ -187,8 +187,8 @@ general.openapi(R.setMaxConcurrent, async (c) => {
   await setAppSetting(MAX_CONCURRENT_KEY, String(value))
 
   // Apply at runtime
-  const { issueEngine } = await import('@/engines/issue')
-  issueEngine.setMaxConcurrent(value)
+  const { getEngine } = await import('@/engines/issue')
+  getEngine().setMaxConcurrent(value)
 
   return c.json({ success: true, data: { value } })
 })

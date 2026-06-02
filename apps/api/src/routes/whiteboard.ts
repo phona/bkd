@@ -5,7 +5,7 @@ import { generateKeyBetween } from 'jittered-fractional-indexing'
 import { db } from '@/db'
 import { findProject, getAppSetting, getDefaultEngine, getEngineDefaultModel } from '@/db/helpers'
 import { issueLogs, issues as issuesTable, whiteboardNodes } from '@/db/schema'
-import { issueEngine } from '@/engines/issue/engine'
+import { getEngine } from '@/engines/issue/engine-ref'
 import type { EngineType } from '@/engines/types'
 import { parseProjectEnvVars } from '@/routes/issues/_shared'
 import { logger } from '@/logger'
@@ -383,7 +383,7 @@ whiteboardRoutes.openapi(R.whiteboardAsk, async (c) => {
 
       // Execute the issue (first turn) — roll back issue on failure
       try {
-        const result = await issueEngine.executeIssue(boundIssueId, {
+        const result = await getEngine().executeIssue(boundIssueId, {
           engineType: resolvedEngine,
           prompt: firstTurnPrompt,
           workingDir: effectiveWorkingDir,
@@ -432,7 +432,7 @@ whiteboardRoutes.openapi(R.whiteboardAsk, async (c) => {
     // If the bound issue has no session (e.g. session ID was reset on failure),
     // re-execute — treat this as a "first turn" and re-send the full system prompt.
     if (!boundIssue.externalSessionId) {
-      const result = await issueEngine.executeIssue(boundIssueId, {
+      const result = await getEngine().executeIssue(boundIssueId, {
         engineType: resolvedEngine,
         prompt: firstTurnPrompt,
         workingDir: effectiveWorkingDir,
@@ -448,7 +448,7 @@ whiteboardRoutes.openapi(R.whiteboardAsk, async (c) => {
 
     // Follow-up on existing bound issue — only turn prompt, system already in session.
     // Do not override the issue's model.
-    const result = await issueEngine.followUpIssue(
+    const result = await getEngine().followUpIssue(
       boundIssueId,
       turnPrompt,
       undefined,

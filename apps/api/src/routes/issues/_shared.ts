@@ -12,7 +12,7 @@ import {
   restorePendingVisibility,
 } from '@/db/pending-messages'
 import { issues as issuesTable } from '@/db/schema'
-import { issueEngine } from '@/engines/issue'
+import { getEngine } from '@/engines/issue'
 import { isValidAcpEngineType } from '@/engines/startup-probe'
 import type { EngineType } from '@/engines/types'
 import { emitIssueLogRemoved, emitIssueUpdated } from '@/events/issue-events'
@@ -197,7 +197,7 @@ export function flushPendingAsFollowUp(issueId: string, issue: { model: string |
       if (!relocated) return
       // Emit SSE so frontend shows "AI thinking" indicator
       emitIssueUpdated(issueId, { sessionStatus: 'pending' }, undefined, undefined, 'engine')
-      await issueEngine.followUpIssue(
+      await getEngine().followUpIssue(
         issueId,
         relocated.prompt,
         issue.model ?? undefined,
@@ -313,7 +313,7 @@ export function triggerIssueExecution(
           [basePrompt, relocated.prompt].filter(Boolean).join('\n\n') :
         basePrompt
 
-      await issueEngine.executeIssue(issueId, {
+      await getEngine().executeIssue(issueId, {
         engineType: (issue.engineType ?? 'claude-code') as EngineType,
         prompt: effectivePrompt,
         workingDir: effectiveWorkingDir,
@@ -330,7 +330,7 @@ export function triggerIssueExecution(
     } catch (err) {
       logger.error({ issueId, err }, 'auto_execute_failed')
       if (relocated) restorePendingVisibility(relocated.oldIds)
-      issueEngine.setLastError(issueId, err instanceof Error ? err.message : 'auto_execute_failed')
+      getEngine().setLastError(issueId, err instanceof Error ? err.message : 'auto_execute_failed')
       try {
         await db
           .update(issuesTable)

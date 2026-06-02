@@ -5,7 +5,7 @@ import type { CockpitProposalType } from '@/cockpit/proposals'
 import { STATUS_IDS } from '@/config'
 import { db } from '@/db'
 import { issues as issuesTable, projects as projectsTable } from '@/db/schema'
-import { issueEngine } from '@/engines/issue/engine'
+import { getEngine } from '@/engines/issue/engine-ref'
 import { appEvents } from '@/events'
 import { logger } from '@/logger'
 import { createOpenAPIRouter } from '@/openapi/hono'
@@ -170,7 +170,7 @@ async function dispatchSendReply(p: { issueId: string, body: string }) {
     throw new Error('body is too long (max 8000 chars)')
   }
   await ensureIssueExists(p.issueId)
-  const result = await issueEngine.followUpIssue(
+  const result = await getEngine().followUpIssue(
     p.issueId,
     p.body,
     undefined,
@@ -203,13 +203,13 @@ async function dispatchMerge(p: { issueId: string }) {
 
 async function dispatchCancel(p: { issueId: string }) {
   await ensureIssueExists(p.issueId)
-  const status = await issueEngine.cancelIssue(p.issueId)
+  const status = await getEngine().cancelIssue(p.issueId)
   return { issueId: p.issueId, status }
 }
 
 async function dispatchRestart(p: { issueId: string }) {
   await ensureIssueExists(p.issueId)
-  const { executionId } = await issueEngine.restartIssue(p.issueId)
+  const { executionId } = await getEngine().restartIssue(p.issueId)
   return { issueId: p.issueId, executionId }
 }
 

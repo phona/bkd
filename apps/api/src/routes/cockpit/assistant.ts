@@ -5,7 +5,7 @@ import { db } from '@/db'
 import { getAppSetting, setAppSetting } from '@/db/helpers'
 import { issues as issuesTable, projects as projectsTable } from '@/db/schema'
 import { toISO } from '@/utils/date'
-import { issueEngine } from '@/engines/issue/engine'
+import { getEngine } from '@/engines/issue/engine-ref'
 import { appEvents } from '@/events'
 import { createOpenAPIRouter } from '@/openapi/hono'
 import { logger } from '@/logger'
@@ -78,7 +78,7 @@ assistant.post('/ask', zValidator('json', askSchema), async (c) => {
     if (firstTurn) {
       const systemPrompt = buildCockpitSystemPrompt(serverName)
       const fullPrompt = `${systemPrompt}\n\n## User request\n\n${body.prompt}`
-      const result = await issueEngine.executeIssue(issueId, {
+      const result = await getEngine().executeIssue(issueId, {
         engineType: currentEngineType as 'claude-code-sdk' | 'claude-code' | 'codex',
         prompt: fullPrompt,
         workingDir: undefined,
@@ -92,7 +92,7 @@ assistant.post('/ask', zValidator('json', askSchema), async (c) => {
       })
     }
 
-    const result = await issueEngine.followUpIssue(
+    const result = await getEngine().followUpIssue(
       issueId,
       body.prompt,
       body.model,

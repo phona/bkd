@@ -2,7 +2,7 @@ import { mkdir, stat } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { findProject, getAppSetting } from '@/db/helpers'
 import { updateIssueSession } from '@/engines/engine-store'
-import { issueEngine } from '@/engines/issue'
+import { getEngine } from '@/engines/issue'
 import { logger } from '@/logger'
 import { createOpenAPIRouter } from '@/openapi/hono'
 import * as R from '@/openapi/routes'
@@ -95,7 +95,7 @@ command.openapi(R.executeIssue, async (c) => {
     // Prepend project-level system prompt if configured
     const basePrompt = project.systemPrompt ? `${project.systemPrompt}\n\n${prompt}` : prompt
     const envVars = parseProjectEnvVars(project.envVars)
-    const result = await issueEngine.executeIssue(issueId, {
+    const result = await getEngine().executeIssue(issueId, {
       engineType: body.engineType as import('@/engines/types').EngineType,
       prompt: basePrompt,
       workingDir: effectiveWorkingDir,
@@ -152,7 +152,7 @@ command.openapi(R.restartIssue, async (c) => {
       return c.json({ success: false, error: guard.reason! }, 400 as const)
     }
     const body = await c.req.json().catch(() => ({}))
-    const result = await issueEngine.restartIssue(issueId, {
+    const result = await getEngine().restartIssue(issueId, {
       engineType: body?.engineType,
     })
     return c.json({
@@ -242,7 +242,7 @@ command.openapi(R.cancelIssue, async (c) => {
   }
 
   try {
-    const status = await issueEngine.cancelIssue(issueId)
+    const status = await getEngine().cancelIssue(issueId)
     return c.json({ success: true, data: { issueId, status } }, 200 as const)
   } catch (error) {
     logger.warn(
@@ -278,7 +278,7 @@ command.openapi(R.getSlashCommands, async (c) => {
   }
 
   const engineType = (issue.engineType as import('@/engines/types').EngineType) ?? undefined
-  const categorized = issueEngine.getCategorizedCommands(issueId, engineType)
+  const categorized = getEngine().getCategorizedCommands(issueId, engineType)
   return c.json({ success: true, data: categorized }, 200 as const)
 })
 

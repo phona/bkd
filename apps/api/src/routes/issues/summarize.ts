@@ -1,7 +1,7 @@
 import { db } from '@/db'
 import { notes } from '@/db/schema'
 import { findProject } from '@/db/helpers'
-import { issueEngine } from '@/engines/issue'
+import { getEngine } from '@/engines/issue'
 import { logger } from '@/logger'
 import { createOpenAPIRouter } from '@/openapi/hono'
 import * as R from '@/openapi/routes'
@@ -25,7 +25,7 @@ summarize.openapi(R.summarizeIssue, async (c) => {
     }
 
     // 1. Fetch issue logs
-    const logResult = issueEngine.getLogs(issueId, { limit: 1000 })
+    const logResult = getEngine().getLogs(issueId, { limit: 1000 })
     const entries = logResult.entries
 
     if (entries.length === 0) {
