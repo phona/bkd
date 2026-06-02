@@ -3,6 +3,7 @@ import type { EngineAttachment, EngineType, PermissionPolicy } from '@/engines/t
 import { logger } from '@/logger'
 import { AUTO_CLEANUP_DELAY_MS, GC_INTERVAL_MS, MAX_CONCURRENT_EXECUTIONS } from './constants'
 import type { EngineContext } from './context'
+import { setEngine } from './engine-ref'
 import { gcSweep } from './gc'
 import {
   cancelIssue,
@@ -262,4 +263,9 @@ export class IssueEngine {
 }
 
 // Singleton
-export const issueEngine = new IssueEngine()
+// Backed by the engine accessor (Stage 1 of engine-injection). The const is
+// retained ONLY as a temporary bridge for not-yet-migrated callers; it is
+// removed at the end of Stage 1 once every consumer uses getEngine().
+const issueEngineInstance = new IssueEngine()
+setEngine(issueEngineInstance)
+export const issueEngine = issueEngineInstance
