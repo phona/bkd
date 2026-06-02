@@ -1,5 +1,5 @@
 export { createApp } from './app'
-export { createCore } from './core'
+export { createCore } from './app-core'
 // The launcher loads this bundle in a SEPARATE module graph, which gives it its
 // own issueEngine singleton. Export the lifecycle entrypoints so the launcher
 // can run them against THIS bundle's engine (the one that actually executes

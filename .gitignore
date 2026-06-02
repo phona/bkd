@@ -74,8 +74,6 @@ apps/api/src/_static-assets.generated.ts
 # core dumps
 core
 core.*
-# but keep the API core source module (not a core dump)
-!apps/api/src/core.ts
 
 # temp
 tmp/
