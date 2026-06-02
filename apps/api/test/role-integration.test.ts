@@ -3,14 +3,17 @@ import { createTestProject, expectSuccess, post } from './helpers'
 import './setup'
 
 // Mock issueEngine to avoid real AI execution
+const engineStub = {
+  executeIssue: mock(() => ({ executionId: 'mock', messageId: 'mock' })),
+  isTurnInFlight: mock(() => false),
+  getLogs: mock(() => ({ entries: [], hasMore: false })),
+  getMaxTurnIndex: mock(() => 0),
+  getLogsAround: mock(() => ({ entries: [], hasMore: false })),
+}
 mock.module('@/engines/issue', () => ({
-  issueEngine: {
-    executeIssue: mock(() => ({ executionId: 'mock', messageId: 'mock' })),
-    isTurnInFlight: mock(() => false),
-    getLogs: mock(() => ({ entries: [], hasMore: false })),
-    getMaxTurnIndex: mock(() => 0),
-    getLogsAround: mock(() => ({ entries: [], hasMore: false })),
-  },
+  issueEngine: engineStub,
+  getEngine: () => engineStub,
+  setEngine: () => {},
 }))
 
 let projectId: string
