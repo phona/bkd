@@ -1,4 +1,5 @@
 import { kill } from 'node:process'
+import { ulid } from 'ulid'
 import type { EngineContext } from '@/engines/issue/context'
 import { createIssueDebugLog, teeStreamToDebug } from '@/engines/issue/debug-log'
 import { emitDiagnosticLog } from '@/engines/issue/diagnostic'
@@ -169,4 +170,62 @@ export function register(
   )
 
   return managed
+}
+
+// ---------- Test-only seam ----------
+
+/**
+ * TEST-ONLY: register a minimal "running" ManagedProcess in ctx.pm grouped by
+ * issueId, with no real OS process. Used to assert that the reconciler leaves a
+ * `working` issue alone when the engine reports a tracked active process
+ * (proving the reconciler and the issue-runner share ONE engine instance).
+ *
+ * The stub subprocess never resolves `exited`, so ProcessManager keeps the
+ * entry in the non-terminal `running` state and `getFirstActiveInGroup`
+ * (the basis of `hasActiveProcessForIssue`) returns it.
+ *
+ * Guarded by NODE_ENV==='test' so it can never run in production.
+ */
+export function registerFakeActiveForTest(ctx: EngineContext, issueId: string): string {
+  if (process.env.NODE_ENV !== 'test') {
+    throw new Error('registerFakeActiveForTest is test-only')
+  }
+
+  const executionId = ulid()
+
+  // A never-resolving exit promise keeps PM from transitioning to terminal.
+  const fakeHandle = {
+    pid: undefined as number | undefined,
+    exited: new Promise<number>(() => {}),
+    kill: () => {},
+    isAlive: () => true,
+  }
+
+  const managed = {
+    executionId,
+    issueId,
+    engineType: 'claude-code' as EngineType,
+    process: { subprocess: fakeHandle } as unknown as SpawnedProcess,
+    state: 'running' as const,
+    startedAt: new Date(),
+    logs: new ExecutionStore(executionId),
+    retryCount: 0,
+    turnInFlight: true,
+    queueCancelRequested: false,
+    logicalFailure: false,
+    turnSettled: false,
+    keepAlive: false,
+    lastActivityAt: new Date(),
+    slashCommands: [],
+    agents: [],
+    plugins: [],
+    pendingInputs: [],
+  } as unknown as ManagedProcess
+
+  ctx.pm.register(executionId, fakeHandle, managed, {
+    group: issueId,
+    startAsRunning: true,
+  })
+
+  return executionId
 }

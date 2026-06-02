@@ -259,4 +259,17 @@ export class IssueEngine {
   setLastError(issueId: string, message: string): void {
     this.ctx.lastErrors.set(issueId, message)
   }
+
+  // ---- Test-only seam ----
+
+  /**
+   * TEST-ONLY: register a fake active process for an issue so that
+   * `hasActiveProcessForIssue` returns true without a real subprocess. Used to
+   * verify the reconciler respects tracked processes on THIS engine instance.
+   * Guarded by NODE_ENV==='test' inside the helper.
+   */
+  __registerFakeActiveForTest(issueId: string): string {
+    const { registerFakeActiveForTest } = require('./process/register') as typeof import('./process/register')
+    return registerFakeActiveForTest(this.ctx, issueId)
+  }
 }
