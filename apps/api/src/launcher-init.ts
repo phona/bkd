@@ -25,7 +25,7 @@ export interface LauncherStops {
   stopChangesSummaryWatcher: () => void
 }
 
-export function initLauncher(): LauncherStops {
+export function initProcessGuards(): void {
   process.on('unhandledRejection', (reason, promise) => {
     logger.error({ reason, promise: String(promise) }, 'unhandled_rejection')
   })
@@ -37,7 +37,9 @@ export function initLauncher(): LauncherStops {
 
   acquirePidLock()
   process.on('exit', () => releasePidLock())
+}
 
+export function initEngineLifecycle(): LauncherStops {
   if (authConfig.enabled) {
     void discoverOIDC().catch(err => logger.error({ err }, 'oidc_discovery_warmup_failed'))
   }
@@ -72,6 +74,11 @@ export function initLauncher(): LauncherStops {
     stopDeliveryCleanup,
     stopChangesSummaryWatcher,
   }
+}
+
+export function initLauncher(): LauncherStops {
+  initProcessGuards()
+  return initEngineLifecycle()
 }
 
 export function registerUpgradeShutdown(

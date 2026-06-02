@@ -3,7 +3,6 @@ import type { EngineAttachment, EngineType, PermissionPolicy } from '@/engines/t
 import { logger } from '@/logger'
 import { AUTO_CLEANUP_DELAY_MS, GC_INTERVAL_MS, MAX_CONCURRENT_EXECUTIONS } from './constants'
 import type { EngineContext } from './context'
-import { setEngine } from './engine-ref'
 import { gcSweep } from './gc'
 import {
   cancelIssue,
@@ -261,9 +260,3 @@ export class IssueEngine {
     this.ctx.lastErrors.set(issueId, message)
   }
 }
-
-// Singleton
-// Backed by the engine accessor (engine-injection). The instance is created and
-// seeded into the accessor via setEngine(); consumers reach it via getEngine().
-const issueEngineInstance = new IssueEngine()
-setEngine(issueEngineInstance)
