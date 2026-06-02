@@ -3,7 +3,7 @@ import { cacheDel } from '@/cache'
 import { STATUS_IDS } from '@/config'
 import { db } from '@/db'
 import { issues as issuesTable } from '@/db/schema'
-import { issueEngine } from '@/engines/issue'
+import { getEngine } from '@/engines/issue'
 import { emitIssueUpdated } from '@/events/issue-events'
 import { registerAction } from '../registry'
 import { resolveIssue, validateIssueRefs } from './resolver'
@@ -27,7 +27,7 @@ registerAction('issue-close', {
 
     // Cancel active session if running
     if (issue.sessionStatus === 'running' || issue.sessionStatus === 'pending') {
-      await issueEngine.cancelIssue(issue.id)
+      await getEngine().cancelIssue(issue.id)
     }
 
     db.update(issuesTable)

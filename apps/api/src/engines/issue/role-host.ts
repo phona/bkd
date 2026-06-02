@@ -1,7 +1,7 @@
 import { asc, eq } from 'drizzle-orm'
 import { db } from '@/db'
 import { issueLogs } from '@/db/schema'
-import { issueEngine } from './engine'
+import { getEngine } from './engine-ref'
 import { logger } from '@/logger'
 
 export async function invokeHost(issueId: string, message: string) {
@@ -30,7 +30,7 @@ export async function invokeHost(issueId: string, message: string) {
 
     // 3. Execute in the chatroom issue itself (no expert issue)
     // The host is the chatroom itself
-    const result = await issueEngine.executeIssue(issueId, {
+    const result = await getEngine().executeIssue(issueId, {
       engineType: 'claude-code',
       prompt,
     })

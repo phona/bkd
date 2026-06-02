@@ -3,7 +3,7 @@ import { and, desc, eq } from 'drizzle-orm'
 import { db } from '@/db'
 import { getAppSetting } from '@/db/helpers'
 import { issueLogs, issues as issuesTable } from '@/db/schema'
-import { issueEngine } from '@/engines/issue/engine'
+import { getEngine } from '@/engines/issue/engine-ref'
 import { appEvents } from '@/events'
 import { logger } from '@/logger'
 import { ROOT_DIR } from '@/root'
@@ -262,7 +262,7 @@ async function runEnrichment(prompt: string): Promise<RunResult> {
 
     const waiter = waitForDone(issueId, ENRICH_TIMEOUT_MS)
     try {
-      await issueEngine.executeIssue(issueId, {
+      await getEngine().executeIssue(issueId, {
         engineType: engine,
         prompt,
         workingDir: ROOT_DIR,

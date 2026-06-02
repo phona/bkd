@@ -1,4 +1,4 @@
-import { issueEngine } from '@/engines/issue'
+import { getEngine } from '@/engines/issue'
 import { ensureWorking } from '@/routes/issues/_shared'
 import { registerAction } from '../registry'
 import { resolveIssue, validateIssueRefs } from './resolver'
@@ -15,7 +15,7 @@ registerAction('issue-follow-up', {
     const guard = await ensureWorking(issue)
     if (!guard.ok) throw new Error(guard.reason!)
 
-    const result = await issueEngine.followUpIssue(
+    const result = await getEngine().followUpIssue(
       issue.id,
       prompt,
       (config.model as string) ?? issue.model ?? undefined,
