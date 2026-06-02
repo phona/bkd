@@ -15,10 +15,13 @@ const engineStub = {
   getMaxTurnIndex: mock(() => 0),
   getLogsAround: mock(() => ({ entries: [], hasMore: false })),
 }
+let mockCurrentEngine: any = engineStub
 mock.module('@/engines/issue', () => ({
   issueEngine: engineStub,
-  getEngine: () => engineStub,
-  setEngine: () => {},
+  getEngine: () => mockCurrentEngine,
+  setEngine: (e: any) => {
+    mockCurrentEngine = e
+  },
 }))
 
 let projectId: string
