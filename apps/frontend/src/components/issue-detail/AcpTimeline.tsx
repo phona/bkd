@@ -2,10 +2,14 @@ import type { NormalizedLogEntry, TimelineEntry } from '@bkd/shared'
 import { CheckCircle2, Circle, Lightbulb, ListTodo, Loader2 } from 'lucide-react'
 import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Virtuoso } from 'react-virtuoso'
 import { useAcpTimeline } from '@/hooks/use-acp-timeline'
 import { useViewModeStore } from '@/stores/view-mode-store'
 import { LogEntry } from './LogEntry'
 import { ToolGroupMessage } from './ToolItems'
+
+// Base index for Virtuoso's jump-free prepend (inverse infinite scroll).
+const ACP_FIRST_INDEX_BASE = 1_000_000
 
 const AcpPlanCard = memo(({
   entry,
@@ -152,197 +156,145 @@ export function AcpTimeline({
   const fullWidthChat = useViewModeStore(s => s.fullWidthChat)
   const { items, pendingMessages } = useAcpTimeline(logs)
 
-  const nearBottomRef = useRef(true)
-  useEffect(() => {
-    const el = scrollRef?.current
-    if (!el) return
-    const handler = () => {
-      nearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40
-    }
-    el.addEventListener('scroll', handler, { passive: true })
-    return () => el.removeEventListener('scroll', handler)
+  // Virtuoso virtualizes the timeline inside ChatBody's shared scroll
+  // container (customScrollParent), so the existing scroll machinery — title
+  // auto-hide, saved-position restore, scroll buttons — keeps working on the
+  // same element. Prepend (load older) anchoring + bottom-follow are owned by
+  // Virtuoso, replacing the hand-rolled scrollHeight-delta compensation that
+  // could not match mainstream chat quality.
+  const [scrollEl, setScrollEl] = useState<HTMLElement | null>(null)
+  useLayoutEffect(() => {
+    setScrollEl(scrollRef?.current ?? null)
   }, [scrollRef])
 
-  const initialScrollDone = useRef(false)
-  useEffect(() => {
-    if (initialScrollDone.current || (items.length === 0 && pendingMessages.length === 0)) return
-    const el = scrollRef?.current
-    if (!el) return
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        el.scrollTo({ top: el.scrollHeight })
-        initialScrollDone.current = true
-      })
-    })
-  }, [items.length, pendingMessages.length, scrollRef])
-
+  // firstItemIndex bookkeeping for jump-free prepend (inverse infinite scroll):
+  // start high, decrement by the number of items prepended; Virtuoso uses the
+  // index shift to preserve the scroll position. See virtuoso "prepend items".
+  const [firstItemIndex, setFirstItemIndex] = useState(ACP_FIRST_INDEX_BASE)
   const prevLenRef = useRef(items.length)
-  const prevFirstIdRef = useRef(items[0]?.id)
-  const firstItemId = items[0]?.id
-
-  // Scroll anchoring on prepend — see SessionMessages for the long form.
-  // Without this, older items added at the top shift the user's viewport
-  // to the new top instead of preserving the message they were reading.
-  const prevScrollHeightRef = useRef(0)
+  const prevFirstIdRef = useRef<string | undefined>(items[0]?.id)
   useLayoutEffect(() => {
-    const el = scrollRef?.current
-    if (!el) return
-    const wasOlderPrepend =
-      initialScrollDone.current &&
-      items.length > prevLenRef.current &&
-      prevFirstIdRef.current &&
-      firstItemId !== prevFirstIdRef.current
-    if (wasOlderPrepend && prevScrollHeightRef.current > 0) {
-      const delta = el.scrollHeight - prevScrollHeightRef.current
-      if (delta > 0) el.scrollTop = el.scrollTop + delta
-      requestAnimationFrame(() => {
-        const finalDelta = el.scrollHeight - prevScrollHeightRef.current
-        if (finalDelta > 0) el.scrollTop = el.scrollTop + (finalDelta - delta)
-      })
-    }
-    prevScrollHeightRef.current = el.scrollHeight
-  }, [firstItemId, items.length, scrollRef])
-
-  // Auto-load older logs via IntersectionObserver on a top sentinel.
-  const hasOlderLogsRef = useRef(hasOlderLogs)
-  const isLoadingOlderRef = useRef(isLoadingOlder)
-  useEffect(() => {
-    hasOlderLogsRef.current = hasOlderLogs
-  }, [hasOlderLogs])
-  useEffect(() => {
-    isLoadingOlderRef.current = isLoadingOlder
-  }, [isLoadingOlder])
-
-  const topSentinelRef = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    const sentinel = topSentinelRef.current
-    const root = scrollRef?.current
-    if (!sentinel || !root || !onLoadOlder) return
-    const trigger = () => {
-      if (!hasOlderLogsRef.current || isLoadingOlderRef.current) return
-      onLoadOlder()
-    }
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (!entries[0]?.isIntersecting) return
-        trigger()
-      },
-      { root, rootMargin: '300px 0px 0px 0px' },
-    )
-    observer.observe(sentinel)
-    // Scroll-based fallback for mobile WebKit: IntersectionObserver can
-    // miss the intersection event during fast inertial scrolls. The shared
-    // `trigger` guard makes both paths safe to coexist.
-    const onScroll = () => {
-      if (root.scrollTop <= 300) trigger()
-    }
-    root.addEventListener('scroll', onScroll, { passive: true })
-    return () => {
-      observer.disconnect()
-      root.removeEventListener('scroll', onScroll)
-    }
-    // items.length: sentinel div is gated by a `return null` early-exit
-    // (see below) when items=[] && pending=[] && !isRunning. Without
-    // re-running on items.length transition 0→N the observer never gets
-    // attached after a cold mount — same bug class as SessionMessages.
-  }, [scrollRef, onLoadOlder, items.length])
-
-  useEffect(() => {
-    if (!initialScrollDone.current) return
-    const wasOlderPrepend =
-      items.length > prevLenRef.current &&
-      prevFirstIdRef.current &&
-      firstItemId !== prevFirstIdRef.current
-
-    if (!wasOlderPrepend && nearBottomRef.current && (items.length !== prevLenRef.current || isRunning)) {
-      const el = scrollRef?.current
-      el?.scrollTo({ top: el.scrollHeight })
+    const firstId = items[0]?.id
+    const prepended
+      = items.length > prevLenRef.current
+        && prevFirstIdRef.current !== undefined
+        && firstId !== prevFirstIdRef.current
+    if (prepended) {
+      setFirstItemIndex(i => i - (items.length - prevLenRef.current))
     }
     prevLenRef.current = items.length
-    prevFirstIdRef.current = firstItemId
-  }, [items, isRunning, scrollRef, firstItemId])
+    prevFirstIdRef.current = firstId
+  }, [items])
 
   if (items.length === 0 && pendingMessages.length === 0 && !isRunning) return null
 
+  const itemClass = fullWidthChat ? 'px-4' : 'mx-auto w-full max-w-3xl px-4'
+
+  const context: AcpListContext = {
+    isLoadingOlder,
+    loadingLabel: t('common.loading'),
+    editLabel: t('common.edit'),
+    pendingMessages,
+    onEditPending,
+    itemClass,
+  }
+
+  // Virtuoso owns virtualization, jump-free prepend, and bottom-follow, all
+  // inside ChatBody's shared scroll container (customScrollParent). Render only
+  // once that element is available so Virtuoso never spins up its own nested
+  // scroller. Header = load-older spinner; Footer = pending (unsent) messages.
+  if (!scrollEl) return null
+
   return (
-    <div className={`flex flex-col py-1.5 px-4${fullWidthChat ? '' : ' max-w-3xl'}`}>
-      {/* Auto-load sentinel — see SessionMessages for context. */}
-      <div ref={topSentinelRef} aria-hidden className="h-0 shrink-0" />
-      {isLoadingOlder ?
-          (
-            <div className="flex justify-center py-2">
-              <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-                <Loader2 className="h-3 w-3 animate-spin" />
-                {t('common.loading')}
-              </span>
-            </div>
-          ) :
-        null}
-
-      {items.map((item) => {
-        switch (item.type) {
-          case 'tool-group':
-            return (
-              <div key={item.id} className="group">
-                {item.thinking && (
-                  <div className="mb-1.5">
-                    <CompletedThinking entry={item.thinking} />
-                  </div>
-                )}
-                <ToolGroupMessage message={item.message} />
-              </div>
-            )
-          case 'plan':
-            return (
-              <AcpPlanCard
-                key={item.id}
-                entry={item.entry}
-                todos={item.todos}
-                completedCount={item.completedCount}
-              />
-            )
-          case 'thinking':
-            return item.isStreaming && isRunning ?
-                <StreamingThinking key={item.id} entry={item.entry} /> :
-                <CompletedThinking key={item.id} entry={item.entry} />
-          case 'entry':
-            return (
-              <div key={item.id} className="group">
-                {item.thinking && (
-                  <div className="mb-1.5">
-                    <CompletedThinking entry={item.thinking} />
-                  </div>
-                )}
-                <LogEntry entry={item.entry} />
-              </div>
-            )
-          default:
-            return null
-        }
-      })}
-
-      {pendingMessages.length > 0 ?
-          (
-            <div className="mt-1 border-t border-border/30 pt-2">
-              {pendingMessages.map((entry, idx) => (
-                <div key={entry.messageId ?? `acp-pending-${idx}`} className="group relative">
-                  <LogEntry entry={entry} />
-                  {onEditPending ?
-                      (
-                        <button
-                          type="button"
-                          onClick={() => onEditPending(entry.messageId ?? `acp-pending-${idx}`)}
-                          className="absolute right-2 top-2 hidden rounded-md border border-border/40 bg-background/90 px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground group-hover:inline-flex"
-                        >
-                          {t('common.edit')}
-                        </button>
-                      ) :
-                    null}
+    <Virtuoso
+      data={items}
+      context={context}
+      customScrollParent={scrollEl}
+      firstItemIndex={firstItemIndex}
+      initialTopMostItemIndex={Math.max(0, items.length - 1)}
+      followOutput="auto"
+      startReached={() => {
+        if (hasOlderLogs && !isLoadingOlder) onLoadOlder?.()
+      }}
+      computeItemKey={(_index, item) => item.id}
+      itemContent={(_index, item) => (
+        <div className={`${itemClass} py-1.5`}>
+          {item.type === 'tool-group'
+            ? (
+                <div className="group">
+                  {item.thinking && (
+                    <div className="mb-1.5"><CompletedThinking entry={item.thinking} /></div>
+                  )}
+                  <ToolGroupMessage message={item.message} />
                 </div>
-              ))}
-            </div>
-          ) :
-        null}
+              )
+            : item.type === 'plan'
+              ? (
+                  <AcpPlanCard entry={item.entry} todos={item.todos} completedCount={item.completedCount} />
+                )
+              : item.type === 'thinking'
+                ? (item.isStreaming && isRunning
+                    ? <StreamingThinking entry={item.entry} />
+                    : <CompletedThinking entry={item.entry} />)
+                : item.type === 'entry'
+                  ? (
+                      <div className="group">
+                        {item.thinking && (
+                          <div className="mb-1.5"><CompletedThinking entry={item.thinking} /></div>
+                        )}
+                        <LogEntry entry={item.entry} />
+                      </div>
+                    )
+                  : null}
+        </div>
+      )}
+      components={{ Header: AcpListHeader, Footer: AcpListFooter }}
+    />
+  )
+}
+
+interface AcpListContext {
+  isLoadingOlder: boolean
+  loadingLabel: string
+  editLabel: string
+  pendingMessages: NormalizedLogEntry[]
+  onEditPending?: (messageId: string) => void
+  itemClass: string
+}
+
+function AcpListHeader({ context }: { context?: AcpListContext }) {
+  if (!context?.isLoadingOlder) return null
+  return (
+    <div className={`${context.itemClass} flex justify-center py-2`}>
+      <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+        <Loader2 className="h-3 w-3 animate-spin" />
+        {context.loadingLabel}
+      </span>
+    </div>
+  )
+}
+
+function AcpListFooter({ context }: { context?: AcpListContext }) {
+  if (!context || context.pendingMessages.length === 0) return null
+  const { pendingMessages, onEditPending, editLabel, itemClass } = context
+  return (
+    <div className={`${itemClass} mt-1 border-t border-border/30 pt-2`}>
+      {pendingMessages.map((entry, idx) => (
+        <div key={entry.messageId ?? `acp-pending-${idx}`} className="group relative">
+          <LogEntry entry={entry} />
+          {onEditPending
+            ? (
+                <button
+                  type="button"
+                  onClick={() => onEditPending(entry.messageId ?? `acp-pending-${idx}`)}
+                  className="absolute right-2 top-2 hidden rounded-md border border-border/40 bg-background/90 px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground group-hover:inline-flex"
+                >
+                  {editLabel}
+                </button>
+              )
+            : null}
+        </div>
+      ))}
     </div>
   )
 }
