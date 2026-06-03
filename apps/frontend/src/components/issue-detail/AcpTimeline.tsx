@@ -169,22 +169,29 @@ export function AcpTimeline({
 
   // firstItemIndex bookkeeping for jump-free prepend (inverse infinite scroll):
   // start high, decrement by the number of items prepended; Virtuoso uses the
-  // index shift to preserve the scroll position. See virtuoso "prepend items".
+  // index shift to hold the user's position instead of snapping to the new top.
+  //
+  // CRITICAL: firstItemIndex must change in the SAME render as `items`. Doing it
+  // in an effect lags one frame — Virtuoso renders the longer list with the
+  // stale index and jumps to the new top (the "I don't know where I am" symptom).
+  // React's "adjust state during render when an input changes" pattern keeps the
+  // data and the index in lockstep.
   const [firstItemIndex, setFirstItemIndex] = useState(ACP_FIRST_INDEX_BASE)
-  const prevLenRef = useRef(items.length)
-  const prevFirstIdRef = useRef<string | undefined>(items[0]?.id)
-  useLayoutEffect(() => {
-    const firstId = items[0]?.id
-    const prepended
-      = items.length > prevLenRef.current
-        && prevFirstIdRef.current !== undefined
-        && firstId !== prevFirstIdRef.current
-    if (prepended) {
-      setFirstItemIndex(i => i - (items.length - prevLenRef.current))
+  const [prevSig, setPrevSig] = useState<{ len: number, firstId: string | undefined }>({
+    len: items.length,
+    firstId: items[0]?.id,
+  })
+  const firstId = items[0]?.id
+  if (prevSig.len !== items.length || prevSig.firstId !== firstId) {
+    if (
+      items.length > prevSig.len
+      && prevSig.firstId !== undefined
+      && firstId !== prevSig.firstId
+    ) {
+      setFirstItemIndex(i => i - (items.length - prevSig.len))
     }
-    prevLenRef.current = items.length
-    prevFirstIdRef.current = firstId
-  }, [items])
+    setPrevSig({ len: items.length, firstId })
+  }
 
   if (items.length === 0 && pendingMessages.length === 0 && !isRunning) return null
 
