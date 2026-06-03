@@ -662,8 +662,12 @@ async function main() {
   console.log(`[launcher] Starting version ${version}`)
 
   // 7. Load Hono app
-  const publicDir = resolve(appDir, 'public')
-  const indexHtml = resolve(publicDir, 'index.html')
+  // `let`, not `const`: a route hot-reload swaps to a new version dir, and the
+  // static-asset directory MUST track it too — otherwise hot-reload serves the
+  // new server.js (API) but the OLD frontend (index.html + /assets), so
+  // frontend-only changes never reach users. Updated in hotReloadApp below.
+  let publicDir = resolve(appDir, 'public')
+  let indexHtml = resolve(publicDir, 'index.html')
   let currentServerPath = serverPath
   let currentApp: any = null
 
@@ -774,7 +778,11 @@ async function main() {
       if (persistentBus && typeof m.setBus === 'function') m.setBus(persistentBus)
       currentApp = m.createApp()
       currentServerPath = newPath
-      console.log(`[launcher] Hot-reloaded routes from ${newVersionDir} (engine + bus preserved)`)
+      // Point static serving at the new version's public/ so the hot-reloaded
+      // frontend (index.html + content-hashed /assets) is actually served.
+      publicDir = resolve(newVersionDir, 'public')
+      indexHtml = resolve(publicDir, 'index.html')
+      console.log(`[launcher] Hot-reloaded routes + static from ${newVersionDir} (engine + bus preserved)`)
     } catch (err) {
       console.error('[launcher] Hot-reload failed, falling back to drain+restart:', err)
       const apply = await import('../apps/api/src/upgrade/apply')
