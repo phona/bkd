@@ -8,6 +8,7 @@ import { useChatSearchStore } from '@/stores/chat-search-store'
 import { useViewModeStore } from '@/stores/view-mode-store'
 import { AcpTimeline } from './AcpTimeline'
 import { LogEntry } from './LogEntry'
+import { markProgrammaticScroll } from './scroll-coordination'
 import { ToolGroupMessage } from './ToolItems'
 
 // ── ChatMessage renderer ─────────────────────────────────
@@ -284,7 +285,22 @@ function LegacySessionMessages({
   // and before paint, so the adjustment is invisible to the user. Runs
   // before the existing scroll-to-bottom useEffect below, which is fine —
   // both branches check `wasOlderPrepend` and mutually exclude.
+  //
+  // The naive "compensate by scrollHeight delta once + a single rAF" misses
+  // ASYNC content: code blocks (Shiki) and markdown finish laying out several
+  // frames later, growing the prepended region AFTER the correction ran — so
+  // the viewport visibly jumps when those blocks expand. Instead we keep
+  // absorbing growth across a short settle window: each frame that the content
+  // grew, add exactly that growth to scrollTop, until it stops (or the window
+  // ends). The scroll writes are stamped programmatic so the title auto-hide
+  // (which shares this scroll element) ignores them.
   const prevScrollHeightRef = useRef(0)
+  const settleRef = useRef<{ raf: number, lastHeight: number, until: number }>({
+    raf: 0,
+    lastHeight: 0,
+    until: 0,
+  })
+  useEffect(() => () => cancelAnimationFrame(settleRef.current.raf), [])
   useLayoutEffect(() => {
     const el = scrollRef?.current
     if (!el) return
@@ -295,12 +311,24 @@ function LegacySessionMessages({
       firstMessageId !== prevFirstIdRef.current
     if (wasOlderPrepend && prevScrollHeightRef.current > 0) {
       const delta = el.scrollHeight - prevScrollHeightRef.current
-      if (delta > 0) el.scrollTop = el.scrollTop + delta
-      // Correct after virtualizer finishes measuring in the next frame
-      requestAnimationFrame(() => {
-        const finalDelta = el.scrollHeight - prevScrollHeightRef.current
-        if (finalDelta > 0) el.scrollTop = el.scrollTop + (finalDelta - delta)
-      })
+      if (delta > 0) {
+        markProgrammaticScroll(el, 700)
+        el.scrollTop = el.scrollTop + delta
+      }
+      const s = settleRef.current
+      cancelAnimationFrame(s.raf)
+      s.lastHeight = el.scrollHeight
+      s.until = performance.now() + 600
+      const tick = (): void => {
+        const grew = el.scrollHeight - s.lastHeight
+        if (grew > 0) {
+          markProgrammaticScroll(el, 200)
+          el.scrollTop = el.scrollTop + grew
+          s.lastHeight = el.scrollHeight
+        }
+        s.raf = performance.now() < s.until ? requestAnimationFrame(tick) : 0
+      }
+      s.raf = requestAnimationFrame(tick)
     }
     prevScrollHeightRef.current = el.scrollHeight
   }, [firstMessageId, messages.length, scrollRef])
