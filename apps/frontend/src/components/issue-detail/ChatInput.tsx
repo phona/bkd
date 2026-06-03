@@ -85,6 +85,7 @@ export function ChatInput({
   onRefreshLogs,
   pendingEditContent,
   onPendingEditConsumed,
+  titleVisible = true,
 }: {
   projectId?: string
   issueId?: string
@@ -104,6 +105,13 @@ export function ChatInput({
   onRefreshLogs?: () => void
   pendingEditContent?: string | null
   onPendingEditConsumed?: () => void
+  /**
+   * Mobile reading signal from ChatArea's title auto-hide. When the title bar
+   * is hidden (user scrolled away to read), collapse the input too so chrome
+   * shrinks consistently — even if the textarea is still focused (mobile
+   * doesn't blur on scroll). Empty-input gate still protects unsent drafts.
+   */
+  titleVisible?: boolean
 }) {
   const { t } = useTranslation()
   const isMobile = useIsMobile()
@@ -665,7 +673,7 @@ export function ChatInput({
 
   const mobileCollapsed =
     isMobile
-    && !isFocused
+    && (!isFocused || !titleVisible)
     && input.length === 0
     && attachedFiles.length === 0
     && !isDoneIssue

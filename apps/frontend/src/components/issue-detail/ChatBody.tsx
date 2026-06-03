@@ -686,6 +686,7 @@ export function ChatBody({
         diffOpen={showDiff}
         onToggleDiff={onToggleDiff}
         scrollRef={scrollRef}
+        titleVisible={titleVisible}
         engineType={issue.engineType ?? undefined}
         model={issue.model ?? undefined}
         sessionStatus={issue.sessionStatus}
