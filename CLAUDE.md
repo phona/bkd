@@ -2,6 +2,12 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Product Direction (read before adding features)
+
+BKD is a **self-hosted, engine-neutral, mobile chat tool for driving coding agents** + a thin chat-management layer. Its only real edge is **no lock-in** (engine-neutral, your infra/MCP/creds, multi-device). See [README.md#direction](README.md) for the full charter.
+
+**Litmus test for any new feature:** does it make *this conversation with the agent* better (context, branching, navigation)? → build it. Does it organize/relate issues for tracking/planning? → that's project management; **do not build it**. Out of scope: PM/workspace/gantt/portfolios, general automation-platform ambitions, anything vendor-locked.
+
 ## Project Overview
 
 Kanban app for managing AI coding agents. Issues on the board are assigned to CLI-based AI engines (Claude Code, Codex, Gemini CLI) that execute autonomously in the user's workspace.
