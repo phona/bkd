@@ -90,13 +90,18 @@ export async function createWorktree(
    * from the parent issue's branch (PLAN-021).
    */
   startPointRef?: string,
+  /**
+   * Optional branch name for the new worktree. Defaults to `bkd/{issueId}`.
+   * Used by WT-001 to let users name the branch.
+   */
+  branchNameOverride?: string,
 ): Promise<string> {
   // Guard: baseDir must be inside a git work tree
   if (!(await isGitRepoFresh(baseDir))) {
     throw new Error(`Cannot create worktree: ${baseDir} is not a git repository`)
   }
 
-  const branchName = `bkd/${issueId}`
+  const branchName = branchNameOverride?.trim() || `bkd/${issueId}`
   const worktreeDir = resolveWorktreePath(projectId, issueId)
   await mkdir(join(WORKTREE_BASE, projectId), { recursive: true })
 

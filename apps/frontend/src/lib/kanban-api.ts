@@ -378,6 +378,10 @@ export const kanbanApi = {
     get<Array<{ issueId: string, path: string, branch: string | null }>>(
       `/api/projects/${projectId}/worktrees`,
     ),
+  getGitBranches: (projectId: string) =>
+    get<{ branches: string[], current: string | null }>(
+      `/api/git/branches?projectId=${encodeURIComponent(projectId)}`,
+    ),
   deleteWorktree: (projectId: string, issueId: string) =>
     del<{ issueId: string }>(`/api/projects/${projectId}/worktrees/${issueId}`),
 
@@ -563,6 +567,8 @@ export const kanbanApi = {
       tags?: string[]
       statusId: string
       useWorktree?: boolean
+      worktreeBaseBranch?: string
+      worktreeBranchName?: string
       engineType?: string
       model?: string
       permissionMode?: string

@@ -1,13 +1,18 @@
 import { stat } from 'node:fs/promises'
 import { resolve } from 'node:path'
-import { getAppSetting } from '@/db/helpers'
+import { findProject, getAppSetting } from '@/db/helpers'
 import { runCommand } from '@/engines/spawn'
 import { zValidator } from '@hono/zod-validator'
 import * as z from 'zod'
 import { createOpenAPIRouter } from '@/openapi/hono'
+import { ROOT_DIR } from '@/root'
 
 const detectRemoteSchema = z.object({
   directory: z.string().min(1).max(1000),
+})
+
+const branchesQuerySchema = z.object({
+  projectId: z.string().min(1).max(64),
 })
 
 async function runGit(args: string[], cwd: string): Promise<{ code: number, stdout: string }> {
@@ -84,6 +89,49 @@ git.post(
     }
 
     return c.json({ success: false, error: 'no_remote_found' }, 404)
+  },
+)
+
+// GET /api/git/branches?projectId=… — List branches in a project's repo.
+// Used by the create-issue worktree options (WT-001) to pick a base branch.
+git.get(
+  '/branches',
+  zValidator('query', branchesQuerySchema, (result, c) => {
+    if (!result.success) {
+      return c.json({ success: false, error: 'Invalid projectId' }, 400)
+    }
+  }),
+  async (c) => {
+    const { projectId } = c.req.valid('query')
+    const project = await findProject(projectId)
+    if (!project) {
+      return c.json({ success: false, error: 'Project not found' }, 404)
+    }
+
+    const dir = project.directory ? resolve(project.directory) : ROOT_DIR
+
+    const rev = await runGit(['rev-parse', '--is-inside-work-tree'], dir)
+    if (rev.code !== 0 || rev.stdout.trim() !== 'true') {
+      return c.json({ success: true, data: { branches: [], current: null } })
+    }
+
+    const refs = await runGit(
+      ['for-each-ref', '--format=%(refname:short)', 'refs/heads', 'refs/remotes'],
+      dir,
+    )
+    const branches = Array.from(
+      new Set(
+        refs.stdout
+          .split('\n')
+          .map(l => l.trim())
+          .filter(l => l.length > 0 && !l.endsWith('/HEAD')),
+      ),
+    ).sort()
+
+    const cur = await runGit(['branch', '--show-current'], dir)
+    const current = cur.stdout.trim() || null
+
+    return c.json({ success: true, data: { branches, current } })
   },
 )
 

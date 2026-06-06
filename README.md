@@ -6,6 +6,42 @@ BKD is a unified frontend for CLI-based coding agents — [Claude Code](https://
 
 [中文说明](README.zh-CN.md)
 
+## Direction
+
+> The north star for what BKD is — and what it deliberately is **not**. Read this before adding features.
+
+**Goal:** a real assistant that measurably lowers my work/study load — by being the easiest *self-hosted, vendor-neutral* way to hand work to AI agents, from anywhere.
+
+**What BKD is:** a self-hosted, engine-neutral, mobile-friendly **chat tool for driving coding agents** (Claude Code / Codex / Gemini), plus a thin **chat-management** layer (branch, reference, search, organize conversations).
+
+**Why self-host it instead of a vendor's hosted agent — the only real edge is *no lock-in*:**
+
+- **Engine-neutral** — swap Claude / Codex / Gemini freely; a vendor UI structurally can't.
+- **Self-hosted** — runs on *your* infra, wired to *your* MCP tools and credentials; data stays home.
+- **Multi-device** — reach your agents (and their live state) from your phone.
+
+**In scope — invest here:**
+
+- The chat experience itself: rendering, load-history/scroll, streaming, search, input, mobile ergonomics.
+- Engine parity — every engine should feel equally good (neutrality only pays off if switching is seamless).
+- A reliable self-hosted core — upgrades, session continuity, no data loss.
+- *Chat management*: fork/branch a conversation, reference another issue's context (`#issue`), search, organize.
+- The few non-chat capabilities that genuinely beat a bare terminal: parallel sessions, persistent state, light scheduling (cron).
+
+**Out of scope — do NOT drift here:**
+
+- Project management — portfolios, workspaces, gantt, dependencies, cross-issue tracking graphs. (Commodity; Linear/Jira/Notion do it better; the model absorbs the rest.)
+- A general "autonomous-agent + scheduler" automation platform. Crowded category; not our edge.
+- Anything that locks BKD to a single vendor.
+- "Perception/organization" layers the model will eat as it grows more capable.
+
+**Litmus test for any new feature:**
+
+> Does it make *this conversation with the agent* better — context, branching, navigation? → build it.
+> Does it organize/relate issues for tracking or planning? → that's PM. Skip it.
+
+**Near-term:** fork-from-any-message + lineage navigation; `#issue` context reference (reuses `fork-context`).
+
 ## Features
 
 - **Kanban Board** — Drag-and-drop issues across Todo / Working / Review / Done columns

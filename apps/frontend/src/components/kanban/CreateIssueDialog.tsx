@@ -20,6 +20,7 @@ import {
   useEngineAvailability,
   useEngineProfiles,
   useEngineSettings,
+  useGitBranches,
   useOmitModel,
   useProject,
   useProjects,
@@ -85,6 +86,12 @@ export function CreateIssueForm({
   const [modelId, setModelId] = useState('')
   const [permission, setPermission] = useState<PermissionId>('auto')
   const [useWorktree, setUseWorktree] = useState(false)
+  const [worktreeBaseBranch, setWorktreeBaseBranch] = useState('')
+  const [worktreeBranchName, setWorktreeBranchName] = useState('')
+  const { data: gitBranches } = useGitBranches(
+    effectiveProjectId,
+    Boolean(effectiveProjectId) && projectIsGitRepo && useWorktree,
+  )
   const [templateId, setTemplateId] = useState('')
   const [templatePrefix, setTemplatePrefix] = useState('')
 
@@ -167,6 +174,10 @@ export function CreateIssueForm({
         })(),
         statusId,
         useWorktree,
+        worktreeBaseBranch:
+          useWorktree && worktreeBaseBranch ? worktreeBaseBranch : undefined,
+        worktreeBranchName:
+          useWorktree && worktreeBranchName.trim() ? worktreeBranchName.trim() : undefined,
         engineType: resolvedEngineType || undefined,
         model: modelId || undefined,
         permissionMode: permissionMap[permission],
@@ -179,6 +190,8 @@ export function CreateIssueForm({
           setModelId('')
           setPermission('auto')
           setUseWorktree(false)
+          setWorktreeBaseBranch('')
+          setWorktreeBranchName('')
           setTemplateId('')
           setTemplatePrefix('')
           setSelectedProjectId('')
@@ -192,6 +205,8 @@ export function CreateIssueForm({
     statusId,
     permission,
     useWorktree,
+    worktreeBaseBranch,
+    worktreeBranchName,
     resolvedEngineType,
     modelId,
     createIssue,
@@ -279,6 +294,33 @@ export function CreateIssueForm({
           <PropertyRow label={t('createIssue.worktree')}>
             <WorktreeToggle value={useWorktree} onChange={setUseWorktree} disabled={!projectIsGitRepo} />
           </PropertyRow>
+          {useWorktree && projectIsGitRepo
+            ? (
+                <>
+                  <PropertyRow label={t('createIssue.baseBranch')}>
+                    <select
+                      value={worktreeBaseBranch}
+                      onChange={e => setWorktreeBaseBranch(e.target.value)}
+                      className="w-full bg-transparent text-sm outline-none text-foreground"
+                    >
+                      <option value="">{t('createIssue.baseBranchDefault')}</option>
+                      {(gitBranches?.branches ?? []).map(b => (
+                        <option key={b} value={b}>{b}</option>
+                      ))}
+                    </select>
+                  </PropertyRow>
+                  <PropertyRow label={t('createIssue.branchName')}>
+                    <input
+                      type="text"
+                      value={worktreeBranchName}
+                      onChange={e => setWorktreeBranchName(e.target.value)}
+                      placeholder={t('createIssue.branchNamePlaceholder')}
+                      className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
+                    />
+                  </PropertyRow>
+                </>
+              )
+            : null}
           <PropertyRow label={t('createIssue.engine')}>
             <EngineSelect
               engines={installedEngines}

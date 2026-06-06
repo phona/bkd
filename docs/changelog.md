@@ -1,5 +1,75 @@
 # Changelog
 
+## 2026-06-06 15:05 [feat]
+
+WT-001 / PLAN-025 — Choose worktree base branch + custom branch name. Fixes
+"永远从一个分支拉出来".
+
+Stored on the issue (worktrees are created at execute time), so this adds a DB
+migration `0029_mean_eternity.sql` (`worktree_base_branch`,
+`worktree_branch_name` on `issues`) → this deploy is a graceful-drain restart,
+not a hot-reload.
+
+- `createWorktree(..., branchNameOverride?)`; base branch reuses `startPointRef`.
+- `execute.ts` passes the issue's stored base/branch into `createWorktree`.
+- `CreateIssueSchema` accepts both (branch name regex-validated); persisted +
+  returned (`serializeIssue` / `IssueSchema`).
+- New `GET /api/git/branches?projectId=` for the base-branch picker.
+- CreateIssueDialog: base-branch dropdown + branch-name input when worktree is
+  on; i18n en+zh; shared `Issue` type extended.
+
+Tests: `test/api-worktree-options.test.ts`; issues regression 25/25. Lint +
+typecheck clean.
+
+## 2026-06-06 14:25 [feat]
+
+WT-002 / PLAN-026 — Worktree-aware terminal cwd. Fixes "终端打开的地方不是
+对应的 worktree 目录".
+
+Backend (`apps/api/src/routes/terminal.ts`, new `terminal-cwd.ts`):
+`POST /api/terminal` accepts optional `{ cwd }`, validated via
+`resolveTerminalCwd()` against an allowlist (ROOT_DIR ∪ WORKTREE_BASE ∪ every
+`projects.directory`) using realpath on both sides (blocks `..`/symlink escape).
+Invalid → 400; absent → HOME.
+
+Frontend: `terminal-store` gains `openInDir(cwd)` (pendingCwd + restartToken);
+`TerminalView` sends cwd and recreates the session on demand; a terminal button
+in the issue chat header (`ChatArea`) opens the shell in that issue's worktree
+(or the project directory), desktop + mobile. i18n `chat.openTerminalHere`.
+
+Tests: `test/terminal-cwd.test.ts` + cwd cases in `test/terminal-lifecycle.test.ts`
+(10/10 green). Lint + typecheck clean. Routes/frontend only → hot-reloadable.
+
+## 2026-06-06 13:55 [BUG-P0]
+
+BUG-004 / PLAN-023 — Fix terminal PTY session leak that made the terminal
+unable to load ("一直加载不出来").
+
+Symptom: `POST /api/terminal` returned `429 Session limit reached`. The live
+deploy had 181 orphan `/bin/bash -l` shells under the launcher while the
+ProcessManager cap is 10.
+
+Root cause (refined — initial "kill is broken" hypothesis was wrong; a Bun
+1.3.13 repro showed the existing kill path works in dev):
+- Sessions created whose WS never attaches were never reaped (grace timer is
+  only armed on WS close) → lived until the 24h sweep.
+- `killSession` released the PM slot before confirming the process died.
+- The 429 path used `proc.kill()` (SIGTERM), which `bash -l` ignores → leak.
+
+Fix (`apps/api/src/routes/terminal.ts`):
+- New `killPty()` — `terminal.close()` + process-group SIGKILL
+  (`process.kill(-pid, 9)`) + `kill(9)` fallback; used by `killSession` and the
+  429 path.
+- Unattached-session reaper armed on create (`BKD_TERMINAL_UNATTACHED_MS`,
+  default 30s), cleared on WS attach (`everAttached`).
+- Periodic reconcile (60s) also reaps entries whose pid is already dead.
+
+Tests: `apps/api/test/terminal-lifecycle.test.ts`. Process suites green, lint +
+typecheck clean.
+
+Operational follow-ups (user action, not code): clear the 181 leaked shells
+on the running deploy (non-restart) and rebuild + redeploy the launcher.
+
 ## 2026-05-19 14:45 [feat]
 
 SEARCH-001 / PLAN-019 — In-chat full-text search + CJK-friendly tokenizer.

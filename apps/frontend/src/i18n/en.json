@@ -173,10 +173,15 @@
     "worktree": "Worktree",
     "worktreeOn": "Enabled",
     "worktreeOff": "Disabled",
+    "baseBranch": "Base branch",
+    "baseBranchDefault": "Default (auto)",
+    "branchName": "Branch name",
+    "branchNamePlaceholder": "Default: bkd/{id}",
     "modelDefault": "Default",
     "modelDefaultHint": "Use system default"
   },
   "chat": {
+    "openTerminalHere": "Open terminal in this working directory",
     "search": {
       "placeholder": "Search this conversation…",
       "empty": "No matches",

@@ -85,6 +85,8 @@ create.openapi(R.createIssue, async (c) => {
           tag: serializeTags(body.tags),
           sortOrder,
           useWorktree: body.useWorktree ?? false,
+          worktreeBaseBranch: body.worktreeBaseBranch ?? null,
+          worktreeBranchName: body.worktreeBranchName ?? null,
           keepAlive: body.keepAlive ?? false,
           engineType: resolvedEngine,
           model: resolvedModel,

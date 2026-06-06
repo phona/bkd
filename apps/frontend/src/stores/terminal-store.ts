@@ -20,8 +20,19 @@ interface TerminalStore {
   isMinimized: boolean
   isFullscreen: boolean
   width: number
+  /**
+   * When set, the next terminal connection must start a FRESH session in this
+   * directory (e.g. an issue's worktree). Consumed by TerminalView once the
+   * session is created.
+   */
+  pendingCwd: string | null
+  /** Bumped by openInDir to force an already-open terminal to recreate. */
+  restartToken: number
   open: () => void
   openFullscreen: () => void
+  /** Open the terminal in a specific directory, starting a fresh session. */
+  openInDir: (cwd: string, fullscreen?: boolean) => void
+  clearPendingCwd: () => void
   close: () => void
   toggle: () => void
   minimize: () => void
@@ -38,9 +49,20 @@ export const useTerminalStore = create<TerminalStore>(set => ({
   isMinimized: false,
   isFullscreen: false,
   width: Math.round(getViewportWidth() * DEFAULT_WIDTH_RATIO),
+  pendingCwd: null,
+  restartToken: 0,
 
   open: () => set({ isOpen: true, isMinimized: false }),
   openFullscreen: () => set({ isOpen: true, isMinimized: false, isFullscreen: true }),
+  openInDir: (cwd, fullscreen = false) =>
+    set(s => ({
+      isOpen: true,
+      isMinimized: false,
+      isFullscreen: fullscreen ? true : s.isFullscreen,
+      pendingCwd: cwd,
+      restartToken: s.restartToken + 1,
+    })),
+  clearPendingCwd: () => set({ pendingCwd: null }),
   close: () => set({ isOpen: false }),
   toggle: () =>
     set((s) => {

@@ -173,10 +173,15 @@
     "worktree": "工作树",
     "worktreeOn": "启用",
     "worktreeOff": "禁用",
+    "baseBranch": "基准分支",
+    "baseBranchDefault": "默认（自动）",
+    "branchName": "分支名",
+    "branchNamePlaceholder": "默认：bkd/{id}",
     "modelDefault": "默认",
     "modelDefaultHint": "使用系统默认模型"
   },
   "chat": {
+    "openTerminalHere": "在此工作目录打开终端",
     "search": {
       "placeholder": "搜索当前对话…",
       "empty": "无结果",
