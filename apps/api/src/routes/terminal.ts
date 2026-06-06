@@ -6,6 +6,7 @@ import { ProcessManager } from '@/engines/process-manager'
 import { spawnNodeSync } from '@/engines/spawn'
 import type { Subprocess } from '@/engines/spawn'
 import { logger } from '@/logger'
+import { resolveTerminalCwd } from './terminal-cwd'
 
 // App-specific env vars that must not leak into terminal PTY processes.
 // HOST/PORT would override zsh's %m prompt (e.g. HOST=0.0.0.0 → "0").
@@ -68,11 +69,18 @@ interface WsLike {
 interface TerminalMeta {
   wsRaw: WsLike | null
   graceTimer: ReturnType<typeof setTimeout> | null
+  /** Reaps a session whose WS never attaches (connect race / unmount). */
+  unattachedTimer: ReturnType<typeof setTimeout> | null
+  /** True once a WS has attached at least once. */
+  everAttached: boolean
   pty: Subprocess
 }
 
 const MAX_SESSIONS = 10
 const GRACE_PERIOD_MS = 60_000 // keep PTY alive 60s after WS disconnect
+// Kill a session that is created but never gets a WS within this window.
+// Overridable via env (read at call time) for tests.
+const DEFAULT_UNATTACHED_MS = 30_000
 const MAX_COLS = 500
 const MAX_ROWS = 200
 
@@ -84,15 +92,42 @@ const terminalPM = new ProcessManager<TerminalMeta>('terminal', {
   logger,
 })
 
+/**
+ * Terminate a PTY subprocess reliably.
+ *
+ * `bash -l` ignores SIGTERM, so we SIGKILL. We target the process GROUP
+ * (negative pid) first so anything spawned inside the shell dies too, then
+ * fall back to killing the handle directly. Closing the PTY master alone is
+ * not enough on every runtime (notably compiled binaries), which is how
+ * sessions leaked while their slot was already released.
+ */
+export function killPty(proc: Pick<Subprocess, 'pid' | 'kill' | 'terminal'>): void {
+  try {
+    proc.terminal?.close()
+  } catch {
+    /* already closed */
+  }
+  const pid = proc.pid
+  if (typeof pid === 'number' && pid > 0) {
+    try {
+      process.kill(-pid, 9)
+    } catch {
+      /* group already gone */
+    }
+  }
+  try {
+    proc.kill(9)
+  } catch {
+    /* already dead */
+  }
+}
+
 function killSession(id: string): void {
   const entry = terminalPM.get(id)
   if (!entry) return
   if (entry.meta.graceTimer) clearTimeout(entry.meta.graceTimer)
-  try {
-    entry.meta.pty.terminal?.close()
-  } catch {
-    /* already closed */
-  }
+  if (entry.meta.unattachedTimer) clearTimeout(entry.meta.unattachedTimer)
+  killPty(entry.meta.pty)
   terminalPM.forceKill(id)
   terminalPM.remove(id)
 }
@@ -110,19 +145,36 @@ terminalPM.onExit((entry) => {
   terminalPM.remove(entry.id)
 })
 
-// Periodic cleanup: kill sessions older than 24h
+// Periodic reconcile: reap sessions whose process is already dead (accounting
+// drift) and sessions older than 24h. Runs every 60s.
 const expiryTimer = setInterval(
   () => {
     const now = Date.now()
     const MAX_AGE = 24 * 60 * 60 * 1000
     for (const entry of terminalPM.getActive()) {
+      // Reap entries whose underlying process no longer exists — this is the
+      // accounting divergence that previously saturated MAX_SESSIONS.
+      const pid = entry.handle.pid
+      if (typeof pid === 'number' && pid > 0) {
+        let dead = false
+        try {
+          process.kill(pid, 0)
+        } catch {
+          dead = true
+        }
+        if (dead) {
+          logger.info({ id: entry.id, pid }, 'terminal_dead_pid_reaped')
+          killSession(entry.id)
+          continue
+        }
+      }
       if (now - entry.startedAt.getTime() > MAX_AGE) {
         logger.info({ id: entry.id }, 'terminal_session_expired')
         killSession(entry.id)
       }
     }
   },
-  5 * 60 * 1000,
+  60 * 1000,
 )
 if (typeof expiryTimer === 'object' && 'unref' in expiryTimer) {
   ;(expiryTimer as NodeJS.Timeout).unref()
@@ -145,13 +197,36 @@ app.get('/terminal/:id', (c) => {
 })
 
 // POST /terminal — Create a new terminal session (spawn PTY)
-app.post('/terminal', (c) => {
+// Optional body `{ cwd }` opens the shell in that directory (e.g. an issue's
+// worktree). The path is validated against an allowlist; an invalid cwd is
+// rejected, an absent cwd falls back to HOME.
+app.post('/terminal', async (c) => {
+  let requestedCwd: string | undefined
+  try {
+    const body = (await c.req.json()) as { cwd?: unknown }
+    if (typeof body?.cwd === 'string' && body.cwd.trim()) requestedCwd = body.cwd
+  } catch {
+    /* no/invalid JSON body — open in the default cwd */
+  }
+
+  const resolvedCwd = resolveTerminalCwd(requestedCwd)
+  if (requestedCwd && !resolvedCwd) {
+    return c.json({ success: false, error: 'Invalid working directory' }, 400)
+  }
+  const cwd = resolvedCwd ?? process.env.HOME ?? '/'
+
   const id = crypto.randomUUID()
 
   // We need a reference the PTY data callback can close over
   // to forward output to the attached WS. The meta object is
   // shared by reference with the PM entry.
-  const meta: TerminalMeta = { wsRaw: null, graceTimer: null, pty: null as unknown as Subprocess }
+  const meta: TerminalMeta = {
+    wsRaw: null,
+    graceTimer: null,
+    unattachedTimer: null,
+    everAttached: false,
+    pty: null as unknown as Subprocess,
+  }
 
   const proc = Bun.spawn([defaultShell, '-l'], {
     terminal: {
@@ -168,7 +243,7 @@ app.post('/terminal', (c) => {
         }
       },
     },
-    cwd: process.env.HOME || '/',
+    cwd,
     env: {
       ...(Object.fromEntries(
         Object.entries(process.env).filter(([k]) => !TERMINAL_STRIP_KEYS.has(k)),
@@ -187,12 +262,24 @@ app.post('/terminal', (c) => {
       startAsRunning: true,
     })
   } catch {
-    // Concurrency limit reached
-    proc.kill()
+    // Concurrency limit reached — kill the just-spawned shell reliably
+    // (bash -l ignores SIGTERM, so proc.kill() alone would leak it).
+    killPty(proc)
     return c.json({ success: false, error: 'Session limit reached' }, 429)
   }
 
-  logger.info({ id, pid: proc.pid, shell: defaultShell }, 'terminal_session_created')
+  // Reap the session if no WS ever attaches (connect race / unmount / churn).
+  // This is the dominant leak vector: grace timers are only armed on WS close.
+  const unattachedMs = Number(process.env.BKD_TERMINAL_UNATTACHED_MS) || DEFAULT_UNATTACHED_MS
+  meta.unattachedTimer = setTimeout(() => {
+    meta.unattachedTimer = null
+    if (!meta.everAttached && !meta.wsRaw) {
+      logger.info({ id }, 'terminal_unattached_reaped')
+      killSession(id)
+    }
+  }, unattachedMs)
+
+  logger.info({ id, pid: proc.pid, shell: defaultShell, cwd }, 'terminal_session_created')
 
   return c.json({ success: true, data: { id } })
 })
@@ -219,6 +306,13 @@ app.get(
         if (!entry) {
           ws.close(1008, 'Session not found')
           return
+        }
+
+        // A WS attached — cancel the unattached reaper for good.
+        entry.meta.everAttached = true
+        if (entry.meta.unattachedTimer) {
+          clearTimeout(entry.meta.unattachedTimer)
+          entry.meta.unattachedTimer = null
         }
 
         // Clear grace timer — WS reconnected

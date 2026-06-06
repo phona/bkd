@@ -65,6 +65,8 @@ export interface Issue {
   parentIssueId: string | null
   forkAwaitingParent: boolean
   useWorktree: boolean
+  worktreeBaseBranch?: string | null
+  worktreeBranchName?: string | null
   isPinned: boolean
   keepAlive: boolean
   // Hidden from default listings (e.g. whiteboard-bound sessions). The issue

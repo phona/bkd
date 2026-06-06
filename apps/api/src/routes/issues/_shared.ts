@@ -112,6 +112,8 @@ export function serializeIssue(row: IssueRow) {
     parentIssueId: row.parentIssueId ?? null,
     forkAwaitingParent: row.forkAwaitingParent,
     useWorktree: row.useWorktree,
+    worktreeBaseBranch: row.worktreeBaseBranch ?? null,
+    worktreeBranchName: row.worktreeBranchName ?? null,
     isPinned: row.isPinned,
     keepAlive: row.keepAlive,
     isHidden: row.isHidden,

@@ -72,7 +72,13 @@ export async function executeIssue(
 
     if (issue.useWorktree) {
       try {
-        worktreePath = await createWorktree(baseDir, issue.projectId, issueId)
+        worktreePath = await createWorktree(
+          baseDir,
+          issue.projectId,
+          issueId,
+          issue.worktreeBaseBranch ?? undefined,
+          issue.worktreeBranchName ?? undefined,
+        )
         workingDir = worktreePath
       } catch (error) {
         logger.warn({ issueId, error }, 'worktree_creation_failed_fallback_to_base')

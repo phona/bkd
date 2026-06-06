@@ -1,13 +1,14 @@
-import { ArrowLeft, Check, GitBranch, Link, Search } from 'lucide-react'
+import { ArrowLeft, Check, GitBranch, Link, Search, SquareTerminal } from 'lucide-react'
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { MobileSidebar } from '@/components/kanban/MobileSidebar'
 import { Button } from '@/components/ui/button'
-import { useIssue, useProject, useUpdateIssue } from '@/hooks/use-kanban'
+import { useIssue, useProject, useProjectWorktrees, useUpdateIssue } from '@/hooks/use-kanban'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { addRecentIssue } from '@/hooks/use-recent-issues'
 import { useFileBrowserStore } from '@/stores/file-browser-store'
+import { useTerminalStore } from '@/stores/terminal-store'
 import { getIssueUrl } from '@/stores/server-store'
 import { MiniMatrix } from '@/components/cockpit/MiniMatrix'
 import { ChatBody } from './ChatBody'
@@ -60,6 +61,11 @@ export function ChatArea({
   const navigate = useNavigate()
   const { data: issue, isLoading, isError } = useIssue(projectId, issueId)
   const { data: project } = useProject(projectId)
+  const { data: worktrees } = useProjectWorktrees(projectId)
+  // Working dir for "open terminal here": the issue's worktree if it has one,
+  // otherwise the project directory. Null → terminal opens in the default cwd.
+  const terminalCwd
+    = worktrees?.find(w => w.issueId === issueId)?.path ?? project?.directory ?? null
   const scrollRef = useRef<HTMLDivElement>(null)
 
   // Track recently visited issues for global search
@@ -352,6 +358,23 @@ export function ChatArea({
               }}
             >
               {copied ? <Check className="h-3.5 w-3.5" /> : <Link className="h-3.5 w-3.5" />}
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 md:h-7 md:w-7 shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+              title={t('chat.openTerminalHere', '在此工作目录打开终端')}
+              onClick={() => {
+                if (terminalCwd) {
+                  useTerminalStore.getState().openInDir(terminalCwd, isMobile)
+                } else if (isMobile) {
+                  useTerminalStore.getState().openFullscreen()
+                } else {
+                  useTerminalStore.getState().open()
+                }
+              }}
+            >
+              <SquareTerminal className="h-3.5 w-3.5" />
             </Button>
             {/* Mobile-only quick access to terminal / settings / notes / project switch.
               Without this, reaching settings from the chat required two back-navs

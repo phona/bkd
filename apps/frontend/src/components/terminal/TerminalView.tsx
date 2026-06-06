@@ -6,6 +6,7 @@ import { Terminal } from '@xterm/xterm'
 import { useCallback, useEffect, useRef } from 'react'
 import { getToken } from '@/lib/auth'
 import { useTerminalSessionStore } from '@/stores/terminal-session-store'
+import { useTerminalStore } from '@/stores/terminal-store'
 import '@xterm/xterm/css/xterm.css'
 
 // --- Terminal themes ---
@@ -124,8 +125,14 @@ function terminalHeaders(): Record<string, string> {
   return headers
 }
 
-async function createSession(): Promise<string> {
-  const res = await fetch('/api/terminal', { method: 'POST', headers: terminalHeaders() })
+async function createSession(cwd?: string | null): Promise<string> {
+  const headers = terminalHeaders()
+  let body: string | undefined
+  if (cwd) {
+    headers['Content-Type'] = 'application/json'
+    body = JSON.stringify({ cwd })
+  }
+  const res = await fetch('/api/terminal', { method: 'POST', headers, body })
   const json = await res.json()
   if (!json.success) throw new Error(json.error)
   return json.data.id as string
@@ -311,10 +318,16 @@ async function initConnection(terminal: Terminal, fitAddon: FitAddon): Promise<v
 
   const connectingPromise = (async () => {
     try {
-      // Try to reconnect to a persisted session first
+      // A pending cwd (e.g. "open terminal in this worktree") forces a fresh
+      // session in that directory instead of reconnecting to the global one.
+      const pendingCwd = useTerminalStore.getState().pendingCwd
       const savedId = loadSessionId()
       let sessionId: string
-      if (savedId && await checkSession(savedId)) {
+      if (pendingCwd) {
+        clearSessionId()
+        sessionId = await createSession(pendingCwd)
+        useTerminalStore.getState().clearPendingCwd()
+      } else if (savedId && await checkSession(savedId)) {
         sessionId = savedId
         terminal.writeln('\r\n\x1B[90m[reconnected to existing session]\x1B[0m')
       } else {
@@ -341,9 +354,45 @@ async function initConnection(terminal: Terminal, fitAddon: FitAddon): Promise<v
   await connectingPromise
 }
 
+/**
+ * Tear down the current session and reconnect. Used when the terminal is asked
+ * to switch directories (openInDir) while already open — the pending cwd in the
+ * store makes initConnection start a fresh session there.
+ */
+async function restartConnection(): Promise<void> {
+  const state = store.getState()
+  if (state.ws) {
+    try {
+      state.ws.close()
+    } catch {
+      /* already closed */
+    }
+  }
+  if (state.reconnectTimer) clearTimeout(state.reconnectTimer)
+  if (state.sessionId) deleteSession(state.sessionId)
+  clearSessionId()
+  store.getState().set({ sessionId: null, ws: null, connecting: null, reconnectTimer: null })
+
+  const { terminal, fitAddon } = getOrCreateTerminal()
+  terminal.reset()
+  await initConnection(terminal, fitAddon)
+}
+
 export function TerminalView({ className }: { className?: string }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mountedRef = useRef(false)
+  const restartToken = useTerminalStore(s => s.restartToken)
+  const seenRestartToken = useRef(restartToken)
+
+  // openInDir bumps restartToken — when the terminal is already mounted, switch
+  // to the requested directory by recreating the session. On a fresh mount the
+  // pending cwd is consumed by initConnection, so skip the restart there.
+  useEffect(() => {
+    if (seenRestartToken.current === restartToken) return
+    seenRestartToken.current = restartToken
+    if (!mountedRef.current) return
+    void restartConnection()
+  }, [restartToken])
 
   const handleResize = useCallback(() => {
     const state = store.getState()

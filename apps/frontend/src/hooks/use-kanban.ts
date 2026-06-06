@@ -31,6 +31,7 @@ export const queryKeys = {
     ['files', root, path, { hideIgnored }] as const,
   allProcesses: () => ['processes', 'all'] as const,
   projectWorktrees: (projectId: string) => ['projects', projectId, 'worktrees'] as const,
+  gitBranches: (projectId: string) => ['projects', projectId, 'git-branches'] as const,
   logPageSize: () => ['settings', 'logPageSize'] as const,
   worktreeAutoCleanup: () => ['settings', 'worktreeAutoCleanup'] as const,
   disableAskUser: () => ['settings', 'disableAskUser'] as const,
@@ -197,6 +198,15 @@ export function useProjectWorktrees(projectId: string) {
   })
 }
 
+export function useGitBranches(projectId: string, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.gitBranches(projectId),
+    queryFn: () => kanbanApi.getGitBranches(projectId),
+    enabled: !!projectId && enabled,
+    staleTime: STALE_TIME.STANDARD,
+  })
+}
+
 export function useDeleteWorktree() {
   const queryClient = useQueryClient()
   return useMutation({
@@ -291,6 +301,8 @@ export function useCreateIssue(projectId: string) {
       tags?: string[]
       statusId: string
       useWorktree?: boolean
+      worktreeBaseBranch?: string
+      worktreeBranchName?: string
       engineType?: string
       model?: string
       permissionMode?: string

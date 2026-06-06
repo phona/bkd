@@ -70,6 +70,10 @@ export const issues = sqliteTable(
       .notNull()
       .default(false),
     useWorktree: integer('use_worktree', { mode: 'boolean' }).notNull().default(false),
+    // Worktree base branch (start point) and branch name, chosen at create time.
+    // null → default behavior (auto-resolved base, `bkd/{issueId}` name).
+    worktreeBaseBranch: text('worktree_base_branch'),
+    worktreeBranchName: text('worktree_branch_name'),
     isPinned: integer('is_pinned', { mode: 'boolean' }).notNull().default(false),
     keepAlive: integer('keep_alive', { mode: 'boolean' }).notNull().default(false),
     // Hidden issues are excluded from default listings (e.g. whiteboard-bound
