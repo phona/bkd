@@ -308,6 +308,7 @@ export function useCreateIssue(projectId: string) {
       useWorktree?: boolean
       worktreeBaseBranch?: string
       worktreeBranchName?: string
+      worktreeAttachExisting?: boolean
       engineType?: string
       model?: string
       permissionMode?: string
@@ -380,12 +381,23 @@ export function useBulkUpdateIssues(projectId: string) {
   })
 }
 
+export interface DeleteIssueCleanup {
+  deleteWorktree?: boolean
+  forceDelete?: boolean
+  deleteBranch?: boolean
+}
+
 export function useDeleteIssue(projectId: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (issueId: string) => kanbanApi.deleteIssue(projectId, issueId),
+    mutationFn: (args: string | { issueId: string, cleanup?: DeleteIssueCleanup }) => {
+      const issueId = typeof args === 'string' ? args : args.issueId
+      const cleanup = typeof args === 'string' ? undefined : args.cleanup
+      return kanbanApi.deleteIssue(projectId, issueId, cleanup)
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.issues(projectId) })
+      queryClient.invalidateQueries({ queryKey: queryKeys.projectWorktrees(projectId) })
     },
   })
 }

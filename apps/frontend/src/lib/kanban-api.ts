@@ -549,6 +549,7 @@ export const kanbanApi = {
       useWorktree?: boolean
       worktreeBaseBranch?: string
       worktreeBranchName?: string
+      worktreeAttachExisting?: boolean
       engineType?: string
       model?: string
       permissionMode?: string
@@ -567,8 +568,18 @@ export const kanbanApi = {
 
   getIssue: (projectId: string, issueId: string) =>
     get<Issue>(`/api/projects/${projectId}/issues/${issueId}`),
-  deleteIssue: (projectId: string, issueId: string) =>
-    del<{ id: string }>(`/api/projects/${projectId}/issues/${issueId}`),
+  deleteIssue: (
+    projectId: string,
+    issueId: string,
+    cleanup?: { deleteWorktree?: boolean, forceDelete?: boolean, deleteBranch?: boolean },
+  ) => {
+    const params = new URLSearchParams()
+    if (cleanup?.deleteWorktree != null) params.set('deleteWorktree', String(cleanup.deleteWorktree))
+    if (cleanup?.forceDelete != null) params.set('forceDelete', String(cleanup.forceDelete))
+    if (cleanup?.deleteBranch != null) params.set('deleteBranch', String(cleanup.deleteBranch))
+    const qs = params.toString()
+    return del<{ id: string }>(`/api/projects/${projectId}/issues/${issueId}${qs ? `?${qs}` : ''}`)
+  },
   duplicateIssue: (projectId: string, issueId: string) =>
     post<Issue>(`/api/projects/${projectId}/issues/${issueId}/duplicate`, {}),
   forkIssue: (projectId: string, issueId: string, data: ForkIssuePayload) =>

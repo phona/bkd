@@ -211,6 +211,13 @@
       "when": 1780756797899,
       "tag": "0029_mean_eternity",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "6",
+      "when": 1780852388848,
+      "tag": "0030_demonic_corsair",
+      "breakpoints": true
     }
   ]
 }

@@ -1,0 +1,1 @@
+ALTER TABLE `issues` ADD `worktree_attach_existing` integer DEFAULT false NOT NULL;

@@ -429,7 +429,16 @@ export const deleteIssue = createRoute({
   tags: ['Issues'],
   summary: 'Soft-delete issue',
   operationId: 'deleteIssue',
-  request: { params: projectIssueParams },
+  request: {
+    params: projectIssueParams,
+    // Worktree cleanup options (AoE DeleteSessionDialog parity). Booleans
+    // arrive as `true`/`false` query strings; coerce them.
+    query: z.object({
+      deleteWorktree: z.enum(['true', 'false']).optional(),
+      forceDelete: z.enum(['true', 'false']).optional(),
+      deleteBranch: z.enum(['true', 'false']).optional(),
+    }),
+  },
   responses: {
     200: successResponse(z.object({ id: z.string() }), 'Deleted'),
     404: errorResponse('Issue not found'),

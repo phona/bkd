@@ -57,7 +57,9 @@ export function IssueDetail({
     [worktrees, issue.id],
   )
   const worktreePath = worktreeEntry?.path ?? ''
-  const worktreeBranch = worktreeEntry?.branch ?? (issue.id ? `bkd/${issue.id}` : '')
+  const worktreeBranch = worktreeEntry?.branch
+    ?? issue.worktreeBranchName
+    ?? (issue.id ? `bkd/${issue.id}` : '')
 
   const mergeWorktree = useMergeWorktree()
   const handleMergeWorktree = async () => {
@@ -210,9 +212,9 @@ export function IssueDetail({
             </button>
           )}
 
-      {/* Worktree (right side) — hidden on phones; the path/branch info is
-          rarely needed mid-thread and bloats the header on small screens. */}
-      <div className="ml-auto flex items-center gap-1.5 max-md:hidden">
+      {/* Worktree (right side) — shown on mobile too (AoE parity): the branch
+          chip stays glanceable and the popup carries branch/path + merge. */}
+      <div className="ml-auto flex items-center gap-1.5">
         {issue.useWorktree ?
             (
               <div ref={worktreeRef} className="relative flex">
@@ -221,8 +223,10 @@ export function IssueDetail({
                   onClick={() => setShowWorktree(v => !v)}
                   className={`${badgeBase} cursor-pointer transition-colors border-emerald-400/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:opacity-80`}
                 >
-                  <GitBranch className="h-3 w-3" />
-                  {t('chat.worktree')}
+                  <GitBranch className="h-3 w-3 shrink-0" />
+                  {/* Surface the branch name directly in the chip; fall back to
+                      the generic "worktree" label only when unknown. */}
+                  <span className="max-w-[140px] truncate">{worktreeBranch || t('chat.worktree')}</span>
                 </button>
                 {showWorktree ?
                     (

@@ -80,28 +80,50 @@ async function resolveStartPoint(baseDir: string): Promise<string> {
   throw new Error(`Cannot resolve a worktree start point in ${baseDir}`)
 }
 
-export async function createWorktree(
-  baseDir: string,
-  projectId: string,
-  issueId: string,
+export interface CreateWorktreeOptions {
   /**
    * Optional git ref to branch the worktree from. Defaults to the resolved
    * default-branch start point. Used by forked dependent issues to start
    * from the parent issue's branch (PLAN-021).
    */
-  startPointRef?: string,
+  startPointRef?: string
   /**
    * Optional branch name for the new worktree. Defaults to `bkd/{issueId}`.
    * Used by WT-001 to let users name the branch.
    */
-  branchNameOverride?: string,
+  branchNameOverride?: string
+  /**
+   * Attach the worktree to an existing branch instead of creating a new one
+   * (mirrors AoE's "Attach to existing branch" toggle). When true, the
+   * branch named by `branchNameOverride` is checked out as-is and the start
+   * point is ignored — git rejects a worktree that does not name a real
+   * branch, which is the intended guard.
+   */
+  attachExisting?: boolean
+}
+
+export async function createWorktree(
+  baseDir: string,
+  projectId: string,
+  issueId: string,
+  /**
+   * Backwards-compatible: either the legacy `startPointRef` string or an
+   * options object. Existing callers (fork/dependent) pass the ref string.
+   */
+  startPointRefOrOptions?: string | CreateWorktreeOptions,
+  /** Legacy positional branch-name override (kept for existing call sites). */
+  branchNameOverrideArg?: string,
 ): Promise<string> {
+  const opts: CreateWorktreeOptions = typeof startPointRefOrOptions === 'string' || startPointRefOrOptions == null ?
+      { startPointRef: startPointRefOrOptions as string | undefined, branchNameOverride: branchNameOverrideArg } :
+    startPointRefOrOptions
+
   // Guard: baseDir must be inside a git work tree
   if (!(await isGitRepoFresh(baseDir))) {
     throw new Error(`Cannot create worktree: ${baseDir} is not a git repository`)
   }
 
-  const branchName = branchNameOverride?.trim() || `bkd/${issueId}`
+  const branchName = opts.branchNameOverride?.trim() || `bkd/${issueId}`
   const worktreeDir = resolveWorktreePath(projectId, issueId)
   await mkdir(join(WORKTREE_BASE, projectId), { recursive: true })
 
@@ -112,7 +134,21 @@ export async function createWorktree(
     return worktreeDir
   }
 
-  let startPoint = startPointRef
+  // Attach-to-existing-branch path: check out the named branch without
+  // creating a new one. The branch must already exist (local or remote).
+  if (opts.attachExisting) {
+    const result = await runCommand(
+      ['git', 'worktree', 'add', worktreeDir, branchName],
+      { cwd: baseDir, stderr: 'pipe' },
+    )
+    if (result.code !== 0) {
+      throw new Error(`Failed to attach worktree to branch "${branchName}": ${result.stderr.trim()}`)
+    }
+    logger.debug({ issueId, worktreeDir, branchName }, 'worktree_attached_existing')
+    return worktreeDir
+  }
+
+  let startPoint = opts.startPointRef
   if (startPoint) {
     const { code } = await runCommand(
       ['git', 'rev-parse', '--verify', '--quiet', startPoint],
@@ -141,19 +177,69 @@ export async function createWorktree(
   return worktreeDir
 }
 
-export async function removeWorktree(baseDir: string, worktreeDir: string): Promise<void> {
+/**
+ * Delete a local git branch. Idempotent — a missing branch is treated as
+ * success since the caller asked for it to be gone. Uses `-D` (force) when
+ * `force` is set or the branch is not fully merged. Mirrors AoE's
+ * `delete_branch` semantics.
+ */
+export async function deleteBranch(baseDir: string, branch: string, force = false): Promise<void> {
+  const flag = force ? '-D' : '-d'
+  const { code, stderr } = await runCommand(
+    ['git', 'branch', flag, branch],
+    { cwd: baseDir, stderr: 'pipe' },
+  )
+  if (code === 0) {
+    logger.debug({ baseDir, branch, force }, 'worktree_branch_deleted')
+    return
+  }
+  const err = stderr.trim()
+  // Branch already gone — the desired end state is satisfied.
+  if (/not found|no branch named/i.test(err)) {
+    return
+  }
+  // Not fully merged and force wasn't requested — retry with -D.
+  if (!force && /not fully merged/i.test(err)) {
+    const retry = await runCommand(
+      ['git', 'branch', '-D', branch],
+      { cwd: baseDir, stderr: 'pipe' },
+    )
+    if (retry.code === 0) return
+    throw new Error(`Failed to delete branch "${branch}": ${retry.stderr.trim()}`)
+  }
+  throw new Error(`Failed to delete branch "${branch}": ${err}`)
+}
+
+export async function removeWorktree(
+  baseDir: string,
+  worktreeDir: string,
+  /**
+   * When true, pass `--force` so git removes the worktree even if it has
+   * uncommitted/untracked changes (AoE's "Force delete"). Defaults to true
+   * to preserve the historical behaviour of all existing callers.
+   */
+  force = true,
+): Promise<void> {
   const resolved = resolve(worktreeDir)
   try {
-    const { code } = await runCommand(
-      ['git', 'worktree', 'remove', '--force', resolved],
+    const args = force ?
+        ['git', 'worktree', 'remove', '--force', resolved] :
+        ['git', 'worktree', 'remove', resolved]
+    const { code, stderr } = await runCommand(
+      args,
       { cwd: baseDir, stderr: 'pipe' },
     )
     if (code !== 0) {
-      throw new Error(`git worktree remove exited with code ${code}`)
+      throw new Error(`git worktree remove exited with code ${code}: ${stderr.trim()}`)
     }
     logger.debug({ worktreeDir: resolved }, 'worktree_removed')
   } catch (error) {
     logger.warn({ worktreeDir: resolved, error }, 'worktree_remove_failed')
+    // Non-force deletes must respect uncommitted changes: git refused for a
+    // reason (dirty worktree), so surface it instead of nuking the directory.
+    if (!force) {
+      throw error instanceof Error ? error : new Error(String(error))
+    }
     // Containment guard: never rm outside the managed worktree directory
     if (!resolved.startsWith(WORKTREE_SAFE_ROOT + sep)) {
       logger.error(

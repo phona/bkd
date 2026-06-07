@@ -1,9 +1,16 @@
+import { resolve } from 'node:path'
 import { and, eq } from 'drizzle-orm'
 import { cacheDel, cacheDelByPrefix } from '@/cache'
 import { db } from '@/db'
 import { findProject, getServerUrl } from '@/db/helpers'
 import { issues as issuesTable } from '@/db/schema'
 import { getEngine } from '@/engines/issue'
+import {
+  deleteBranch as deleteGitBranch,
+  isWorktreeRegistered,
+  removeWorktree,
+  resolveWorktreePath,
+} from '@/engines/issue/utils/worktree'
 import { logger } from '@/logger'
 import { createOpenAPIRouter } from '@/openapi/hono'
 import * as R from '@/openapi/routes'
@@ -53,6 +60,46 @@ del.openapi(R.deleteIssue, async (c) => {
       ])
     } catch (err) {
       logger.warn({ issueId, err }, 'delete_terminate_failed_proceeding')
+    }
+  }
+
+  // Optional worktree cleanup (AoE DeleteSessionDialog parity). Best-effort:
+  // failures are logged but never block the issue soft-delete.
+  if (existing.useWorktree) {
+    const { deleteWorktree, forceDelete, deleteBranch } = c.req.valid('query')
+    const wantDeleteWorktree = deleteWorktree === 'true'
+    const wantForce = forceDelete === 'true'
+    const wantDeleteBranch = deleteBranch === 'true'
+
+    if (wantDeleteWorktree || wantDeleteBranch) {
+      const baseDir = project.directory ? resolve(project.directory) : process.cwd()
+      const worktreePath = resolveWorktreePath(project.id, issueId)
+      const branchName = existing.worktreeBranchName?.trim() || `bkd/${issueId}`
+
+      if (wantDeleteWorktree) {
+        try {
+          await removeWorktree(baseDir, worktreePath, wantForce)
+          logger.info({ projectId: project.id, issueId, worktreePath }, 'issue_delete_worktree_removed')
+        } catch (err) {
+          logger.warn({ projectId: project.id, issueId, worktreePath, err }, 'issue_delete_worktree_remove_failed')
+        }
+      }
+
+      if (wantDeleteBranch) {
+        try {
+          // If the worktree is still registered (e.g. removal skipped/failed),
+          // git refuses to delete the checked-out branch — that is expected.
+          const stillRegistered = wantDeleteWorktree ?
+            false :
+              await isWorktreeRegistered(baseDir, worktreePath)
+          if (!stillRegistered) {
+            await deleteGitBranch(baseDir, branchName, true)
+            logger.info({ projectId: project.id, issueId, branchName }, 'issue_delete_branch_removed')
+          }
+        } catch (err) {
+          logger.warn({ projectId: project.id, issueId, branchName, err }, 'issue_delete_branch_remove_failed')
+        }
+      }
     }
   }
 

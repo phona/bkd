@@ -2,16 +2,6 @@ import { Copy, Download, GitBranch, MoreHorizontal, Pencil, Pin, PinOff, Trash2 
 import type { ReactNode } from 'react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -31,6 +21,8 @@ import { useDeleteIssue, useDuplicateIssue, useUpdateIssue } from '@/hooks/use-k
 import { kanbanApi } from '@/lib/kanban-api'
 import { cn } from '@/lib/utils'
 import type { Issue } from '@/types/kanban'
+import type { DeleteIssueCleanupOptions } from './DeleteIssueDialog'
+import { DeleteIssueDialog } from './DeleteIssueDialog'
 import { ForkDialog } from './ForkDialog'
 
 /** Shared rename dialog — used by both IssueContextMenu and IssueRow */
@@ -139,9 +131,11 @@ export function IssueContextMenu({
     document.body.removeChild(a)
   }, [projectId, issue.id])
 
-  const handleDelete = useCallback(() => {
-    deleteIssue.mutate(issue.id)
-    setDeleteOpen(false)
+  const handleDelete = useCallback((cleanup: DeleteIssueCleanupOptions | undefined) => {
+    deleteIssue.mutate(
+      { issueId: issue.id, cleanup },
+      { onSuccess: () => setDeleteOpen(false) },
+    )
   }, [deleteIssue, issue.id])
 
   return (
@@ -206,19 +200,16 @@ export function IssueContextMenu({
         projectId={projectId}
       />
 
-      {/* Delete confirmation */}
-      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t('contextMenu.delete')}</AlertDialogTitle>
-            <AlertDialogDescription>{t('contextMenu.deleteConfirm')}</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete}>{t('contextMenu.delete')}</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {/* Delete confirmation with worktree cleanup options (AoE parity) */}
+      <DeleteIssueDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        issueTitle={issue.title}
+        hasWorktree={issue.useWorktree}
+        branchName={issue.worktreeBranchName ?? (issue.useWorktree ? `bkd/${issue.id}` : null)}
+        isPending={deleteIssue.isPending}
+        onConfirm={handleDelete}
+      />
     </>
   )
 }

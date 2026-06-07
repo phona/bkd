@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, test } from 'bun:test'
-import { createTestProject, expectError, expectSuccess, post } from './helpers'
+import { createTestProject, del, expectError, expectSuccess, post } from './helpers'
 import './setup'
 
 /**
@@ -52,5 +52,40 @@ describe('POST /api/projects/:projectId/issues — worktree options', () => {
     const data = expectSuccess(res)
     expect(data.worktreeBaseBranch ?? null).toBeNull()
     expect(data.worktreeBranchName ?? null).toBeNull()
+  })
+
+  test('persists the attach-to-existing-branch flag', async () => {
+    const res = await post<IssueWithWorktree & { worktreeAttachExisting?: boolean }>(
+      `/api/projects/${projectId}/issues`,
+      {
+        title: 'attach existing',
+        statusId: 'todo',
+        useWorktree: true,
+        worktreeBranchName: 'feature/existing',
+        worktreeAttachExisting: true,
+      },
+    )
+    const data = expectSuccess(res)
+    expect(data.worktreeAttachExisting).toBe(true)
+  })
+})
+
+describe('DELETE /api/projects/:projectId/issues/:issueId — worktree cleanup options', () => {
+  test('accepts cleanup query params and soft-deletes the issue', async () => {
+    const created = await post<{ id: string }>(`/api/projects/${projectId}/issues`, {
+      title: 'cleanup issue',
+      statusId: 'todo',
+      useWorktree: true,
+      worktreeBranchName: 'feature/cleanup',
+    })
+    const { id } = expectSuccess(created)
+
+    // Cleanup is best-effort (no real worktree on disk in this sandbox); the
+    // route must still honour the flags and return success.
+    const res = await del<{ id: string }>(
+      `/api/projects/${projectId}/issues/${id}?deleteWorktree=true&forceDelete=true&deleteBranch=true`,
+    )
+    const data = expectSuccess(res)
+    expect(data.id).toBe(id)
   })
 })

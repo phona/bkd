@@ -2,16 +2,6 @@ import { ArrowDownToLine, ArrowUpToLine, ChevronDown, ChevronRight, Clock, FileT
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
 import { useIssueStream } from '@/hooks/use-issue-stream'
 import {
   useCancelIssue,
@@ -28,6 +18,8 @@ import { useChatFilterStore } from '@/stores/chat-filter-store'
 import { useScrollPositionStore } from '@/stores/scroll-position-store'
 import type { Issue, NormalizedLogEntry } from '@/types/kanban'
 import { ChatInput } from './ChatInput'
+import type { DeleteIssueCleanupOptions } from './DeleteIssueDialog'
+import { DeleteIssueDialog } from './DeleteIssueDialog'
 import { computeScrollAnchor, markProgrammaticScroll } from './scroll-coordination'
 import { ChatSearchBar } from './ChatSearchBar'
 import { CurrentPromptHover } from './CurrentPromptHover'
@@ -186,8 +178,8 @@ export function ChatBody({
     setDeleteDialogOpen(true)
   }, [])
 
-  const handleConfirmDelete = useCallback(() => {
-    deleteIssueMutation.mutate(issueId, {
+  const handleConfirmDelete = useCallback((cleanup: DeleteIssueCleanupOptions | undefined) => {
+    deleteIssueMutation.mutate({ issueId, cleanup }, {
       onSuccess: () => {
         setDeleteDialogOpen(false)
         onAfterDelete?.()
@@ -732,28 +724,15 @@ export function ChatBody({
         onPendingEditConsumed={() => setPendingEditContent(null)}
       />
 
-      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t('issue.delete')}</AlertDialogTitle>
-            <AlertDialogDescription>{t('issue.deleteConfirm')}</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleteIssueMutation.isPending}>
-              {t('common.cancel')}
-            </AlertDialogCancel>
-            <AlertDialogAction
-              disabled={deleteIssueMutation.isPending}
-              onClick={(event) => {
-                event.preventDefault()
-                handleConfirmDelete()
-              }}
-            >
-              {deleteIssueMutation.isPending ? t('issue.deleting') : t('issue.delete')}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <DeleteIssueDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        issueTitle={issue.title}
+        hasWorktree={issue.useWorktree}
+        branchName={issue.worktreeBranchName ?? (issue.useWorktree ? `bkd/${issue.id}` : null)}
+        isPending={deleteIssueMutation.isPending}
+        onConfirm={handleConfirmDelete}
+      />
     </>
   )
 }

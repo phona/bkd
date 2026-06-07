@@ -74,6 +74,12 @@ export const issues = sqliteTable(
     // null → default behavior (auto-resolved base, `bkd/{issueId}` name).
     worktreeBaseBranch: text('worktree_base_branch'),
     worktreeBranchName: text('worktree_branch_name'),
+    // Attach the worktree to an existing branch (named by worktreeBranchName)
+    // instead of creating a new branch. Mirrors AoE's "Attach to existing
+    // branch" toggle. When true, worktreeBaseBranch is ignored.
+    worktreeAttachExisting: integer('worktree_attach_existing', { mode: 'boolean' })
+      .notNull()
+      .default(false),
     isPinned: integer('is_pinned', { mode: 'boolean' }).notNull().default(false),
     keepAlive: integer('keep_alive', { mode: 'boolean' }).notNull().default(false),
     // Hidden issues are excluded from default listings (e.g. whiteboard-bound

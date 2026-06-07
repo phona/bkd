@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import {
   cleanupWorktree,
   createWorktree,
+  deleteBranch,
   removeWorktree,
   resolveWorktreePath,
 } from '@/engines/issue/utils/worktree'
@@ -161,6 +162,55 @@ describe('removeWorktree', () => {
 
     await removeWorktree(gitRoot, fakeDir)
     expect(existsSync(fakeDir)).toBe(false)
+  })
+})
+
+describe('createWorktree attachExisting', () => {
+  test('checks out an existing branch without creating a new one', async () => {
+    const issueId = makeIssueId('attach')
+    // Pre-create a branch on the repo to attach to.
+    const branch = `existing-${issueId}`
+    gitSync(['branch', branch], gitRoot)
+
+    const wtDir = await createWorktree(gitRoot, TEST_PROJECT_ID, issueId, {
+      branchNameOverride: branch,
+      attachExisting: true,
+    })
+    expect(existsSync(wtDir)).toBe(true)
+
+    // The worktree HEAD should be on the attached branch, not bkd/{issueId}.
+    const head = spawnNodeSync(['git', 'rev-parse', '--abbrev-ref', 'HEAD'], { cwd: wtDir })
+    expect(head.stdout.trim()).toBe(branch)
+
+    await removeWorktree(gitRoot, wtDir)
+    gitSync(['branch', '-D', branch], gitRoot)
+  })
+
+  test('fails when the existing branch does not exist', async () => {
+    const issueId = makeIssueId('attach-missing')
+    await expect(
+      createWorktree(gitRoot, TEST_PROJECT_ID, issueId, {
+        branchNameOverride: 'does-not-exist-branch',
+        attachExisting: true,
+      }),
+    ).rejects.toThrow()
+  })
+})
+
+describe('deleteBranch', () => {
+  test('deletes a local branch', async () => {
+    const branch = `to-delete-${Date.now()}`
+    gitSync(['branch', branch], gitRoot)
+    await deleteBranch(gitRoot, branch, true)
+    const res = spawnNodeSync(
+      ['git', 'show-ref', '--verify', '--quiet', `refs/heads/${branch}`],
+      { cwd: gitRoot },
+    )
+    expect(res.exitCode).not.toBe(0)
+  })
+
+  test('is idempotent for a missing branch', async () => {
+    await expect(deleteBranch(gitRoot, 'never-existed-branch', true)).resolves.toBeUndefined()
   })
 })
 

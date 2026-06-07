@@ -76,8 +76,11 @@ export async function executeIssue(
           baseDir,
           issue.projectId,
           issueId,
-          issue.worktreeBaseBranch ?? undefined,
-          issue.worktreeBranchName ?? undefined,
+          {
+            startPointRef: issue.worktreeBaseBranch ?? undefined,
+            branchNameOverride: issue.worktreeBranchName ?? undefined,
+            attachExisting: issue.worktreeAttachExisting ?? false,
+          },
         )
         workingDir = worktreePath
       } catch (error) {

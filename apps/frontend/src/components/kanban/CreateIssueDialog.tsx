@@ -1,4 +1,4 @@
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useParams } from 'react-router-dom'
@@ -25,6 +25,7 @@ import {
   useProject,
   useProjects,
 } from '@/hooks/use-kanban'
+import { slugifyBranch } from '@/lib/branch-slug'
 import { formatModelName } from '@/lib/format'
 import { tStatus } from '@/lib/i18n-utils'
 import type { StatusDefinition } from '@/lib/statuses'
@@ -85,12 +86,22 @@ export function CreateIssueForm({
   const [engineType, setEngineType] = useState('')
   const [modelId, setModelId] = useState('')
   const [permission, setPermission] = useState<PermissionId>('auto')
-  const [useWorktree, setUseWorktree] = useState(false)
+  // Worktree defaults ON (opt-out) to match AoE; the effect below forces it
+  // off for non-git projects.
+  const [useWorktree, setUseWorktree] = useState(true)
+  const [worktreeAdvancedOpen, setWorktreeAdvancedOpen] = useState(false)
+  const [worktreeAttachExisting, setWorktreeAttachExisting] = useState(false)
   const [worktreeBaseBranch, setWorktreeBaseBranch] = useState('')
   const [worktreeBranchName, setWorktreeBranchName] = useState('')
   const { data: gitBranches } = useGitBranches(
     effectiveProjectId,
     Boolean(effectiveProjectId) && projectIsGitRepo && useWorktree,
+  )
+  // Auto-generated branch name from the issue title (AoE session-title → branch).
+  // Shown as the placeholder / fallback when the user hasn't typed a name.
+  const autoBranchName = useMemo(
+    () => slugifyBranch(input, 'issue'),
+    [input],
   )
   const [templateId, setTemplateId] = useState('')
   const [templatePrefix, setTemplatePrefix] = useState('')
@@ -174,10 +185,13 @@ export function CreateIssueForm({
         })(),
         statusId,
         useWorktree,
+        // base branch is meaningless when attaching to an existing branch
         worktreeBaseBranch:
-          useWorktree && worktreeBaseBranch ? worktreeBaseBranch : undefined,
+          useWorktree && !worktreeAttachExisting && worktreeBaseBranch ? worktreeBaseBranch : undefined,
+        // resolved branch name: user-typed, else auto-slug from the title
         worktreeBranchName:
-          useWorktree && worktreeBranchName.trim() ? worktreeBranchName.trim() : undefined,
+          useWorktree ? (worktreeBranchName.trim() || slugifyBranch(trimmed, 'issue')) : undefined,
+        worktreeAttachExisting: useWorktree && worktreeAttachExisting ? true : undefined,
         engineType: resolvedEngineType || undefined,
         model: modelId || undefined,
         permissionMode: permissionMap[permission],
@@ -189,7 +203,9 @@ export function CreateIssueForm({
           setEngineType('')
           setModelId('')
           setPermission('auto')
-          setUseWorktree(false)
+          setUseWorktree(true)
+          setWorktreeAdvancedOpen(false)
+          setWorktreeAttachExisting(false)
           setWorktreeBaseBranch('')
           setWorktreeBranchName('')
           setTemplateId('')
@@ -205,6 +221,7 @@ export function CreateIssueForm({
     statusId,
     permission,
     useWorktree,
+    worktreeAttachExisting,
     worktreeBaseBranch,
     worktreeBranchName,
     resolvedEngineType,
@@ -296,29 +313,20 @@ export function CreateIssueForm({
           </PropertyRow>
           {useWorktree && projectIsGitRepo
             ? (
-                <>
-                  <PropertyRow label={t('createIssue.baseBranch')}>
-                    <select
-                      value={worktreeBaseBranch}
-                      onChange={e => setWorktreeBaseBranch(e.target.value)}
-                      className="w-full bg-transparent text-sm outline-none text-foreground"
-                    >
-                      <option value="">{t('createIssue.baseBranchDefault')}</option>
-                      {(gitBranches?.branches ?? []).map(b => (
-                        <option key={b} value={b}>{b}</option>
-                      ))}
-                    </select>
-                  </PropertyRow>
-                  <PropertyRow label={t('createIssue.branchName')}>
-                    <input
-                      type="text"
-                      value={worktreeBranchName}
-                      onChange={e => setWorktreeBranchName(e.target.value)}
-                      placeholder={t('createIssue.branchNamePlaceholder')}
-                      className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
-                    />
-                  </PropertyRow>
-                </>
+                <div className="md:col-span-3">
+                  <WorktreeAdvanced
+                    open={worktreeAdvancedOpen}
+                    onToggle={() => setWorktreeAdvancedOpen(v => !v)}
+                    attachExisting={worktreeAttachExisting}
+                    onAttachExistingChange={setWorktreeAttachExisting}
+                    baseBranch={worktreeBaseBranch}
+                    onBaseBranchChange={setWorktreeBaseBranch}
+                    branchName={worktreeBranchName}
+                    onBranchNameChange={setWorktreeBranchName}
+                    autoBranchName={autoBranchName}
+                    branches={gitBranches?.branches ?? []}
+                  />
+                </div>
               )
             : null}
           <PropertyRow label={t('createIssue.engine')}>
@@ -530,6 +538,118 @@ function WorktreeToggle({ value, onChange, disabled }: { value: boolean, onChang
   return (
     <div className="flex items-center w-full">
       <Switch checked={value} onCheckedChange={onChange} disabled={disabled} className="shrink-0" />
+    </div>
+  )
+}
+
+// ── WorktreeAdvanced ──────────────────────────────────
+// Collapsible "Advanced" section (collapsed by default) that mirrors AoE's
+// SessionStep disclosure: attach-to-existing toggle, base branch (new-branch
+// path only), and branch name with an auto-generated default. Mobile parity:
+// uses the same stacked layout on every breakpoint.
+
+function WorktreeAdvanced({
+  open,
+  onToggle,
+  attachExisting,
+  onAttachExistingChange,
+  baseBranch,
+  onBaseBranchChange,
+  branchName,
+  onBranchNameChange,
+  autoBranchName,
+  branches,
+}: {
+  open: boolean
+  onToggle: () => void
+  attachExisting: boolean
+  onAttachExistingChange: (v: boolean) => void
+  baseBranch: string
+  onBaseBranchChange: (v: string) => void
+  branchName: string
+  onBranchNameChange: (v: string) => void
+  autoBranchName: string
+  branches: string[]
+}) {
+  const { t } = useTranslation()
+
+  return (
+    <div className="rounded-lg border bg-muted/20 px-3 py-2">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+      >
+        {open
+          ? <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+          : <ChevronRight className="h-3.5 w-3.5 shrink-0" />}
+        {t('createIssue.advanced')}
+      </button>
+
+      {open
+        ? (
+            <div className="mt-3 space-y-3 border-l border-border/40 pl-3">
+              {/* Attach to existing branch */}
+              <label className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-xs font-medium text-foreground">{t('createIssue.attachExisting')}</div>
+                  <div className="text-[11px] text-muted-foreground/70 mt-0.5 leading-snug">
+                    {t('createIssue.attachExistingHint')}
+                  </div>
+                </div>
+                <Switch checked={attachExisting} onCheckedChange={onAttachExistingChange} className="shrink-0" />
+              </label>
+
+              {attachExisting
+                ? (
+                    <div>
+                      <div className="text-xs text-muted-foreground mb-1">{t('createIssue.attachExistingBranch')}</div>
+                      <select
+                        value={branchName}
+                        onChange={e => onBranchNameChange(e.target.value)}
+                        className="w-full bg-transparent text-sm outline-none text-foreground border rounded-md px-2 py-1.5"
+                      >
+                        <option value="">{t('createIssue.baseBranchDefault')}</option>
+                        {branches.map(b => (
+                          <option key={b} value={b}>{b}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )
+                : (
+                    <>
+                      <div>
+                        <div className="text-xs text-muted-foreground mb-1">{t('createIssue.baseBranch')}</div>
+                        <select
+                          value={baseBranch}
+                          onChange={e => onBaseBranchChange(e.target.value)}
+                          className="w-full bg-transparent text-sm outline-none text-foreground border rounded-md px-2 py-1.5"
+                        >
+                          <option value="">{t('createIssue.baseBranchDefault')}</option>
+                          {branches.map(b => (
+                            <option key={b} value={b}>{b}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <div className="text-xs text-muted-foreground mb-1">{t('createIssue.branchName')}</div>
+                        <input
+                          type="text"
+                          value={branchName}
+                          onChange={e => onBranchNameChange(e.target.value)}
+                          placeholder={autoBranchName}
+                          className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground/50 border rounded-md px-2 py-1.5"
+                        />
+                        <div className="text-[11px] text-muted-foreground/70 mt-1">
+                          {t('createIssue.branchNameAutoHint')}
+                        </div>
+                      </div>
+                    </>
+                  )}
+            </div>
+          )
+        : null}
     </div>
   )
 }

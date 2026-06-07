@@ -87,6 +87,7 @@ create.openapi(R.createIssue, async (c) => {
           useWorktree: body.useWorktree ?? false,
           worktreeBaseBranch: body.worktreeBaseBranch ?? null,
           worktreeBranchName: body.worktreeBranchName ?? null,
+          worktreeAttachExisting: body.worktreeAttachExisting ?? false,
           keepAlive: body.keepAlive ?? false,
           engineType: resolvedEngine,
           model: resolvedModel,

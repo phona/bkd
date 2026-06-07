@@ -114,6 +114,7 @@ export function serializeIssue(row: IssueRow) {
     useWorktree: row.useWorktree,
     worktreeBaseBranch: row.worktreeBaseBranch ?? null,
     worktreeBranchName: row.worktreeBranchName ?? null,
+    worktreeAttachExisting: row.worktreeAttachExisting,
     isPinned: row.isPinned,
     keepAlive: row.keepAlive,
     isHidden: row.isHidden,

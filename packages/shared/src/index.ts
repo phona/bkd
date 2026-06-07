@@ -67,6 +67,7 @@ export interface Issue {
   useWorktree: boolean
   worktreeBaseBranch?: string | null
   worktreeBranchName?: string | null
+  worktreeAttachExisting?: boolean
   isPinned: boolean
   keepAlive: boolean
   // Hidden from default listings (e.g. whiteboard-bound sessions). The issue
