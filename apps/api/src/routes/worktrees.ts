@@ -1,7 +1,9 @@
 import { readdir, stat } from 'node:fs/promises'
 import { join, resolve, sep } from 'node:path'
 import { findProject } from '@/db/helpers'
+import { mergeIssueBranch } from '@/engines/issue/utils/merge'
 import { removeWorktree, WORKTREE_BASE } from '@/engines/issue/utils/worktree'
+import { runCommand } from '@/engines/spawn'
 import { logger } from '@/logger'
 import { createOpenAPIRouter } from '@/openapi/hono'
 import * as R from '@/openapi/routes'
@@ -123,6 +125,59 @@ worktrees.openapi(R.deleteWorktree, async (c) => {
   }
 
   return c.json({ success: true, data: { issueId } }, 200 as const)
+})
+
+// POST /api/projects/:projectId/worktrees/:issueId/merge — Merge the issue's
+// worktree branch back into the repo's checked-out branch (PLAN-030 / WT-003).
+worktrees.openapi(R.mergeWorktree, async (c) => {
+  const projectId = c.req.param('projectId')!
+  const project = await findProject(projectId)
+  if (!project) {
+    return c.json({ success: false, error: 'Project not found' }, 404 as const)
+  }
+
+  const issueId = c.req.param('issueId')!
+  if (!VALID_ID.test(issueId)) {
+    return c.json({ success: false, error: 'Invalid issueId' }, 400 as const)
+  }
+
+  const baseWorktreeDir = resolve(join(WORKTREE_BASE, project.id))
+  const worktreePath = resolve(join(baseWorktreeDir, issueId))
+  if (!worktreePath.startsWith(baseWorktreeDir + sep) && worktreePath !== baseWorktreeDir) {
+    return c.json({ success: false, error: 'Invalid issueId' }, 400 as const)
+  }
+
+  try {
+    const s = await stat(worktreePath)
+    if (!s.isDirectory()) {
+      return c.json({ success: false, error: 'Worktree not found' }, 404 as const)
+    }
+  } catch {
+    return c.json({ success: false, error: 'Worktree not found' }, 404 as const)
+  }
+
+  const baseDir = project.directory ? resolve(project.directory) : process.cwd()
+
+  try {
+    // The branch checked out in the worktree is what we merge back.
+    const headRes = await runCommand(
+      ['git', 'rev-parse', '--abbrev-ref', 'HEAD'],
+      { cwd: worktreePath, stderr: 'pipe' },
+    )
+    const branch = headRes.stdout.trim()
+    if (!branch || branch === 'HEAD') {
+      return c.json({ success: false, error: 'Merge failed' }, 500 as const)
+    }
+    const result = await mergeIssueBranch(baseDir, branch)
+    logger.info(
+      { projectId: project.id, issueId, branch, status: result.status },
+      'worktree_merge',
+    )
+    return c.json({ success: true, data: result }, 200 as const)
+  } catch (err) {
+    logger.error({ projectId: project.id, issueId, err }, 'worktree_merge_failed')
+    return c.json({ success: false, error: 'Merge failed' }, 500 as const)
+  }
 })
 
 export default worktrees

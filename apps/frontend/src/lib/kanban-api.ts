@@ -385,6 +385,12 @@ export const kanbanApi = {
   deleteWorktree: (projectId: string, issueId: string) =>
     del<{ issueId: string }>(`/api/projects/${projectId}/worktrees/${issueId}`),
 
+  mergeWorktree: (projectId: string, issueId: string) =>
+    post<{ status: 'merged' | 'conflict' | 'refused' | 'noop', message: string, conflicts?: string[] }>(
+      `/api/projects/${projectId}/worktrees/${issueId}/merge`,
+      {},
+    ),
+
   // Issues
   getReviewIssues: (opts?: { statuses?: string[] }) => {
     const qs = opts?.statuses && opts.statuses.length > 0 ?

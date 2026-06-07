@@ -220,6 +220,13 @@ export function useDeleteWorktree() {
   })
 }
 
+export function useMergeWorktree() {
+  return useMutation({
+    mutationFn: (data: { projectId: string, issueId: string }) =>
+      kanbanApi.mergeWorktree(data.projectId, data.issueId),
+  })
+}
+
 export function useProject(projectId: string) {
   return useQuery({
     queryKey: queryKeys.project(projectId),

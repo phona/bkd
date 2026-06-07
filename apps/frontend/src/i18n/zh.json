@@ -236,6 +236,8 @@
     "worktree": "工作树",
     "worktreeBranch": "分支",
     "worktreePath": "路径",
+    "worktreeMerge": "合并回主分支",
+    "worktreeMerging": "合并中…",
     "clearSession": "清空 Session ID",
     "clearSessionConfirmTitle": "清空 Session ID？",
     "clearSessionConfirmDescription": "这将清空 CLI 的 session ID，下次执行时会开启全新会话。当会话过大导致 resume 时出现 \"Prompt is too long\" 时使用。Issue 历史记录会保留。",

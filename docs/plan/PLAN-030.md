@@ -1,6 +1,6 @@
 # PLAN-030 Branch/workspace interaction redesign — visibility + merge-back
 
-- **status**: implementing
+- **status**: completed
 - **createdAt**: 2026-06-06
 - **approvedAt**: 2026-06-06
 - **relatedTask**: WT-003
@@ -53,3 +53,9 @@ covers the actual daily pain without a new PM-ish surface.
 - 2026-06-06: Ride-along from AoE sweep — adopt **status glyphs (shape + color, not
   color-only)**: ● running / ◐ waiting / ○ idle / ✕ error / ◌ starting / ■ stopped,
   for the card/list visibility work. Also consider per-session diff base-branch override.
+- 2026-06-06: Completed — status glyph + worktree branch chip on cards (mobile too,
+  7dc006e); conservative merge-back helper + bun:test (c7baea1); merge route +
+  handler + client/hook + an in-detail "Merge to base" button with toast feedback.
+  Verified: lint + tsc + 404 tests + merge bun:test. DEFERRED (minor): the detail
+  header worktree panel + merge button are desktop-only (`max-md:hidden`); a mobile
+  surface for them is a small follow-up (card chip already shows on mobile).

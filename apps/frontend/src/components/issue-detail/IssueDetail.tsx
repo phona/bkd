@@ -1,10 +1,11 @@
 import { Brain, ChevronDown, GitBranch, Tag, Trash2, Wrench, Zap } from 'lucide-react'
 import { useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { useClickOutside } from '@/hooks/use-click-outside'
-import { useProjectWorktrees } from '@/hooks/use-kanban'
+import { useMergeWorktree, useProjectWorktrees } from '@/hooks/use-kanban'
 import { useSummarizeIssue } from '@/hooks/use-notes'
 import { tStatus } from '@/lib/i18n-utils'
 import type { StatusDefinition, StatusId } from '@/lib/statuses'
@@ -57,6 +58,21 @@ export function IssueDetail({
   )
   const worktreePath = worktreeEntry?.path ?? ''
   const worktreeBranch = worktreeEntry?.branch ?? (issue.id ? `bkd/${issue.id}` : '')
+
+  const mergeWorktree = useMergeWorktree()
+  const handleMergeWorktree = async () => {
+    if (!projectId || !issue.id) return
+    try {
+      const res = await mergeWorktree.mutateAsync({ projectId, issueId: issue.id })
+      if (res.status === 'merged') toast.success(res.message)
+      else if (res.status === 'conflict') toast.error(`${res.message}: ${res.conflicts?.join(', ') ?? ''}`)
+      else toast(res.message)
+    } catch {
+      toast.error(t('chat.worktreeMerge'))
+    } finally {
+      setShowWorktree(false)
+    }
+  }
 
   return (
     <div
@@ -231,6 +247,16 @@ export function IssueDetail({
                             <code className="font-mono text-foreground/80 break-all">{worktreePath}</code>
                           </div>
                         </div>
+                        <button
+                          type="button"
+                          onClick={handleMergeWorktree}
+                          disabled={mergeWorktree.isPending}
+                          className="mt-1 inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-border/60 px-2 py-1 text-xs text-foreground hover:bg-muted/60 disabled:opacity-50"
+                          style={{ color: 'var(--accent-brand)' }}
+                        >
+                          <GitBranch className="h-3 w-3" />
+                          {mergeWorktree.isPending ? t('chat.worktreeMerging') : t('chat.worktreeMerge')}
+                        </button>
                       </div>
                     ) :
                   null}

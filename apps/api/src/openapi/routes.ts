@@ -1015,6 +1015,28 @@ export const deleteWorktree = createRoute({
   },
 })
 
+export const mergeWorktree = createRoute({
+  method: 'post',
+  path: '/{issueId}/merge',
+  tags: ['Worktrees'],
+  summary: 'Merge an issue worktree branch into the repo checked-out branch',
+  operationId: 'mergeWorktree',
+  request: { params: z.object({ issueId: z.string() }) },
+  responses: {
+    200: successResponse(
+      z.object({
+        status: z.enum(['merged', 'conflict', 'refused', 'noop']),
+        message: z.string(),
+        conflicts: z.array(z.string()).optional(),
+      }),
+      'Merge result',
+    ),
+    400: errorResponse('Invalid issueId'),
+    404: errorResponse('Project or worktree not found'),
+    500: errorResponse('Merge failed'),
+  },
+})
+
 // ── Notes ──────────────────────────────────────────────
 
 export const listNotes = createRoute({
