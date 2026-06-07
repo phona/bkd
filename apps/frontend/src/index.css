@@ -266,7 +266,10 @@
     @apply bg-background text-foreground;
     font-family: var(--font-sans);
     padding-top: env(safe-area-inset-top);
-    padding-bottom: env(safe-area-inset-bottom);
+    /* No bottom safe-area here: the app uses a 100dvh shell (main.tsx) and the
+       bottom-edge component (the chat composer) applies its own
+       env(safe-area-inset-bottom). Padding the body too double-counted the inset
+       and left a blank gap under the composer (留白). */
     padding-left: env(safe-area-inset-left);
     padding-right: env(safe-area-inset-right);
     -webkit-overflow-scrolling: touch;
