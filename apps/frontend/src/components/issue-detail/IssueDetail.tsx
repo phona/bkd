@@ -265,8 +265,8 @@ export function StatusSelect({
         variant="outline"
         className={`${badgeButtonBase} cursor-pointer transition-colors hover:opacity-80`}
         style={{
-          borderColor: `${status.color}30`,
-          backgroundColor: `${status.color}08`,
+          borderColor: `color-mix(in oklch, ${status.color} 19%, transparent)`,
+          backgroundColor: `color-mix(in oklch, ${status.color} 3%, transparent)`,
         }}
       >
         <span

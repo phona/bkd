@@ -1,6 +1,6 @@
 # PLAN-028 Design constitution landing — semantic color + motion tokens
 
-- **status**: implementing
+- **status**: completed
 - **createdAt**: 2026-06-06
 - **approvedAt**: 2026-06-06
 - **relatedTask**: DS-001
@@ -60,3 +60,11 @@ a rebuild is out of proportion to a self-use tool. Keep the existing model, fill
 ## Annotations
 
 - 2026-06-06: Created as the foundation plan. PLAN-029/030/031 depend on this.
+- 2026-06-06: Landed token foundation (accent-brand, semantic status + motion
+  tokens, prefers-reduced-motion) and unified statuses.ts onto the semantic
+  tokens (consumers moved from hex-alpha suffixes to color-mix). Verified: vite
+  build + lint + tsc + 396 tests.
+  DEFERRED as optional low-value/higher-risk hygiene (not blocking): the
+  `transition-all` → specific-property sweep (~35 sites, blind edits risk
+  breaking transitions) and keyframe dedup (thinking-dot/thinking-pulse). Pick
+  these up opportunistically when touching the relevant components.

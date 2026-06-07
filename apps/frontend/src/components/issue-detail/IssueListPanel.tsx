@@ -219,13 +219,13 @@ function StatusGroup({
         type="button"
         onClick={onToggle}
         className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs sticky top-0 z-10 transition-colors border-b border-border/20"
-        style={{ backgroundColor: `${status.color}14` }}
+        style={{ backgroundColor: `color-mix(in oklch, ${status.color} 8%, transparent)` }}
       >
         <span
           className="h-2 w-2 rounded-full shrink-0 ring-2 ring-offset-1 ring-offset-transparent"
           style={{
             backgroundColor: status.color,
-            boxShadow: `0 0 6px ${status.color}40`,
+            boxShadow: `0 0 6px color-mix(in oklch, ${status.color} 25%, transparent)`,
           }}
         />
         <span className="font-semibold text-foreground/80 truncate tracking-tight">
