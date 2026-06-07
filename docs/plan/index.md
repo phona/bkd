@@ -56,7 +56,7 @@ Each plan is a single line linking to its detail file. All detailed information 
 - [x] [**PLAN-025 Worktree base branch and custom branch name**](PLAN-025.md) `2026-06-06`
 - [x] [**PLAN-026 Worktree-aware terminal cwd**](PLAN-026.md) `2026-06-06`
 - [~] [**PLAN-027 Dockable, persistent panels (terminal / diff / file browser)**](PLAN-027.md) `2026-06-06`
-- [ ] [**PLAN-028 Design constitution landing — semantic color + motion tokens**](PLAN-028.md) `2026-06-06`
+- [-] [**PLAN-028 Design constitution landing — semantic color + motion tokens**](PLAN-028.md) `2026-06-06`
 - [ ] [**PLAN-029 Secretary — cockpit reborn as a push inbox (supersedes PLAN-022)**](PLAN-029.md) `2026-06-06`
 - [ ] [**PLAN-030 Branch/workspace interaction redesign — visibility + merge-back**](PLAN-030.md) `2026-06-06`
 - [ ] [**PLAN-031 Decompose giant components per DESIGN.md C**](PLAN-031.md) `2026-06-06`

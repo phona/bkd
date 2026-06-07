@@ -1,9 +1,9 @@
 # PLAN-028 Design constitution landing — semantic color + motion tokens
 
-- **status**: draft
+- **status**: implementing
 - **createdAt**: 2026-06-06
-- **approvedAt**: (pending)
-- **relatedTask**: DS-001 (to be created)
+- **approvedAt**: 2026-06-06
+- **relatedTask**: DS-001
 
 ## Context
 
