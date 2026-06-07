@@ -55,9 +55,10 @@ data/
 .bkd/
 .mcp.json
 
-# Superpowers plugin docs
+# Superpowers plugin docs + local cache
 docs/superpowers/
 docs/tmp/
+.superpowers/
 
 # npm cache (leaked via ~/ symlink)
 ~/
