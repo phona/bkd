@@ -80,8 +80,9 @@ Each task is a single line linking to its detail file. All detailed information 
 - [-] [**DIFF-001 Diff inline comments → send to agent**](DIFF-001.md) `P1`
 - [x] [**WT-003 Branch/workspace visibility + merge-back**](WT-003.md) `P1`
 - [x] [**BUG-006 Terminal/WebSocket fail — launcher Bun.serve missing websocket handler**](BUG-006.md) `P0`
-- [-] [**BUG-007 Chat — final response not rendered live on settle; needs manual refresh**](BUG-007.md) `P1`
+- [x] [**BUG-007 Chat — final response not rendered live on settle; needs manual refresh**](BUG-007.md) `P1`
 - [x] [**BUG-008 Chat — edit-mode toolbar covers last message + unstable bottom scroll (mobile)**](BUG-008.md) `P1`
-- [-] [**BUG-009 Chat — entering a session lands a few turns back, not on latest**](BUG-009.md) `P1`
-- [-] [**BUG-010 Chat — composer stays expanded after keyboard dismiss (mobile)**](BUG-010.md) `P1`
-- [-] [**BUG-011 Chat — entry jumps to a stale anchor (neither latest nor last-read)**](BUG-011.md) `P1`
+- [x] [**BUG-009 Chat — entering a session lands a few turns back, not on latest**](BUG-009.md) `P1`
+- [x] [**BUG-010 Chat — composer stays expanded after keyboard dismiss (mobile)**](BUG-010.md) `P1`
+- [x] [**BUG-011 Chat — entry jumps to a stale anchor (neither latest nor last-read)**](BUG-011.md) `P1`
+- [x] [**BUG-012 Mobile — blank gap under the composer (double safe-area)**](BUG-012.md) `P1`
