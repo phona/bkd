@@ -74,7 +74,7 @@ Each task is a single line linking to its detail file. All detailed information 
 - [x] [**WT-002 Make terminal cwd worktree-aware**](WT-002.md) `P1`
 - [~] [**DOCK-001 Dockable, persistent terminal / diff / file-browser panels**](DOCK-001.md) `P1`
 - [-] [**CHAT-010 Chat input focus management**](CHAT-010.md) `P1`
-- [-] [**BUG-005 Chat scroll lands at wrong position when switching sessions**](BUG-005.md) `P1`
+- [~] [**BUG-005 Chat scroll lands at wrong position when switching sessions**](BUG-005.md) `P1` (resume-reading dropped → see BUG-011)
 - [x] [**DS-001 Design constitution landing — semantic color + motion tokens**](DS-001.md) `P1`
 - [x] [**CHAT-011 Chat message rendering robustness — async Shiki/diff fault tolerance**](CHAT-011.md) `P2`
 - [-] [**DIFF-001 Diff inline comments → send to agent**](DIFF-001.md) `P1`
@@ -84,3 +84,4 @@ Each task is a single line linking to its detail file. All detailed information 
 - [x] [**BUG-008 Chat — edit-mode toolbar covers last message + unstable bottom scroll (mobile)**](BUG-008.md) `P1`
 - [-] [**BUG-009 Chat — entering a session lands a few turns back, not on latest**](BUG-009.md) `P1`
 - [-] [**BUG-010 Chat — composer stays expanded after keyboard dismiss (mobile)**](BUG-010.md) `P1`
+- [-] [**BUG-011 Chat — entry jumps to a stale anchor (neither latest nor last-read)**](BUG-011.md) `P1`

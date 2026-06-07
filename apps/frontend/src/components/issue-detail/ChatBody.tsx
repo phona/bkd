@@ -292,7 +292,6 @@ export function ChatBody({
   // user left off (Slack / Discord / mail-client style). Saved on scroll,
   // restored once after logs first arrive — see useLayoutEffect below.
   const setSavedScroll = useScrollPositionStore(s => s.setPosition)
-  const savedAnchor = useScrollPositionStore(s => s.positions[issueId])
 
   // Mirror isLoadingOlder into a ref so the scroll handler can read the
   // current value without forcing this effect to re-attach the listener
@@ -398,24 +397,16 @@ export function ChatBody({
     if (!el) return
     restoredForIssueRef.current = issueId
     markProgrammaticScroll(el)
-    // Resume the reading position only when we have a top-of-viewport messageId
-    // whose row is currently rendered (non-virtual, or virtualized + in window).
-    // Everything else — was-at-bottom, no anchor, or an off-screen virtualized
-    // row — lands at the latest message, the right default. See BUG-005.
-    const anchorId = savedAnchor && !savedAnchor.atBottom ? savedAnchor.anchorId : null
-    const anchorEl = anchorId
-      ? el.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(anchorId)}"]`)
-      : null
-    if (anchorEl) {
-      anchorEl.scrollIntoView({ block: 'start' })
-      return
-    }
+    // Entering a session ALWAYS lands on the latest message. The previous
+    // "resume reading position" branch (BUG-005) landed on stale / mis-saved
+    // anchors — neither the latest nor the real last-read spot (BUG-011) — so it
+    // was dropped in favour of predictable latest-on-entry.
     el.scrollTop = el.scrollHeight
     // Async content (code blocks, markdown, images) can grow the list AFTER this
-    // first pin, leaving entry a few turns short of the latest message. Re-pin
-    // across a short settle window so we always land on the newest message —
-    // unless the user has already scrolled away (gap > 600px → abort). BUG-009.
-    const repinTimers = [60, 180, 360, 600].map(delay =>
+    // first pin, leaving entry a few turns short of the latest. Re-pin across a
+    // settle window so we always land on the newest message — unless the user has
+    // already scrolled away (gap > 600px → abort). BUG-009.
+    const repinTimers = [60, 180, 360, 600, 1000, 1600].map(delay =>
       window.setTimeout(() => {
         const e = scrollRef.current
         if (!e) return
@@ -427,7 +418,7 @@ export function ChatBody({
     return () => {
       for (const t of repinTimers) clearTimeout(t)
     }
-  }, [issueId, logs.length, savedAnchor, scrollRef])
+  }, [issueId, logs.length, scrollRef])
 
   const scrollToTop = useCallback(() => {
     const el = scrollRef.current
