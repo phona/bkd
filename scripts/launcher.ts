@@ -719,6 +719,11 @@ async function main() {
   const http = Bun.serve({
     port: listenPort,
     hostname: listenHost,
+    // Hono's Bun WebSocket handler from the loaded bundle (same module graph as
+    // its routes' upgradeWebSocket). Required for WS upgrades — terminal, etc. —
+    // since the launcher, not the bundle, owns Bun.serve. Older bundles without
+    // the export leave this undefined (WS disabled, same as before the fix).
+    websocket: bundleMod.websocket,
     fetch: async (req, server) => {
       const url = new URL(req.url)
 
