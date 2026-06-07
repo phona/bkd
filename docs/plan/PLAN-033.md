@@ -1,9 +1,9 @@
 # PLAN-033 Chat input focus management
 
-- **status**: draft
+- **status**: implementing
 - **createdAt**: 2026-06-06
-- **approvedAt**: (pending)
-- **relatedTask**: CHAT-010 (to be created)
+- **approvedAt**: 2026-06-06
+- **relatedTask**: CHAT-010
 
 ## Context
 

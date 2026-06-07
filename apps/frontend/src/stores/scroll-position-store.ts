@@ -1,47 +1,65 @@
+import type { ScrollAnchor } from '@/components/issue-detail/scroll-coordination'
 import { create } from 'zustand'
 
 /**
- * Per-issue scroll position memory.
+ * Per-issue scroll anchor memory.
  *
- * When the user navigates between issues, we persist where they were
- * scrolled in each one and restore it on return. Mirrors the behaviour
- * of Slack / Discord / mail clients where revisiting a thread doesn't
- * lose your reading place.
+ * When the user navigates between issues we persist a SEMANTIC anchor for each
+ * one and restore it on return — either "was following the latest" (land at the
+ * bottom) or the messageId at the top of the viewport (resume reading). This
+ * replaces the old absolute-pixel scrollTop, which drifted whenever the content
+ * height changed (async Shiki/markdown rendering, new messages while away). See
+ * `computeScrollAnchor` and BUG-005.
  *
  * Design choices:
- * - Stored as a flat `issueId → scrollTop` map; cheap (O(1) read/write).
+ * - Stored as a flat `issueId → ScrollAnchor` map; cheap (O(1) read/write).
  * - Persisted to localStorage so it survives full reloads / tab close.
- * - Capped at 200 entries via `prune()` so a long-tenured fork doesn't
- *   bloat the JSON blob with stale issue keys; oldest entries (lowest
- *   scrollTop / least recently set) are evicted first by FIFO order.
- * - In-memory map seeded from localStorage at module load; subsequent
- *   reads / writes hit memory (no JSON parse on every scroll event).
+ * - Capped at 200 entries via FIFO prune so a long-tenured fork doesn't bloat
+ *   the JSON blob with stale issue keys.
+ * - In-memory map seeded from localStorage at module load; legacy numeric
+ *   (pixel) entries from before BUG-005 are dropped on load so a stale pixel can
+ *   never mis-position again — those issues just land at the latest message.
  */
 
 const STORAGE_KEY = 'bkd-scroll-positions'
 const MAX_ENTRIES = 200
 
 interface ScrollPositionStore {
-  positions: Record<string, number>
-  setPosition: (issueId: string, top: number) => void
-  getPosition: (issueId: string) => number | undefined
+  positions: Record<string, ScrollAnchor>
+  setPosition: (issueId: string, anchor: ScrollAnchor) => void
+  getPosition: (issueId: string) => ScrollAnchor | undefined
   clear: (issueId: string) => void
 }
 
-function loadPositions(): Record<string, number> {
+function isScrollAnchor(value: unknown): value is ScrollAnchor {
+  return (
+    typeof value === 'object'
+    && value !== null
+    && typeof (value as ScrollAnchor).atBottom === 'boolean'
+  )
+}
+
+function loadPositions(): Record<string, ScrollAnchor> {
   if (typeof window === 'undefined') return {}
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return {}
-    const parsed = JSON.parse(raw) as Record<string, number>
-    return typeof parsed === 'object' && parsed ? parsed : {}
+    const parsed = JSON.parse(raw) as Record<string, unknown>
+    if (typeof parsed !== 'object' || !parsed) return {}
+    // Drop legacy numeric (pixel) entries and any other malformed shapes so a
+    // stale pre-BUG-005 pixel can never mis-position again.
+    const clean: Record<string, ScrollAnchor> = {}
+    for (const [key, value] of Object.entries(parsed)) {
+      if (isScrollAnchor(value)) clean[key] = value
+    }
+    return clean
   } catch {
     return {}
   }
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null
-function schedulePersist(positions: Record<string, number>) {
+function schedulePersist(positions: Record<string, ScrollAnchor>) {
   if (typeof window === 'undefined') return
   // Throttle writes to avoid hammering localStorage on every scroll tick.
   if (saveTimer) clearTimeout(saveTimer)
@@ -57,9 +75,9 @@ function schedulePersist(positions: Record<string, number>) {
 
 export const useScrollPositionStore = create<ScrollPositionStore>((set, get) => ({
   positions: loadPositions(),
-  setPosition: (issueId, top) => {
+  setPosition: (issueId, anchor) => {
     set((state) => {
-      const next = { ...state.positions, [issueId]: top }
+      const next = { ...state.positions, [issueId]: anchor }
       // FIFO prune when the map gets too big — keep the most recent 200.
       const keys = Object.keys(next)
       if (keys.length > MAX_ENTRIES) {

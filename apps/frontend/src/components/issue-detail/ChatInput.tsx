@@ -86,6 +86,7 @@ export function ChatInput({
   pendingEditContent,
   onPendingEditConsumed,
   titleVisible = true,
+  searchOpen = false,
 }: {
   projectId?: string
   issueId?: string
@@ -105,6 +106,7 @@ export function ChatInput({
   onRefreshLogs?: () => void
   pendingEditContent?: string | null
   onPendingEditConsumed?: () => void
+  searchOpen?: boolean
   /**
    * Mobile reading signal from ChatArea's title auto-hide. When the title bar
    * is hidden (user scrolled away to read), collapse the input too so chrome
@@ -175,6 +177,14 @@ export function ChatInput({
       onPendingEditConsumed?.()
     }
   }, [pendingEditContent, onPendingEditConsumed])
+
+  // Return focus to the composer when the in-chat search bar closes (Esc /
+  // close button) so the user lands back in the input instead of nowhere.
+  const prevSearchOpenRef = useRef(searchOpen)
+  useEffect(() => {
+    if (prevSearchOpenRef.current && !searchOpen) textareaRef.current?.focus()
+    prevSearchOpenRef.current = searchOpen
+  }, [searchOpen])
 
   const [sendError, setSendError] = useState<string | null>(null)
   const [attachedFiles, setAttachedFiles] = useState<File[]>([])
@@ -282,6 +292,8 @@ export function ChatInput({
   const handleMentionSelect = useCallback((role: import('@/lib/kanban-api').Role | null) => {
     if (role === null) {
       setMentionQuery(null)
+      // Return focus to the composer when the picker is dismissed/cancelled.
+      textareaRef.current?.focus()
       return
     }
     const textarea = textareaRef.current
@@ -495,6 +507,10 @@ export function ChatInput({
       setTimeout(setSendError, 5000, null)
     } finally {
       isSendingRef.current = false
+      // Keep the composer focused after sending so the caret stays put and the
+      // mobile keyboard does not dismiss between turns. Same-issue guarded so a
+      // navigation mid-send does not steal focus to a stale composer.
+      if (issueIdRef.current === issueId) textareaRef.current?.focus()
     }
   }
 

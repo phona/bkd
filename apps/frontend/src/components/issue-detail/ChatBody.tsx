@@ -28,7 +28,7 @@ import { useChatFilterStore } from '@/stores/chat-filter-store'
 import { useScrollPositionStore } from '@/stores/scroll-position-store'
 import type { Issue, NormalizedLogEntry } from '@/types/kanban'
 import { ChatInput } from './ChatInput'
-import { markProgrammaticScroll } from './scroll-coordination'
+import { computeScrollAnchor, markProgrammaticScroll } from './scroll-coordination'
 import { ChatSearchBar } from './ChatSearchBar'
 import { CurrentPromptHover } from './CurrentPromptHover'
 import { IssueDetail } from './IssueDetail'
@@ -292,7 +292,7 @@ export function ChatBody({
   // user left off (Slack / Discord / mail-client style). Saved on scroll,
   // restored once after logs first arrive — see useLayoutEffect below.
   const setSavedScroll = useScrollPositionStore(s => s.setPosition)
-  const savedScroll = useScrollPositionStore(s => s.positions[issueId])
+  const savedAnchor = useScrollPositionStore(s => s.positions[issueId])
 
   // Mirror isLoadingOlder into a ref so the scroll handler can read the
   // current value without forcing this effect to re-attach the listener
@@ -360,7 +360,17 @@ export function ChatBody({
         // restores position) into localStorage, poisoning future visits.
         const isScrollable = scrollHeight - clientHeight > 0
         if (isScrollable && !isLoadingOlderRef.current) {
-          setSavedScroll(issueId, scrollTop)
+          // Persist a SEMANTIC anchor (atBottom / top-visible messageId) instead
+          // of an absolute pixel scrollTop, which drifts as content height
+          // changes (async render, new messages while away). See BUG-005.
+          const containerTop = el.getBoundingClientRect().top
+          const tops = Array.from(
+            el.querySelectorAll<HTMLElement>('[data-message-id]'),
+          ).map(node => ({
+            id: node.dataset.messageId ?? '',
+            top: node.getBoundingClientRect().top - containerTop,
+          }))
+          setSavedScroll(issueId, computeScrollAnchor({ scrollTop, scrollHeight, clientHeight }, tops))
         }
       })
     }
@@ -384,20 +394,24 @@ export function ChatBody({
   useLayoutEffect(() => {
     if (logs.length === 0) return
     if (restoredForIssueRef.current === issueId) return
-    // Ignore polluted savedScroll≤0 entries from the pre-anchoring era
-    // (when the scroll handler would persist 0 mid-prepend or on mount).
-    // SessionMessages' own snap-to-bottom remains in place — landing on
-    // the latest message is the right default if we have nothing better.
-    if (savedScroll === undefined || savedScroll <= 0) {
-      restoredForIssueRef.current = issueId
-      return
-    }
     const el = scrollRef.current
     if (!el) return
-    markProgrammaticScroll(el)
-    el.scrollTop = savedScroll
     restoredForIssueRef.current = issueId
-  }, [issueId, logs.length, savedScroll, scrollRef])
+    markProgrammaticScroll(el)
+    // Resume the reading position only when we have a top-of-viewport messageId
+    // whose row is currently rendered (non-virtual, or virtualized + in window).
+    // Everything else — was-at-bottom, no anchor, or an off-screen virtualized
+    // row — lands at the latest message, the right default. See BUG-005.
+    const anchorId = savedAnchor && !savedAnchor.atBottom ? savedAnchor.anchorId : null
+    const anchorEl = anchorId
+      ? el.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(anchorId)}"]`)
+      : null
+    if (anchorEl) {
+      anchorEl.scrollIntoView({ block: 'start' })
+      return
+    }
+    el.scrollTop = el.scrollHeight
+  }, [issueId, logs.length, savedAnchor, scrollRef])
 
   const scrollToTop = useCallback(() => {
     const el = scrollRef.current
@@ -487,7 +501,6 @@ export function ChatBody({
                 hasOlderLogs={hasOlderLogs}
                 isLoadingOlder={isLoadingOlder}
                 onLoadOlder={loadOlderLogs}
-                savedScroll={savedScroll}
               />
             </Suspense>
             {/* Inline thinking ticker — anchored to the bottom of the
@@ -687,6 +700,7 @@ export function ChatBody({
         onToggleDiff={onToggleDiff}
         scrollRef={scrollRef}
         titleVisible={titleVisible}
+        searchOpen={searchOpen}
         engineType={issue.engineType ?? undefined}
         model={issue.model ?? undefined}
         sessionStatus={issue.sessionStatus}

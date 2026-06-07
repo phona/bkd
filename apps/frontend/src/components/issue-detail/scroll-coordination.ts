@@ -35,3 +35,42 @@ export function isProgrammaticScroll(el: HTMLElement | null): boolean {
   if (!el) return false
   return performance.now() < ((el as StampedElement)[STAMP_KEY] ?? 0)
 }
+
+// ── Per-issue scroll restore anchoring (BUG-005) ─────────────────────────────
+//
+// We used to persist an ABSOLUTE pixel scrollTop per issue and write it back on
+// switch. That anchor drifts: async Shiki/markdown/diff rendering grows the
+// content height after the restore, and new messages may have arrived while
+// away, so the saved pixel points at the wrong message and is no longer at the
+// bottom. Instead we persist a SEMANTIC anchor: either "was at bottom" (follow
+// the latest) or the messageId at the top of the viewport (resume reading).
+
+/** Distance from the bottom (px) within which we treat the user as "following". */
+export const NEAR_BOTTOM_PX = 40
+
+export interface ScrollAnchor {
+  /** User was following the latest message → restore should land at the bottom. */
+  atBottom: boolean
+  /** messageId at the top of the viewport when reading history; null if atBottom. */
+  anchorId: string | null
+}
+
+/**
+ * Derive the semantic scroll anchor from the container metrics and the vertical
+ * positions of the rendered message rows (each `top` is relative to the scroll
+ * container's top edge, in px). Pure so it can be unit-tested without layout.
+ */
+export function computeScrollAnchor(
+  metrics: { scrollTop: number, scrollHeight: number, clientHeight: number },
+  messageTops: Array<{ id: string, top: number }>,
+): ScrollAnchor {
+  const { scrollTop, scrollHeight, clientHeight } = metrics
+  if (scrollHeight - scrollTop - clientHeight < NEAR_BOTTOM_PX) {
+    return { atBottom: true, anchorId: null }
+  }
+  // Top-most message at/below the viewport top edge; fall back to the last row
+  // above it so a partially-scrolled-past message still anchors.
+  const firstBelow = messageTops.find(m => m.top >= 0)
+  const anchor = firstBelow ?? messageTops.at(-1) ?? null
+  return { atBottom: false, anchorId: anchor?.id ?? null }
+}

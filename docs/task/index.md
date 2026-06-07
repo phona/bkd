@@ -73,3 +73,5 @@ Each task is a single line linking to its detail file. All detailed information 
 - [x] [**WT-001 Allow choosing worktree base branch and custom branch name**](WT-001.md) `P1`
 - [x] [**WT-002 Make terminal cwd worktree-aware**](WT-002.md) `P1`
 - [~] [**DOCK-001 Dockable, persistent terminal / diff / file-browser panels**](DOCK-001.md) `P1`
+- [-] [**CHAT-010 Chat input focus management**](CHAT-010.md) `P1`
+- [-] [**BUG-005 Chat scroll lands at wrong position when switching sessions**](BUG-005.md) `P1`
