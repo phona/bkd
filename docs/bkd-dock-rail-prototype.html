@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>BKD 常驻栏原型</title>
+<style>
+  :root{
+    --bg:#f7f8fa; --card:#ffffff; --border:#e4e7ec; --muted:#8a93a2;
+    --fg:#1c2433; --primary:#3b6cf6; --accent:#10a4ab; /* teal */
+    --accent-soft:rgba(16,164,171,.10); --primary-soft:rgba(59,108,246,.10);
+  }
+  *{box-sizing:border-box} html,body{margin:0;height:100%}
+  body{font:14px/1.5 -apple-system,system-ui,"PingFang SC",sans-serif;background:var(--bg);color:var(--fg)}
+  .app{height:100dvh;display:flex;flex-direction:column}
+  .topbar{height:46px;display:flex;align-items:center;gap:10px;padding:0 14px;background:var(--card);border-bottom:1px solid var(--border);flex:0 0 auto}
+  .topbar .brand{font-weight:700;letter-spacing:.2px}
+  .topbar .spacer{flex:1}
+  .seg{display:inline-flex;background:#eef0f4;border-radius:9px;padding:3px}
+  .seg button{border:0;background:transparent;padding:5px 12px;border-radius:7px;font-size:12.5px;color:var(--muted);cursor:pointer}
+  .seg button.on{background:var(--card);color:var(--fg);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+  .pill{font-size:11px;color:var(--muted);border:1px solid var(--border);border-radius:999px;padding:2px 8px}
+
+  /* ---------- DESKTOP ---------- */
+  .desk{flex:1;min-height:0;display:flex}
+  .issues{width:190px;flex:0 0 auto;border-right:1px solid var(--border);background:var(--card);padding:10px;overflow:auto}
+  .issues h4{margin:.2em 0 .6em;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+  .issue{padding:8px 9px;border-radius:8px;font-size:12.5px;cursor:pointer;color:#41506a}
+  .issue.on{background:var(--primary-soft);color:var(--primary);font-weight:600}
+  .chat{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--bg)}
+  .chat .body{flex:1;overflow:auto;padding:16px 18px;display:flex;flex-direction:column;gap:12px}
+  .bub{max-width:80%;padding:9px 12px;border-radius:14px;font-size:13px}
+  .bub.u{align-self:flex-end;background:var(--primary);color:#fff;border-bottom-right-radius:5px}
+  .bub.a{align-self:flex-start;background:var(--card);border:1px solid var(--border);border-bottom-left-radius:5px}
+  .composer{flex:0 0 auto;border-top:1px solid var(--border);background:var(--card);padding:10px 12px}
+  .composer .box{border:1px solid var(--border);border-radius:12px;padding:9px 12px;color:var(--muted)}
+
+  /* right rail */
+  .rail{flex:0 0 auto;width:380px;min-width:240px;max-width:680px;display:flex;background:var(--card);border-left:1px solid var(--border);position:relative}
+  .rail .grip{position:absolute;left:-3px;top:0;bottom:0;width:6px;cursor:col-resize}
+  .rail .grip:hover{background:var(--accent-soft)}
+  .rail.collapsed{width:48px!important;min-width:48px}
+  .railwrap{flex:1;display:flex;flex-direction:column;min-width:0}
+  .railhead{height:42px;flex:0 0 auto;display:flex;align-items:center;gap:4px;padding:0 8px;border-bottom:1px solid var(--border)}
+  .tab{border:0;background:transparent;cursor:pointer;font-size:12.5px;color:var(--muted);padding:6px 10px;border-radius:8px;display:inline-flex;gap:6px;align-items:center}
+  .tab.on{color:var(--accent);background:var(--accent-soft);font-weight:600}
+  .tab .dot{width:7px;height:7px;border-radius:50%;background:var(--accent)}
+  .railhead .x{margin-left:auto;border:0;background:transparent;color:var(--muted);cursor:pointer;font-size:16px;padding:4px 8px;border-radius:8px}
+  .railhead .x:hover{background:#eef0f4}
+  .railbody{flex:1;min-height:0;overflow:auto;padding:12px}
+  .panel{display:none;height:100%}
+  .panel.on{display:block}
+  .keep{font-size:11px;color:var(--accent);margin-top:8px}
+  /* collapsed rail strip */
+  .strip{display:none;flex-direction:column;align-items:center;gap:10px;padding-top:10px;width:100%}
+  .rail.collapsed .railwrap{display:none}
+  .rail.collapsed .strip{display:flex}
+  .strip button{border:1px solid var(--border);background:var(--card);border-radius:9px;width:32px;height:32px;cursor:pointer;font-size:14px}
+  .strip button.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+
+  /* terminal / files / diff mock content */
+  .term{background:#0f1830;color:#cfe;border-radius:10px;padding:10px 12px;font:12px/1.55 ui-monospace,Menlo,monospace;height:100%}
+  .term .g{color:#8ee6a8}.term .d{color:#9fb3c8}
+  .fb .row{display:flex;gap:8px;align-items:center;padding:6px 8px;border-radius:7px;cursor:pointer;font-size:13px}
+  .fb .row:hover{background:#f1f3f7}
+  .diff{font:12px/1.5 ui-monospace,monospace;border:1px solid var(--border);border-radius:10px;overflow:hidden}
+  .diff .h{background:#f1f3f7;padding:6px 10px;font-weight:600}
+  .diff .add{background:rgba(16,164,171,.10)} .diff .del{background:rgba(244,63,94,.10)}
+  .diff .ln{padding:1px 10px;white-space:pre}
+  .hint{font-size:12px;color:var(--muted);text-align:center;padding:8px}
+
+  /* ---------- MOBILE ---------- */
+  .mob{flex:1;min-height:0;display:none;flex-direction:column;position:relative}
+  .mobchat{flex:1;min-height:0;overflow:auto;padding:14px;display:flex;flex-direction:column;gap:10px;background:var(--bg)}
+  .mobtoolbar{flex:0 0 auto;border-top:1px solid var(--border);background:var(--card);padding:8px 10px;display:flex;flex-direction:column;gap:8px}
+  .mobtoolbar .box{border:1px solid var(--border);border-radius:12px;padding:9px 12px;color:var(--muted)}
+  .mobtoolbar .crow{display:flex;gap:8px;align-items:center}
+  .mobtoolbar .crow .box{flex:1}
+  .more{flex:0 0 auto;width:42px;height:40px;border:1px solid var(--border);background:var(--card);border-radius:11px;font-size:18px;color:#41506a;cursor:pointer}
+  .moresheet{display:none;flex-direction:column;gap:2px;border:1px solid var(--border);border-radius:12px;background:var(--card);box-shadow:0 10px 28px rgba(0,0,0,.14);padding:6px;position:absolute;right:10px;bottom:64px;min-width:190px;z-index:8}
+  .moresheet.on{display:flex}
+  .moresheet button{border:0;background:transparent;text-align:left;padding:10px 10px;border-radius:8px;font-size:13px;color:#41506a;cursor:pointer;display:flex;gap:9px;align-items:center}
+  .moresheet button:active{background:var(--accent-soft);color:var(--accent)}
+  .moresheet .sep{height:1px;background:var(--border);margin:4px 2px}
+  .mobpanel{position:absolute;inset:0;background:var(--card);display:none;flex-direction:column;z-index:5}
+  .mobpanel.on{display:flex}
+  .mobpanel .ph{height:46px;flex:0 0 auto;display:flex;align-items:center;gap:8px;padding:0 12px;border-bottom:1px solid var(--border);font-weight:600}
+  .mobpanel .ph .c{margin-left:auto;border:0;background:transparent;font-size:20px;color:var(--muted);cursor:pointer;line-height:1}
+  .mobpanel .pbody{flex:1;min-height:0;overflow:auto;padding:12px}
+  .keybar{flex:0 0 auto;display:flex;gap:6px;overflow-x:auto;padding:8px 10px;border-top:1px solid var(--border);background:#eef1f5}
+  .keybar button{flex:0 0 auto;min-width:40px;height:36px;border:1px solid var(--border);background:var(--card);border-radius:8px;font-size:13px;color:#41506a;cursor:pointer;padding:0 11px}
+  .keybar button:active{background:var(--accent-soft)}
+  .keybar button.mod.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+
+  body.is-mobile .desk{display:none}
+  body.is-mobile .mob{display:flex}
+  body.is-mobile .app{max-width:430px;margin:0 auto;border-left:1px solid var(--border);border-right:1px solid var(--border)}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="topbar">
+    <span class="brand">BKD</span>
+    <span class="pill">issue · iioianio</span>
+    <span class="spacer"></span>
+    <span style="font-size:12px;color:var(--muted)">预览</span>
+    <div class="seg" id="viewseg">
+      <button class="on" data-view="desk">桌面</button>
+      <button data-view="mob">移动</button>
+    </div>
+  </div>
+
+  <!-- DESKTOP -->
+  <div class="desk">
+    <div class="issues">
+      <h4>Issues</h4>
+      <div class="issue on">修复登录态同步</div>
+      <div class="issue">重构 diff 面板</div>
+      <div class="issue">移动端键盘</div>
+      <div class="issue">移除 roles</div>
+    </div>
+
+    <div class="chat">
+      <div class="body">
+        <div class="bub u">把 diff 面板做成常驻栏</div>
+        <div class="bub a">好的,我把终端 / 文件 / diff 收进右侧常驻栏,标签切换、隐藏保活。</div>
+        <div class="bub u">终端 cwd 要跟着 worktree</div>
+        <div class="bub a">已处理,终端默认进入该 issue 的 worktree 目录。</div>
+      </div>
+      <div class="composer"><div class="box">继续处理此任务…</div></div>
+    </div>
+
+    <!-- RIGHT RAIL -->
+    <div class="rail" id="rail">
+      <div class="grip" id="grip"></div>
+      <div class="railwrap">
+        <div class="railhead">
+          <button class="tab on" data-tab="term"><span class="dot"></span>终端</button>
+          <button class="tab" data-tab="files">文件</button>
+          <button class="tab" data-tab="diff">Diff</button>
+          <button class="x" id="collapse" title="折叠">⟩</button>
+        </div>
+        <div class="railbody">
+          <div class="panel on" data-panel="term">
+            <div class="term"><div><span class="g">~/wt/iioianio</span> <span class="d">$</span> bun test</div>
+              <div class="d"> 404 pass · 0 fail</div>
+              <div><span class="g">~/wt/iioianio</span> <span class="d">$</span> ▍</div>
+            </div>
+            <div class="keep">● 切到别的标签也不杀进程,PTY 保活</div>
+          </div>
+          <div class="panel" data-panel="files">
+            <div class="fb">
+              <div class="row">📁 apps/</div>
+              <div class="row">📁 docs/</div>
+              <div class="row">📄 DiffReview.tsx</div>
+              <div class="row">📄 ChatInput.tsx</div>
+            </div>
+            <div class="keep">● 浏览路径在隐藏后保留</div>
+          </div>
+          <div class="panel" data-panel="diff">
+            <div class="diff">
+              <div class="h">DiffReview.tsx</div>
+              <div class="ln add">+ export function useReviewAnnotations() {</div>
+              <div class="ln add">+   const draft = useState(null)</div>
+              <div class="ln del">-   // old stub</div>
+            </div>
+            <div class="keep">● diff 状态常驻,刷新不丢</div>
+          </div>
+        </div>
+      </div>
+      <!-- collapsed strip -->
+      <div class="strip">
+        <button title="展开" id="expand">⟨</button>
+        <button data-stab="term" class="on">▶</button>
+        <button data-stab="files">📁</button>
+        <button data-stab="diff">Δ</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MOBILE -->
+  <div class="mob">
+    <div class="mobchat">
+      <div class="bub u">把 diff 做成常驻</div>
+      <div class="bub a">好。桌面走右侧常驻栏;手机不搞顶部 tab——从下方工具栏按钮唤出,全屏显示,关掉只是隐藏(保活)。</div>
+    </div>
+    <div class="mobtoolbar">
+      <div class="crow">
+        <div class="box">继续处理此任务…</div>
+        <button class="more" id="mobmore" title="更多">⋯</button>
+      </div>
+      <div class="moresheet" id="moresheet">
+        <button data-open="term">▶ 终端</button>
+        <button data-open="files">📁 文件</button>
+        <button data-open="diff">Δ Diff</button>
+        <div class="sep"></div>
+        <button>↻ 清空 Session</button>
+        <button>🐞 开发者视图</button>
+        <button>🌿 工作树</button>
+      </div>
+    </div>
+    <!-- full-screen overlays, kept mounted/alive -->
+    <div class="mobpanel" data-mp="term">
+      <div class="ph">终端 <button class="c" data-close>×</button></div>
+      <div class="pbody">
+        <div class="term"><div><span class="g">~/wt/iioianio</span> <span class="d">$</span> vim app.ts</div><div class="d"> -- INSERT --</div><div><span class="g">$</span> ▍</div></div>
+        <div class="keep">● 关掉只是隐藏,PTY 保活</div>
+      </div>
+      <div class="keybar">
+        <button>Esc</button>
+        <button>Tab</button>
+        <button class="mod" id="ctrlkey" title="点=单次,长按=锁定">Ctrl</button>
+        <button>↑</button><button>↓</button><button>←</button><button>→</button>
+        <button>|</button><button>~</button><button>/</button><button>-</button>
+      </div>
+    </div>
+    <div class="mobpanel" data-mp="files">
+      <div class="ph">文件 <button class="c" data-close>×</button></div>
+      <div class="pbody"><div class="fb"><div class="row">📁 apps/</div><div class="row">📁 docs/</div><div class="row">📄 DiffReview.tsx</div></div><div class="keep">● 浏览路径保留</div></div>
+    </div>
+    <div class="mobpanel" data-mp="diff">
+      <div class="ph">Diff <button class="c" data-close>×</button></div>
+      <div class="pbody"><div class="diff"><div class="h">DiffReview.tsx</div><div class="ln add">+ export function useReviewAnnotations() {</div><div class="ln del">- // old stub</div></div><div class="keep">● 状态保活,刷新不丢</div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // view toggle
+  document.getElementById('viewseg').addEventListener('click',e=>{
+    const b=e.target.closest('button'); if(!b)return;
+    document.querySelectorAll('#viewseg button').forEach(x=>x.classList.toggle('on',x===b));
+    document.body.classList.toggle('is-mobile', b.dataset.view==='mob');
+  });
+  // desktop rail tabs
+  function setTab(t){
+    document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('on',x.dataset.tab===t));
+    document.querySelectorAll('.strip [data-stab]').forEach(x=>x.classList.toggle('on',x.dataset.stab===t));
+    document.querySelectorAll('[data-panel]').forEach(p=>p.classList.toggle('on',p.dataset.panel===t));
+  }
+  document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>setTab(b.dataset.tab)));
+  document.querySelectorAll('.strip [data-stab]').forEach(b=>b.addEventListener('click',()=>{setTab(b.dataset.stab);rail.classList.remove('collapsed')}));
+  // collapse / expand
+  const rail=document.getElementById('rail');
+  document.getElementById('collapse').onclick=()=>rail.classList.add('collapsed');
+  document.getElementById('expand').onclick=()=>rail.classList.remove('collapsed');
+  // resize
+  let dragging=false;
+  document.getElementById('grip').addEventListener('mousedown',()=>{dragging=true;document.body.style.userSelect='none'});
+  window.addEventListener('mouseup',()=>{dragging=false;document.body.style.userSelect=''});
+  window.addEventListener('mousemove',e=>{ if(!dragging)return; const w=window.innerWidth-e.clientX; rail.style.width=Math.max(240,Math.min(680,w))+'px';});
+  // mobile: tools live in the ⋯ more-sheet; selecting opens a full-screen overlay
+  document.getElementById('mobmore').addEventListener('click',()=>document.getElementById('moresheet').classList.toggle('on'));
+  document.querySelectorAll('.moresheet [data-open]').forEach(b=>b.addEventListener('click',()=>{
+    document.getElementById('moresheet').classList.remove('on');
+    document.querySelectorAll('.mobpanel').forEach(p=>p.classList.toggle('on',p.dataset.mp===b.dataset.open));
+  }));
+  document.querySelectorAll('.mobpanel [data-close]').forEach(b=>b.addEventListener('click',()=>{
+    b.closest('.mobpanel').classList.remove('on');
+  }));
+  // terminal helper keys — Ctrl is a sticky modifier (tap = one-shot, long-press = lock)
+  document.getElementById('ctrlkey').addEventListener('click',e=>e.target.classList.toggle('on'));
+</script>
+</body>
+</html>
