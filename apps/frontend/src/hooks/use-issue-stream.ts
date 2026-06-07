@@ -588,6 +588,7 @@ export function useIssueStream({
     doneReceivedRef.current = false
 
     const cleanup = { unsub: (() => {}) as () => void }
+    const doneTimers: Array<ReturnType<typeof setTimeout>> = []
 
     cleanup.unsub = eventBus.subscribe(issueId, {
       onLog: (entry) => {
@@ -636,6 +637,14 @@ export function useIssueStream({
         // Cheap because the LRU cache already has most of it; the merge
         // map dedupes by id so existing entries are unchanged.
         setRefreshCounter(c => c + 1)
+        // BUG-007: the final merged ("dbOnly") content — the part NOT pushed over
+        // SSE (timeline-emit drops dbOnly entries) — can commit to the DB just
+        // AFTER `done` fires, so the first refetch may miss the tail and the user
+        // has to manually refresh. Two staggered reconciles cover that
+        // write-after-done race. Root fix (settle/persist ordering) is PLAN-032.
+        const t1 = setTimeout(() => setRefreshCounter(c => c + 1), 350)
+        const t2 = setTimeout(() => setRefreshCounter(c => c + 1), 1200)
+        doneTimers.push(t1, t2)
       },
     })
 
@@ -643,6 +652,7 @@ export function useIssueStream({
 
     return () => {
       cleanup.unsub()
+      for (const tid of doneTimers) clearTimeout(tid)
     }
   }, [projectId, issueId, enabled, queryClient, appendEntry, upsertEntry, removeEntries])
 
