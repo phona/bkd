@@ -34,6 +34,7 @@ vi.mock('@/hooks/use-kanban', () => ({
   useEngineAvailability: () => ({ data: { engines: [], models: {} } }),
   useEngineProfiles: () => ({ data: [] }),
   useEngineSettings: () => ({ data: { engines: {} } }),
+  useGitBranches: () => ({ data: { branches: ['main', 'develop'] }, isLoading: false }),
   useOmitModel: () => ({ data: { enabled: false } }),
 }))
 
