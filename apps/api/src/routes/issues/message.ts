@@ -9,7 +9,6 @@ import { emitIssueLogRemoved } from '@/events/issue-events'
 import { logger } from '@/logger'
 import type { SavedFile } from '@/uploads'
 import { saveUploadedFile, validateFiles } from '@/uploads'
-import { issueHasAssignedRole, parseMentions } from '@/engines/issue/role-invoke'
 import {
   ensureWorking,
   flushPendingAsFollowUp,
@@ -298,37 +297,6 @@ message.post('/:id/follow-up', async (c) => {
     // Link attachments to the server-assigned message log
     if (savedFiles.length > 0 && result.messageId) {
       await insertAttachmentRecords(issueId, result.messageId, savedFiles)
-    }
-
-    // Command Room chatrooms (issues with assigned roles) route messages to the
-    // host/role agents. Normal issues are already fully handled by followUpIssue
-    // above — running the host/role path on them starts a SECOND executeIssue on
-    // the same issue, which trips ensureNoActiveProcess (logged as
-    // host_execution_failed) and makes the issue bounce working↔review. So gate
-    // the whole role/host block strictly on whether this issue is a chatroom.
-    if (await issueHasAssignedRole(issueId)) {
-      const mentions = parseMentions(prompt)
-      if (mentions.length > 0) {
-        const { invokeRole } = await import('@/engines/issue/role-invoke')
-        // Fire and forget — don't block the response
-        Promise.all(mentions.map(roleName =>
-          invokeRole({
-            projectId: project.id,
-            issueId,
-            roleName,
-            message: prompt,
-            context: `主 issue ${issueId} 的上下文`,
-          }).catch((err) => {
-            logger.warn({ roleName, issueId, error: err.message }, 'role_invocation_failed')
-          }),
-        ))
-      } else {
-        // No @mention - trigger host
-        const { invokeHost } = await import('@/engines/issue/role-host')
-        invokeHost(issueId, prompt).catch((err) => {
-          logger.warn({ issueId, error: err.message }, 'host_invocation_failed')
-        })
-      }
     }
 
     return c.json({

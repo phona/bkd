@@ -1,0 +1,478 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+<title>BKD · Agent Triage 控制台原型</title>
+<style>
+  :root {
+    --bg: #0a0a0b;
+    --panel: #141417;
+    --panel-2: #1b1b1f;
+    --border: #2a2a30;
+    --border-soft: #222227;
+    --fg: #e7e7ea;
+    --fg-dim: #9a9aa3;
+    --fg-faint: #66666e;
+    --indigo: #6366f1;
+    --indigo-soft: rgba(99,102,241,0.12);
+    --red: #ef4444;
+    --amber: #f59e0b;
+    --emerald: #10b981;
+    --blue: #3b82f6;
+    --radius: 10px;
+    font-synthesis: none;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  .app { display: flex; flex-direction: column; height: 100vh; }
+
+  /* ---------- header ---------- */
+  header {
+    display: flex; align-items: center; gap: 16px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+    flex-wrap: wrap;
+  }
+  .brand { display: flex; align-items: center; gap: 8px; font-weight: 600; letter-spacing: .3px; }
+  .brand .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--indigo); box-shadow: 0 0 10px var(--indigo); }
+  .brand small { color: var(--fg-faint); font-weight: 400; font-size: 12px; }
+  .stats { display: flex; gap: 8px; margin-left: auto; flex-wrap: wrap; }
+  .stat {
+    display: flex; flex-direction: column; align-items: flex-start;
+    padding: 5px 12px; border: 1px solid var(--border-soft); border-radius: 8px;
+    background: var(--panel-2); min-width: 78px;
+  }
+  .stat b { font-size: 18px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .stat span { font-size: 10.5px; color: var(--fg-faint); text-transform: uppercase; letter-spacing: .5px; }
+  .stat.danger b { color: var(--red); }
+  .stat.ok b { color: var(--emerald); }
+  .stat.run b { color: var(--blue); }
+
+  /* ---------- layout ---------- */
+  .body { display: flex; flex: 1; min-height: 0; }
+  .col-queue { flex: 1; min-width: 0; display: flex; flex-direction: column; border-right: 1px solid var(--border); }
+  .col-detail { width: 420px; flex-shrink: 0; display: flex; flex-direction: column; background: var(--panel); }
+
+  .tabs { display: flex; gap: 4px; padding: 10px 14px 0; border-bottom: 1px solid var(--border-soft); }
+  .tab {
+    appearance: none; border: none; background: none; cursor: pointer;
+    color: var(--fg-dim); font-size: 13px; padding: 7px 12px; border-radius: 8px 8px 0 0;
+    border-bottom: 2px solid transparent; font-family: inherit;
+  }
+  .tab.active { color: var(--fg); border-bottom-color: var(--indigo); }
+  .tab .count { font-size: 11px; color: var(--fg-faint); margin-left: 4px; }
+  .tab.active .count { color: var(--indigo); }
+
+  .lane-note {
+    padding: 9px 16px; font-size: 12px; color: var(--fg-dim);
+    background: var(--panel-2); border-bottom: 1px solid var(--border-soft);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .lane-note .pulse { width: 7px; height: 7px; border-radius: 50%; background: var(--emerald); animation: pulse 1.8s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+  .list { overflow-y: auto; padding: 10px 12px; flex: 1; }
+  .list::-webkit-scrollbar { width: 8px; }
+  .list::-webkit-scrollbar-thumb { background: #2c2c33; border-radius: 4px; }
+
+  /* ---------- queue card ---------- */
+  .card {
+    border: 1px solid var(--border-soft); border-radius: var(--radius);
+    background: var(--panel); padding: 12px 13px; margin-bottom: 9px; cursor: pointer;
+    transition: border-color .15s, transform .15s, opacity .25s;
+    position: relative; overflow: hidden;
+  }
+  .card:hover { border-color: #3a3a44; }
+  .card.sel { border-color: var(--indigo); box-shadow: 0 0 0 1px var(--indigo-soft); }
+  .card::before { content:""; position:absolute; left:0; top:0; bottom:0; width:3px; }
+  .card.risk-high::before { background: var(--red); }
+  .card.risk-mid::before { background: var(--amber); }
+  .card.risk-low::before { background: var(--emerald); }
+  .card.leaving { opacity: 0; transform: translateX(40px); }
+
+  .card-top { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .risk-badge {
+    font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 100px;
+    text-transform: uppercase; letter-spacing: .4px;
+  }
+  .risk-high .risk-badge { background: rgba(239,68,68,.15); color: #fca5a5; }
+  .risk-mid  .risk-badge { background: rgba(245,158,11,.15); color: #fcd34d; }
+  .risk-low  .risk-badge { background: rgba(16,185,129,.15); color: #6ee7b7; }
+  .repo { font-size: 11px; color: var(--fg-faint); font-family: ui-monospace, monospace; }
+  .age { margin-left: auto; font-size: 11px; color: var(--fg-faint); }
+  .engine { font-size: 10px; color: var(--fg-faint); border:1px solid var(--border); border-radius:5px; padding:1px 5px; }
+
+  .card-title { font-weight: 600; font-size: 13.5px; margin-bottom: 4px; }
+  .card-did { font-size: 12.5px; color: var(--fg-dim); margin-bottom: 7px; }
+  .why {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 11.5px; padding: 3px 8px; border-radius: 6px;
+    background: var(--panel-2); color: var(--fg-dim);
+  }
+  .why b { color: var(--fg); font-weight: 600; }
+  .conf-bar { height: 4px; border-radius: 2px; background: #26262c; margin-top: 9px; overflow: hidden; }
+  .conf-bar > i { display:block; height:100%; border-radius:2px; }
+
+  /* ---------- detail / judgment surface ---------- */
+  .detail-head { padding: 14px 16px; border-bottom: 1px solid var(--border); }
+  .detail-head .t { font-weight: 600; font-size: 15px; }
+  .detail-head .sub { font-size: 12px; color: var(--fg-faint); margin-top: 3px; font-family: ui-monospace, monospace; }
+  .detail-body { flex: 1; overflow-y: auto; padding: 16px; }
+  .detail-empty { color: var(--fg-faint); text-align: center; margin-top: 80px; font-size: 13px; padding: 0 30px; }
+  .section-label { font-size: 11px; text-transform: uppercase; letter-spacing: .6px; color: var(--fg-faint); margin: 18px 0 8px; }
+  .section-label:first-child { margin-top: 0; }
+  .qbox {
+    border:1px solid rgba(245,158,11,.3); background: rgba(245,158,11,.06);
+    border-radius: 8px; padding: 11px 13px; font-size: 13px;
+  }
+  .summary { font-size: 13px; color: var(--fg-dim); }
+  .summary li { margin-bottom: 4px; }
+  .diff { font-family: ui-monospace, monospace; font-size: 12px; border:1px solid var(--border-soft); border-radius:8px; overflow:hidden; }
+  .diff .f { padding: 5px 10px; background: var(--panel-2); color: var(--fg-dim); border-bottom:1px solid var(--border-soft); }
+  .diff pre { margin:0; padding: 8px 10px; overflow-x:auto; }
+  .diff .add { color: #6ee7b7; background: rgba(16,185,129,.07); display:block; }
+  .diff .del { color: #fca5a5; background: rgba(239,68,68,.07); display:block; }
+  .diff .ctx { color: var(--fg-faint); display:block; }
+  .checks li { font-size: 12.5px; margin-bottom: 5px; display:flex; align-items:center; gap:7px; }
+  .checks .pass { color: var(--emerald); }
+  .checks .fail { color: var(--red); }
+
+  .actions { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--border); }
+  .btn {
+    flex: 1; appearance: none; border: 1px solid var(--border); background: var(--panel-2);
+    color: var(--fg); font-family: inherit; font-size: 13px; font-weight: 600;
+    padding: 10px; border-radius: 8px; cursor: pointer; transition: filter .12s;
+  }
+  .btn:hover { filter: brightness(1.25); }
+  .btn.approve { background: var(--emerald); color: #04231a; border-color: var(--emerald); }
+  .btn.reject  { background: transparent; color: #fca5a5; border-color: rgba(239,68,68,.4); }
+  .btn.chat    { flex: 0 0 auto; padding: 10px 12px; }
+
+  /* ---------- auto-accept audit ---------- */
+  .auto-row {
+    display:flex; align-items:center; gap:10px; padding: 9px 11px; font-size:12.5px;
+    border:1px solid var(--border-soft); border-radius:8px; margin-bottom:7px; background: var(--panel);
+  }
+  .auto-row .ok { color: var(--emerald); }
+  .auto-row .repo { margin-left:auto; }
+
+  .sim {
+    margin: 4px 12px 12px; padding: 11px 13px; border:1px dashed var(--border);
+    border-radius: 10px; background: var(--panel-2); font-size: 12px; color: var(--fg-dim);
+  }
+  .sim button {
+    appearance:none; border:1px solid var(--indigo); background: var(--indigo-soft); color:#c7c9ff;
+    font-family:inherit; font-size:12px; font-weight:600; padding:6px 12px; border-radius:7px; cursor:pointer; margin-top:8px;
+  }
+  .toast {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(20px);
+    background: var(--panel); border:1px solid var(--border); border-radius: 10px;
+    padding: 10px 16px; font-size: 13px; opacity: 0; transition: all .25s; pointer-events:none; z-index: 50;
+    box-shadow: 0 8px 30px rgba(0,0,0,.5);
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  .close-detail { display:none; }
+
+  /* ---------- mobile ---------- */
+  @media (max-width: 760px) {
+    .stats { width: 100%; margin-left: 0; }
+    .stat { flex:1; min-width:0; }
+    .col-detail {
+      position: fixed; inset: 0; width: 100%; z-index: 40;
+      transform: translateY(100%); transition: transform .28s ease;
+    }
+    .col-detail.open { transform: translateY(0); }
+    .close-detail {
+      display:block; margin-left:auto; appearance:none; border:none; background:none;
+      color: var(--fg-dim); font-size: 22px; cursor:pointer; line-height:1; padding:0 4px;
+    }
+    .col-queue { border-right: none; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand">
+      <span class="dot"></span> BKD · Agent Triage
+      <small>决策分诊台 · 原型</small>
+    </div>
+    <div class="stats">
+      <div class="stat ok"><b id="s-auto">23</b><span>今日自动放行</span></div>
+      <div class="stat danger"><b id="s-need">4</b><span>待你决策</span></div>
+      <div class="stat run"><b id="s-run">3</b><span>执行中</span></div>
+      <div class="stat"><b id="s-rate">85%</b><span>免打扰率</span></div>
+    </div>
+  </header>
+
+  <div class="body">
+    <!-- 队列 -->
+    <div class="col-queue">
+      <div class="tabs">
+        <button class="tab active" data-tab="need">待你决策 <span class="count" id="c-need">4</span></button>
+        <button class="tab" data-tab="auto">自动放行 <span class="count" id="c-auto">23</span></button>
+        <button class="tab" data-tab="run">执行中 <span class="count" id="c-run">3</span></button>
+      </div>
+
+      <div class="lane-note" id="lane-note">
+        <span class="pulse"></span>
+        <span id="lane-text">按风险排序 · 只有"验证没过 / 低置信度 / 高风险"的才进这条队列。其余 AI 自检通过的已自动归档,不打扰你。</span>
+      </div>
+
+      <div class="sim" id="sim">
+        模拟:一个执行中的 agent 刚产出结果 →
+        <br><button onclick="simulate()">▶ 模拟下一条产出进入分诊</button>
+      </div>
+
+      <div class="list" id="list"></div>
+    </div>
+
+    <!-- 判断界面 -->
+    <div class="col-detail" id="detail">
+      <div class="detail-head" style="display:flex; align-items:flex-start; gap:8px;">
+        <div style="min-width:0;">
+          <div class="t" id="d-title">判断界面</div>
+          <div class="sub" id="d-sub">从左侧队列选一条 · 一眼判定</div>
+        </div>
+        <button class="close-detail" onclick="closeDetail()">×</button>
+      </div>
+      <div class="detail-body" id="d-body">
+        <div class="detail-empty">
+          你只做一件事:<b>判断</b>。<br>
+          点左侧任一条 → 这里给你<b>它做了什么 / 为何需要你 / diff / 自检结果</b>,<br>然后 通过 / 退回 / 进对话。
+        </div>
+      </div>
+      <div class="actions" id="d-actions" style="display:none;">
+        <button class="btn approve" onclick="decide('approve')">✓ 通过</button>
+        <button class="btn reject" onclick="decide('reject')">↩ 退回重做</button>
+        <button class="btn chat" onclick="decide('chat')">💬 进对话</button>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+// ---- 样例数据:贴你真实场景(多仓库目录 / OpenCode·DeepSeek / 经 MCP 的运维财务) ----
+let queue = [
+  {
+    id: 1, risk: 'high', repo: 'infra/cloudflare', engine: 'DeepSeek',
+    title: '把 api.jbcnet.co.jp 的 DNS 切到新 Worker',
+    did: 'agent 准备删除旧 A 记录并部署 worker 路由',
+    why: '高风险:<b>不可逆 · 影响线上域名</b>',
+    conf: 0.95,
+    question: '它要删掉旧 A 记录(8.8.8.8)再绑定 Worker。删除后回滚需手动重建。确认执行吗?',
+    summary: ['列出区域 jbcnet.co.jp 的 3 条 A 记录', '部署 worker `api-edge` 到 api.* 路由', '<b style="color:#fca5a5">删除</b> 旧 A 记录 api → 8.8.8.8'],
+    diff: null,
+    checks: [['fail','这是经 MCP 的真实云操作,无法用测试预验证'],['pass','Worker 语法/构建通过'],['fail','删除 DNS 记录 = 不可逆,按规则强制升级到你']]
+  },
+  {
+    id: 2, risk: 'mid', repo: 'web/dashboard', engine: 'DeepSeek',
+    title: '修复列表分页在移动端错位',
+    did: '改了 2 个文件,新增 1 处 flex 布局',
+    why: '中风险:<b>自检过了,但改了共享组件</b>',
+    conf: 0.72,
+    question: '它顺手改了被 5 处复用的 <Pagination/>。逻辑看起来对,但波及面较大,要不要你扫一眼 diff?',
+    diff: {file: 'src/components/Pagination.tsx', lines: [
+      ['ctx','  return ('],
+      ['del','-   <div className="flex gap-2">'],
+      ['add','+   <div className="flex flex-wrap gap-2 justify-center sm:justify-start">'],
+      ['ctx','     {pages.map(...)}'],
+      ['ctx','   </div>']
+    ]},
+    summary: ['定位到 Pagination 在窄屏溢出', '加 flex-wrap + 居中', '在 dashboard / orders / users 等 5 页生效'],
+    checks: [['pass','单元测试 12/12 通过'],['pass','lint / typecheck 通过'],['fail','共享组件,影响 5 处 → 提示你确认']]
+  },
+  {
+    id: 3, risk: 'mid', repo: 'server/main', engine: 'Claude',
+    title: '排查订单接口偶发 500',
+    did: '定位到一处空指针,给出两种修法',
+    why: '需决策:<b>方案分叉,要你选</b>',
+    conf: 0.6,
+    question: '根因是 partner 为空时取了 .taxId。修法 A:加空值守卫(快、保守)。修法 B:在建单时强制校验 partner(更根治,但要改 3 个调用方)。选哪个?',
+    summary: ['复现:partner=null 时 500', '方案A 加守卫 · 1 文件', '方案B 入口强校验 · 3 文件 + 迁移'],
+    diff: null,
+    checks: [['pass','已复现并定位根因'],['fail','存在两种合理修法,属判断题 → 交给你']]
+  },
+  {
+    id: 4, risk: 'low', repo: 'ops/finance', engine: 'DeepSeek',
+    title: '生成上月 3 张待开发票草稿',
+    did: '从 deal 拉数据,生成 3 张 invoice 草稿(未提交)',
+    why: '低风险:<b>仅草稿,可改</b>',
+    conf: 0.88,
+    question: '3 张发票草稿已就绪(合计 ¥182,400),金额从已成交 deal 自动带出。核对无误就提交?',
+    summary: ['读取上月 status=won 的 3 笔 deal', '生成 invoice 草稿,税率 10%', '<b>未提交</b>,等你确认'],
+    diff: null,
+    checks: [['pass','金额与 deal 金额逐笔一致'],['pass','客户/抬头字段齐全'],['fail','涉及对外财务 → 提交前要你点头']]
+  }
+];
+
+let autoAccepted = [
+  ['web/dashboard','给空状态加插画 + 文案','刚刚'],
+  ['server/main','补 3 个边界单测','2 分钟前'],
+  ['web/dashboard','i18n:补 12 个缺失中文 key','5 分钟前'],
+  ['infra/scripts','给备份脚本加日志','8 分钟前'],
+  ['server/main','重命名变量 + 抽函数(重构)','12 分钟前'],
+];
+
+let running = [
+  ['web/dashboard','重写 Kanban 拖拽为 dnd-kit','进行中 · 第 3 轮'],
+  ['server/main','给 cron 模块补集成测试','进行中 · 第 1 轮'],
+  ['ops/finance','对账:拉取本月银行流水比对','进行中 · 调用 MCP'],
+];
+
+let currentTab = 'need';
+let selected = null;
+
+const $ = id => document.getElementById(id);
+const list = $('list');
+
+function riskClass(r){ return 'risk-'+(r==='high'?'high':r==='mid'?'mid':'low'); }
+function confColor(c){ return c>=0.85?'#10b981':c>=0.7?'#f59e0b':'#ef4444'; }
+
+function render(){
+  // stats
+  $('s-auto').textContent = autoAccepted.length;
+  $('s-need').textContent = queue.length;
+  $('s-run').textContent = running.length;
+  const total = autoAccepted.length + queue.length;
+  $('s-rate').textContent = total ? Math.round(autoAccepted.length/total*100)+'%' : '—';
+  $('c-need').textContent = queue.length;
+  $('c-auto').textContent = autoAccepted.length;
+  $('c-run').textContent = running.length;
+
+  list.innerHTML = '';
+  $('sim').style.display = currentTab==='need' ? 'block' : 'none';
+
+  if (currentTab==='need'){
+    $('lane-text').innerHTML = '按风险排序 · 只有"验证没过 / 低置信度 / 高风险"的才进这条队列。其余 AI 自检通过的已自动归档,不打扰你。';
+    if(queue.length===0){ list.innerHTML='<div class="detail-empty">🎉 队列已清空 — 你可以合上它走人了。</div>'; return; }
+    const order={high:0,mid:1,low:2};
+    [...queue].sort((a,b)=>order[a.risk]-order[b.risk]||a.conf-b.conf).forEach(item=>{
+      const el=document.createElement('div');
+      el.className='card '+riskClass(item.risk)+(selected===item.id?' sel':'');
+      el.onclick=()=>select(item.id);
+      el.innerHTML=`
+        <div class="card-top">
+          <span class="risk-badge">${item.risk==='high'?'高风险':item.risk==='mid'?'需确认':'低风险'}</span>
+          <span class="repo">${item.repo}</span>
+          <span class="engine">${item.engine}</span>
+          <span class="age">${item.age||'刚刚'}</span>
+        </div>
+        <div class="card-title">${item.title}</div>
+        <div class="card-did">${item.did}</div>
+        <span class="why">${item.why}</span>
+        <div class="conf-bar"><i style="width:${Math.round(item.conf*100)}%;background:${confColor(item.conf)}"></i></div>`;
+      list.appendChild(el);
+    });
+  } else if (currentTab==='auto'){
+    $('lane-text').innerHTML = '这些已<b style="color:#6ee7b7">自动放行</b>(过了测试 + lint + AI 自检)。默认不打扰你,这里仅供随时抽查。';
+    autoAccepted.forEach(r=>{
+      const el=document.createElement('div'); el.className='auto-row';
+      el.innerHTML=`<span class="ok">✓</span><span>${r[1]}</span><span class="repo">${r[0]} · ${r[2]}</span>`;
+      list.appendChild(el);
+    });
+  } else {
+    $('lane-text').innerHTML = '执行中的 agent · 完成后会自动分诊:<b style="color:#6ee7b7">自检过→放行</b>,否则进"待你决策"。你不用盯。';
+    running.forEach(r=>{
+      const el=document.createElement('div'); el.className='auto-row';
+      el.innerHTML=`<span class="run" style="color:#3b82f6">◴</span><span>${r[1]}</span><span class="repo">${r[0]} · ${r[2]}</span>`;
+      list.appendChild(el);
+    });
+  }
+}
+
+function select(id){
+  selected=id; const item=queue.find(q=>q.id===id); if(!item) return;
+  render();
+  $('d-title').textContent=item.title;
+  $('d-sub').textContent=item.repo+'  ·  '+item.engine;
+  let html='';
+  html+='<div class="section-label">为什么需要你</div><div class="qbox">'+item.question+'</div>';
+  html+='<div class="section-label">它做了什么</div><ul class="summary">'+item.summary.map(s=>'<li>'+s+'</li>').join('')+'</ul>';
+  if(item.diff){
+    html+='<div class="section-label">改动</div><div class="diff"><div class="f">'+item.diff.file+'</div><pre>'+
+      item.diff.lines.map(l=>'<span class="'+l[0]+'">'+l[1].replace(/</g,'&lt;')+'</span>').join('')+'</pre></div>';
+  }
+  html+='<div class="section-label">自检结果</div><ul class="checks" style="list-style:none;padding:0;margin:0;">'+
+    item.checks.map(c=>'<li><span class="'+c[0]+'">'+(c[0]==='pass'?'✓':'✕')+'</span>'+c[1]+'</li>').join('')+'</ul>';
+  $('d-body').innerHTML=html;
+  $('d-actions').style.display='flex';
+  $('detail').classList.add('open');
+}
+
+function closeDetail(){ $('detail').classList.remove('open'); }
+
+function decide(kind){
+  if(selected==null) return;
+  const idx=queue.findIndex(q=>q.id===selected);
+  if(idx<0) return;
+  const item=queue[idx];
+  const msg = kind==='approve'?'✓ 已通过 · 归档':kind==='reject'?'↩ 已退回 · agent 重做':'💬 已进入对话';
+  toast(msg);
+  if(kind==='approve'){ autoAccepted.unshift([item.repo,item.title,'刚刚 · 你批准']); }
+  // 动画移除
+  const cards=[...document.querySelectorAll('.card.sel')];
+  cards.forEach(c=>c.classList.add('leaving'));
+  queue.splice(idx,1);
+  selected=null;
+  setTimeout(()=>{
+    $('d-body').innerHTML='<div class="detail-empty">已处理。继续下一条,或队列清空就走人。</div>';
+    $('d-actions').style.display='none'; $('d-title').textContent='判断界面'; $('d-sub').textContent='从左侧队列选一条 · 一眼判定';
+    closeDetail(); render();
+  },260);
+}
+
+// 模拟一个执行中产出进入分诊:随机 自检过(放行) 或 没过(进队列)
+let simPool=[
+  {pass:true,  repo:'web/dashboard', title:'给设置页加深色模式适配'},
+  {pass:false, repo:'server/main', risk:'mid', engine:'Claude',
+    title:'升级 drizzle 到 0.36', did:'改了 schema + 1 个迁移', why:'需确认:<b>含 DB 迁移</b>', conf:0.68,
+    question:'这次改动新增了一张表,需跑迁移。迁移看起来安全,但涉及 schema 变更,确认应用?',
+    summary:['新增表 audit_log','生成迁移 0007_audit','无破坏性变更'], diff:null,
+    checks:[['pass','迁移可逆'],['pass','测试通过'],['fail','含 schema 变更 → 提示你']]},
+  {pass:true,  repo:'ops/scripts', title:'给部署脚本加重试'},
+];
+let simI=0;
+function simulate(){
+  const s=simPool[simI%simPool.length]; simI++;
+  if(s.pass){
+    autoAccepted.unshift([s.repo,s.title,'刚刚 · 自检通过']);
+    toast('✓ 自检通过 → 自动放行,没打扰你');
+  }else{
+    const nid=Date.now();
+    queue.push({id:nid, risk:s.risk, repo:s.repo, engine:s.engine, title:s.title, did:s.did, why:s.why,
+      conf:s.conf, question:s.question, summary:s.summary, diff:s.diff, checks:s.checks, age:'刚刚'});
+    toast('⚠ 自检未过 → 进"待你决策"队列');
+  }
+  render();
+}
+
+let toastTimer;
+function toast(msg){
+  const t=$('toast'); t.textContent=msg; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),1900);
+}
+
+document.querySelectorAll('.tab').forEach(tab=>{
+  tab.onclick=()=>{
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    tab.classList.add('active'); currentTab=tab.dataset.tab; render();
+  };
+});
+
+render();
+</script>
+</body>
+</html>

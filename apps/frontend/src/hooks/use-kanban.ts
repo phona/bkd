@@ -3,7 +3,6 @@ import { ApiError, kanbanApi } from '@/lib/kanban-api'
 import { STALE_TIME } from '@/lib/query-config'
 import { useBoardStore } from '@/stores/board-store'
 import { useFileBrowserStore } from '@/stores/file-browser-store'
-import type { CreateRolePayload } from '@/lib/kanban-api'
 import type { ExecuteIssueRequest, ForkIssuePayload, Issue, WebhookEventType } from '@/types/kanban'
 
 export const queryKeys = {
@@ -65,7 +64,6 @@ export const queryKeys = {
   cronJobLogs: (jobId: string) => ['cron', 'jobs', jobId, 'logs'] as const,
   pendingMessages: (projectId: string, issueId: string) =>
     ['projects', projectId, 'issues', issueId, 'pending'] as const,
-  roles: (projectId: string) => ['projects', projectId, 'roles'] as const,
   workspaces: () => ['workspaces'] as const,
   workspace: (id: string) => ['workspaces', id] as const,
   workspaceProjects: (id: string) => ['workspaces', id, 'projects'] as const,
@@ -1169,88 +1167,6 @@ export function useCronJobLogs(jobId: string | null, opts?: { limit?: number }) 
     queryKey: queryKeys.cronJobLogs(jobId ?? ''),
     queryFn: () => kanbanApi.getCronJobLogs(jobId!, { limit: opts?.limit }),
     enabled: !!jobId,
-    staleTime: STALE_TIME.STANDARD,
-  })
-}
-
-// --- Role hooks ---
-
-export function useRoles(projectId: string) {
-  return useQuery({
-    queryKey: queryKeys.roles(projectId),
-    queryFn: () => kanbanApi.getRoles(projectId),
-    enabled: !!projectId,
-    staleTime: STALE_TIME.STANDARD,
-  })
-}
-
-export function useCreateRole(projectId: string) {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: (data: CreateRolePayload) => kanbanApi.createRole(projectId, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.roles(projectId) })
-    },
-  })
-}
-
-export function useUpdateRole(projectId: string) {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: ({ roleId, ...data }: { roleId: string } & Partial<CreateRolePayload>) =>
-      kanbanApi.updateRole(projectId, roleId, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.roles(projectId) })
-    },
-  })
-}
-
-export function useDeleteRole(projectId: string) {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: (roleId: string) => kanbanApi.deleteRole(projectId, roleId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.roles(projectId) })
-    },
-  })
-}
-
-export function useIssueRoles(projectId: string, issueId: string) {
-  return useQuery({
-    queryKey: ['projects', projectId, 'issues', issueId, 'roles'],
-    queryFn: () => kanbanApi.getIssueRoles(projectId, issueId),
-    enabled: !!(projectId && issueId),
-    staleTime: STALE_TIME.STANDARD,
-  })
-}
-
-export function useAssignRole(projectId: string, issueId: string) {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: (roleId: string) => kanbanApi.assignRole(projectId, issueId, roleId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'issues', issueId, 'roles'] })
-      queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'issues', issueId, 'participants'] })
-    },
-  })
-}
-
-export function useRemoveRole(projectId: string, issueId: string) {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: (roleId: string) => kanbanApi.removeRole(projectId, issueId, roleId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'issues', issueId, 'roles'] })
-      queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'issues', issueId, 'participants'] })
-    },
-  })
-}
-
-export function useIssueParticipants(projectId: string, issueId: string) {
-  return useQuery({
-    queryKey: ['projects', projectId, 'issues', issueId, 'participants'],
-    queryFn: () => kanbanApi.getIssueParticipants(projectId, issueId),
-    enabled: !!(projectId && issueId),
     staleTime: STALE_TIME.STANDARD,
   })
 }

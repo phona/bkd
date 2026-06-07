@@ -38,15 +38,13 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Textarea } from '@/components/ui/textarea'
 import { useChangesSummary } from '@/hooks/use-changes-summary'
-import { useClearIssueSession, useEngineAvailability, useEngineSettings, useFollowUpIssue, useIssueRoles, useOmitModel, useRestartIssue } from '@/hooks/use-kanban'
+import { useClearIssueSession, useEngineAvailability, useEngineSettings, useFollowUpIssue, useOmitModel, useRestartIssue } from '@/hooks/use-kanban'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { apiErrorMessage } from '@/lib/api-error'
 import { formatFileSize, formatModelName } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { useFileBrowserStore } from '@/stores/file-browser-store'
 import type { BusyAction, EngineModel, SessionStatus } from '@/types/kanban'
-import { RoleMentionPicker } from './RoleMentionPicker'
-import { RoleCreatorModal } from './RoleCreatorModal'
 
 // Mirrors apps/api/src/uploads.ts. Keep both sides in sync — backend
 // rejects via validateFiles() so any drift would surface as a confusing
@@ -226,7 +224,6 @@ export function ChatInput({
   const followUp = useFollowUpIssue(projectId ?? '')
   const clearSession = useClearIssueSession(projectId ?? '')
   const restartIssue = useRestartIssue(projectId ?? '')
-  const { data: issueRoles } = useIssueRoles(projectId ?? '', issueId ?? '')
   const [clearSessionOpen, setClearSessionOpen] = useState(false)
   const changesSummary = useChangesSummary(projectId, issueId ?? undefined)
   const changedCount = changesSummary?.fileCount ?? 0
@@ -288,53 +285,6 @@ export function ChatInput({
     if (trimmed.includes(' ')) return null
     return trimmed.slice(1).toLowerCase()
   }, [input])
-
-  // @ mention detection: show picker when user types @ followed by word characters
-  const [mentionQuery, setMentionQuery] = useState<string | null>(null)
-  const [showRoleCreator, setShowRoleCreator] = useState(false)
-  const mentionPickerRef = useRef<HTMLDivElement>(null)
-
-  // Detect @ mention query from current input
-  const detectMentionQuery = useCallback((value: string, cursorPos: number) => {
-    // Find the text before cursor
-    const beforeCursor = value.slice(0, cursorPos)
-    // Match @ followed by word characters at the end
-    const match = beforeCursor.match(/@(\w*)$/)
-    if (match) {
-      return match[1]
-    }
-    return null
-  }, [])
-
-  const handleMentionSelect = useCallback((role: import('@/lib/kanban-api').Role | null) => {
-    if (role === null) {
-      setMentionQuery(null)
-      // Return focus to the composer when the picker is dismissed/cancelled.
-      textareaRef.current?.focus()
-      return
-    }
-    const textarea = textareaRef.current
-    if (!textarea) return
-    const cursorPos = textarea.selectionStart
-    const beforeCursor = input.slice(0, cursorPos)
-    const afterCursor = input.slice(cursorPos)
-    // Replace @query with @name + space
-    const newBefore = beforeCursor.replace(/@\w*$/, `@${role.name} `)
-    const newValue = newBefore + afterCursor
-    setInput(newValue)
-    setMentionQuery(null)
-    // Focus and set cursor position after the inserted mention
-    setTimeout(() => {
-      textarea.focus()
-      const newPos = newBefore.length
-      textarea.setSelectionRange(newPos, newPos)
-    }, 0)
-  }, [input])
-
-  const handleMentionCreateNew = useCallback(() => {
-    setMentionQuery(null)
-    setShowRoleCreator(true)
-  }, [])
 
   const filteredCommands = useMemo(() => {
     if (commandQuery === null || allCommands.length === 0) return [] as TaggedCommand[]
@@ -537,11 +487,6 @@ export function ChatInput({
   }, [])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    // Block keyboard events when mention picker is active (it handles its own keyboard)
-    if (mentionQuery !== null) {
-      return
-    }
-
     if (showCommandMenu) {
       if (e.key === 'ArrowDown') {
         e.preventDefault()
@@ -594,12 +539,8 @@ export function ChatInput({
 
   const handleInput = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value
-    const cursorPos = e.target.selectionStart
     setInput(value)
-    // Detect @ mention
-    const query = detectMentionQuery(value, cursorPos)
-    setMentionQuery(query)
-  }, [detectMentionQuery])
+  }, [])
 
   const handlePaste = useCallback(
     (e: React.ClipboardEvent) => {
@@ -799,19 +740,6 @@ export function ChatInput({
               </div>
             ) :
           null}
-
-        {/* @ mention picker */}
-        {mentionQuery !== null && projectId ? (
-          <div className="mx-2 mt-1 relative" ref={mentionPickerRef}>
-            <RoleMentionPicker
-              projectId={projectId}
-              query={mentionQuery}
-              onSelect={handleMentionSelect}
-              onCreateNew={handleMentionCreateNew}
-              allowedRoles={issueRoles}
-            />
-          </div>
-        ) : null}
 
         {/* File preview bar — above the textarea row when files are attached */}
         {attachedFiles.length > 0 ?
@@ -1193,14 +1121,6 @@ export function ChatInput({
           ) :
         null}
 
-      {/* Role creator modal */}
-      {projectId && (
-        <RoleCreatorModal
-          projectId={projectId}
-          isOpen={showRoleCreator}
-          onClose={() => setShowRoleCreator(false)}
-        />
-      )}
     </div>
   )
 }

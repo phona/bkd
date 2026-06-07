@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>bkd 架构 & 零停机升级原型</title>
+<style>
+  :root{
+    --bg:#0b0e14; --panel:#141923; --panel2:#1b2230; --line:#27303f;
+    --txt:#e6eaf2; --mut:#8b97ab; --blue:#3b82f6; --blue2:#2563eb;
+    --green:#22c55e; --yellow:#eab308; --red:#ef4444; --gray:#475569; --purple:#a855f7;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;
+    line-height:1.5;padding:24px 20px 90px}
+  h1{font-size:21px;margin:0 0 4px}
+  .sub{color:var(--mut);font-size:13px;margin:0}
+  .tabs{display:flex;gap:6px;margin:16px 0 4px;border-bottom:1px solid var(--line)}
+  .tab{padding:8px 16px;font-size:13px;font-weight:600;color:var(--mut);cursor:pointer;
+    border-bottom:2px solid transparent;margin-bottom:-1px}
+  .tab.on{color:var(--blue);border-color:var(--blue)}
+  .controls{display:flex;gap:10px;align-items:center;margin:14px 0 8px;flex-wrap:wrap}
+  button{background:var(--blue2);color:#fff;border:none;border-radius:8px;padding:9px 16px;
+    font-size:13px;font-weight:600;cursor:pointer;transition:.15s}
+  button:hover{background:#1d4fd8}
+  button.ghost{background:transparent;border:1px solid var(--line);color:var(--txt)}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  .narr{font-size:12.5px;color:#cdd6e6;background:var(--panel);border:1px solid var(--line);
+    border-radius:8px;padding:9px 13px;margin:8px 0 18px;min-height:20px;font-family:ui-monospace,Menlo,monospace}
+  .narr b{color:var(--yellow)}
+  .view{display:none}.view.on{display:block}
+  /* shared nodes */
+  .node{border:1px solid var(--line);border-radius:10px;padding:9px 11px;background:var(--panel2);position:relative;transition:.4s}
+  .node .t{font-size:12px;font-weight:600}.node .d{font-size:10.5px;color:var(--mut)}
+  .arrow{height:16px;display:flex;align-items:center;justify-content:center;color:var(--mut);font-size:13px}
+  .socket{display:inline-block;font-family:ui-monospace,monospace;font-size:10px;background:#10233f;color:#7db3ff;border-radius:5px;padding:0 6px;margin-left:6px}
+  .engine{margin-top:8px;border:1px dashed #3a4d6e;border-radius:8px;padding:7px 8px;background:#0d1422;transition:.45s}
+  .engine.live{border-color:var(--green);box-shadow:0 0 12px -4px var(--green)}
+  .engine.stale{border-color:var(--gray);opacity:.45;filter:grayscale(.6)}
+  .engine.persist{border-color:var(--purple);box-shadow:0 0 12px -4px var(--purple)}
+  .engine .et{font-size:11px;font-weight:600;display:flex;justify-content:space-between}
+  .pm{display:flex;gap:6px;margin-top:7px;flex-wrap:wrap}
+  .proc{width:32px;height:28px;border-radius:6px;background:#16233a;border:1px solid #2a3d5c;
+    display:flex;align-items:center;justify-content:center;font-size:9px;color:#9ecbff;position:relative;transition:.4s}
+  .proc.run{border-color:var(--green);color:#bff0cf}
+  .proc.run::after{content:"";position:absolute;top:3px;right:3px;width:5px;height:5px;border-radius:50%;background:var(--green);animation:blink 1s infinite}
+  .proc.orphan{border-color:var(--gray);color:var(--gray);opacity:.5;transform:translateY(8px)}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+  .recon{margin-top:9px;border-radius:8px;padding:6px 9px;font-size:11px;display:flex;align-items:center;gap:7px;border:1px solid var(--line);background:#0e1626;transition:.4s}
+  .recon .dot{width:9px;height:9px;border-radius:50%;background:var(--blue);flex:none}
+  .recon.watch-live .dot{background:var(--green)}
+  .recon.watch-stale{border-color:#5a2730}.recon.watch-stale .dot{background:var(--red);animation:pulse 1s infinite}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.6)}50%{box-shadow:0 0 0 6px rgba(239,68,68,0)}}
+  .conn{font-family:ui-monospace,monospace;font-size:10px;color:var(--mut)}
+  .pill{font-size:11px;border-radius:999px;padding:2px 10px;font-weight:600;transition:.3s}
+  .pill.working{background:#15324f;color:#7db3ff}.pill.review{background:#3a2410;color:#f0b572}
+  .pill.failed{background:#3a1418;color:#ff8a8a;animation:flash .5s}
+  @keyframes flash{0%{transform:scale(1.15)}100%{transform:scale(1)}}
+  .legend{margin-top:16px;font-size:11px;color:var(--mut);display:flex;gap:16px;flex-wrap:wrap}
+  .legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:4px;vertical-align:-1px}
+  /* ---- tab1 layout ---- */
+  .stage{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  @media(max-width:880px){.stage{grid-template-columns:1fr}}
+  .col{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;position:relative;overflow:hidden}
+  .col.bad{border-color:#5a2730}.col.good{border-color:#23503a}
+  .col h3{margin:0 0 2px;font-size:14px}.bad h3{color:#ff8a8a}.good h3{color:#7ee2a8}
+  .col .tag{font-size:11px;color:var(--mut);margin:0 0 14px}
+  .badge{position:absolute;top:12px;right:12px;font-size:10px;border-radius:999px;padding:2px 9px;font-weight:600}
+  .badge.bad{background:#3a1418;color:#ff8a8a}.badge.good{background:#10271a;color:#7ee2a8}
+  .supervisor{width:200px;margin:0 auto 8px}.launcher{width:280px;margin:0 auto 8px;border-color:#33425f}
+  .launcher.holds-engine{border-color:var(--purple);box-shadow:0 0 0 1px var(--purple) inset}
+  .bundle{width:300px;margin:0 auto 8px;border-color:#2a3d5c;transition:.5s}
+  .bundle.swapping{transform:translateX(8px);opacity:.25}
+  .ver{float:right;font-family:ui-monospace,monospace;font-size:10px;color:#9ecbff}
+  .issue{margin-top:9px;display:flex;align-items:center;gap:8px;font-size:11.5px;justify-content:center}
+  .note{font-size:11px;color:var(--mut);margin-top:10px;border-top:1px solid var(--line);padding-top:8px}
+  /* ---- tab2 (daemon) layout ---- */
+  .dstage{display:flex;gap:14px;align-items:stretch}
+  @media(max-width:880px){.dstage{flex-direction:column}}
+  .box{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;position:relative}
+  .box h4{margin:0 0 8px;font-size:13px}
+  .client{width:150px;flex:none;display:flex;flex-direction:column;justify-content:center;text-align:center}
+  .frontwrap{flex:1;min-width:0;position:relative}
+  .front{border:1px solid #2a3d5c;border-radius:12px;padding:12px;background:var(--panel);transition:.5s;margin-bottom:10px}
+  .front.v2{border-color:var(--green)}
+  .front.draining{opacity:.4;filter:grayscale(.6);transform:translateY(6px)}
+  .front .ver{color:#9ecbff}
+  .daemon{flex:none;width:280px;border:1.5px solid var(--purple);border-radius:14px;padding:14px;background:#120e1f;box-shadow:0 0 18px -6px var(--purple);position:relative}
+  .daemon.pulse{animation:dpulse 1.4s}
+  @keyframes dpulse{0%,100%{box-shadow:0 0 18px -6px var(--purple)}50%{box-shadow:0 0 26px 0 var(--purple)}}
+  .ipc{display:flex;align-items:center;justify-content:center;font-family:ui-monospace,monospace;font-size:10px;color:var(--mut);min-height:24px;gap:6px;flex-direction:column}
+  .ipc .lab{color:#c9a6f0}
+  .flow{font-size:10px;font-family:ui-monospace,monospace;color:var(--mut);background:#0d1119;border:1px solid var(--line);border-radius:6px;padding:6px 8px;margin-top:8px}
+  .flow b{color:#9ecbff}
+  .hconn{font-family:ui-monospace,monospace;font-size:10px;color:#7db3ff;transition:.4s}
+</style>
+</head>
+<body>
+
+<h1>bkd 架构 & 零停机升级 · 交互原型</h1>
+<p class="sub">点「触发一次升级」看动画。两个标签:① 现在 vs 方案 A &nbsp; ② 方案 D(engine daemon)。</p>
+
+<div class="tabs">
+  <div class="tab on" data-tab="t1">① 现在 vs 方案 A(engine 注入)</div>
+  <div class="tab" data-tab="t2">② 方案 D(engine daemon)</div>
+</div>
+
+<div class="controls">
+  <button id="go">▶ 触发一次升级</button>
+  <button id="reset" class="ghost">↺ 重置</button>
+  <span class="sub">动画约 6 秒</span>
+</div>
+<div class="narr" id="narr"></div>
+
+<!-- ============ TAB 1 ============ -->
+<div class="view on" id="t1">
+<div class="stage">
+  <div class="col bad" id="colBad">
+    <div class="badge bad" id="badgeBad">分裂</div>
+    <h3>① 现在的架构(0.0.178)</h3>
+    <p class="tag">每个版本的 bundle 各带一个 engine 单例 → 热替换换出新 engine</p>
+    <div class="node supervisor"><div class="t">supervisor.sh</div><div class="d">崩了 5s 重拉</div></div>
+    <div class="arrow">▼ exec</div>
+    <div class="node launcher"><div class="t">launcher <span class="socket">socket :3000</span></div><div class="d">import(server.js)→createApp()+initLauncher()</div></div>
+    <div class="arrow" id="badArrow">▼ import(v1)</div>
+    <div class="node bundle" id="badBundle">
+      <span class="ver" id="badVer">v1</span>
+      <div class="t">server.js(路由 + engine)</div>
+      <div class="engine live" id="badEngine">
+        <div class="et"><span>engine 实例</span><span id="badEngTag" style="color:var(--green)">LIVE</span></div>
+        <div class="pm"><div class="proc run">A</div><div class="proc run">B</div><div class="proc run">C</div></div>
+        <div class="recon watch-live" id="badRecon"><span class="dot"></span><span>reconciler</span><span class="conn" id="badConn">→ 看本 engine ✓</span></div>
+      </div>
+    </div>
+    <div class="issue">新 issue:<span class="pill working" id="badPill">进行中</span></div>
+    <div class="note" id="badNote">稳定态:engine LIVE,reconciler 看得到子进程,issue 进行中。</div>
+  </div>
+
+  <div class="col good" id="colGood">
+    <div class="badge good" id="badgeGood">连续</div>
+    <h3>② 方案 A:engine 上移 launcher + 注入路由</h3>
+    <p class="tag">engine 只建一次;热替换只换路由,engine 不动</p>
+    <div class="node supervisor"><div class="t">supervisor.sh</div><div class="d">仅兜底</div></div>
+    <div class="arrow">▼ exec</div>
+    <div class="node launcher holds-engine">
+      <div class="t">launcher <span class="socket">socket :3000</span></div>
+      <div class="d">持有 <b style="color:var(--purple)">唯一 engine</b>,升级不重建</div>
+      <div class="engine persist" id="goodEngine">
+        <div class="et"><span>engine(常驻)</span><span style="color:var(--purple)">PERSIST</span></div>
+        <div class="pm"><div class="proc run">A</div><div class="proc run">B</div><div class="proc run">C</div></div>
+        <div class="recon watch-live" id="goodRecon"><span class="dot"></span><span>reconciler</span><span class="conn">→ 同一 engine ✓</span></div>
+      </div>
+    </div>
+    <div class="arrow">▼ createApp(<b style="color:var(--purple)">engine</b>) 注入</div>
+    <div class="node bundle" id="goodBundle">
+      <span class="ver" id="goodVer">v1</span>
+      <div class="t">server.js(<b>只有路由</b>)</div>
+      <div class="d">用注入的 engine,自己不建</div>
+    </div>
+    <div class="issue">新 issue:<span class="pill working" id="goodPill">进行中</span></div>
+    <div class="note" id="goodNote">稳定态:engine 在 launcher 常驻;bundle 只是路由壳。</div>
+  </div>
+</div>
+</div>
+
+<!-- ============ TAB 2: DAEMON ============ -->
+<div class="view" id="t2">
+<div class="dstage">
+  <!-- client -->
+  <div class="box client">
+    <h4>🌐 浏览器</h4>
+    <div class="hconn" id="dHttp">HTTP/SSE → :3000</div>
+    <div class="conn" id="dReconnectNote" style="margin-top:8px;color:var(--mut)"></div>
+  </div>
+
+  <!-- front-ends (swappable) -->
+  <div class="frontwrap">
+    <div class="box" style="background:transparent;border:none;padding:0">
+      <h4>无状态前端进程(可滚动升级)</h4>
+      <div class="front" id="front1">
+        <div class="t" style="font-size:12px;font-weight:600">前端 <span class="ver">v1</span> <span class="socket">:3000 (SO_REUSEPORT)</span></div>
+        <div class="d" style="font-size:10.5px;color:var(--mut)">路由 / 校验 / 序列化 —— 不持有任何活资源</div>
+      </div>
+      <div class="front v2" id="front2" style="display:none">
+        <div class="t" style="font-size:12px;font-weight:600">前端 <span class="ver" style="color:#7ee2a8">v2</span> <span class="socket">:3000</span></div>
+        <div class="d" style="font-size:10.5px;color:var(--mut)">新版本路由,连同一个 daemon</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- IPC -->
+  <div class="box" style="flex:none;width:140px;display:flex;align-items:center">
+    <div class="ipc">
+      <div class="lab">IPC</div>
+      <div>unix socket</div>
+      <div style="color:#c9a6f0">/run/bkd.sock</div>
+      <div style="margin-top:6px;color:var(--green)">⇄ 不变</div>
+    </div>
+  </div>
+
+  <!-- daemon (persistent) -->
+  <div class="box daemon" id="daemon">
+    <h4 style="color:#d6b6ff">⚙️ engine daemon(常驻 · 升级不重启)</h4>
+    <div class="engine persist" style="box-shadow:none">
+      <div class="et"><span>issueEngine + ProcessManager</span><span style="color:var(--purple)">PERSIST</span></div>
+      <div class="pm" id="dPm"><div class="proc run">A</div><div class="proc run">B</div><div class="proc run">C</div></div>
+      <div class="recon watch-live" id="dRecon"><span class="dot"></span><span>reconciler / cron / monitor</span></div>
+    </div>
+    <div class="flow">
+      ↑ 收: <b>execute / followUp / cancel / query</b><br>
+      ↓ 推: <b>log / state / done</b>(事件流,前端再扇出给 SSE)
+    </div>
+    <div class="d" style="font-size:10.5px;color:var(--mut);margin-top:7px">子进程、连接、reconciler 全在这——前端怎么换都不动</div>
+  </div>
+</div>
+<div class="note" id="dNote" style="max-width:none">稳定态:浏览器连前端 v1(:3000);v1 通过 IPC 调 daemon;真正的 engine + 子进程 A/B/C + reconciler 都在 daemon 里常驻。</div>
+</div>
+
+<div class="legend">
+  <span><i style="background:var(--green)"></i>LIVE / 在跑</span>
+  <span><i style="background:var(--purple)"></i>常驻(升级不重建)</span>
+  <span><i style="background:var(--gray)"></i>孤儿 / 排空退出</span>
+  <span><i style="background:var(--red)"></i>reconciler 看错 engine→误杀</span>
+</div>
+
+<script>
+const $=id=>document.getElementById(id)
+const narr=$('narr'); let busy=false, activeTab='t1'
+const sleep=ms=>new Promise(r=>setTimeout(r,ms))
+
+/* ---------- tab switching ---------- */
+document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{
+  if(busy) return
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'))
+  document.querySelectorAll('.view').forEach(x=>x.classList.remove('on'))
+  t.classList.add('on'); activeTab=t.dataset.tab; $(activeTab).classList.add('on')
+  resetActive()
+}))
+
+/* ---------- TAB 1 reset/run ---------- */
+function reset1(){
+  $('badVer').textContent='v1'; $('badArrow').innerHTML='▼ import(v1)'
+  $('badBundle').classList.remove('swapping'); $('badBundle').style.opacity=''
+  $('badEngine').className='engine live'; $('badEngTag').textContent='LIVE'; $('badEngTag').style.color='var(--green)'
+  $('badEngine').querySelectorAll('.proc').forEach(p=>p.className='proc run')
+  $('badRecon').className='recon watch-live'; $('badConn').textContent='→ 看本 engine ✓'
+  $('badPill').className='pill working'; $('badPill').textContent='进行中'
+  $('badNote').textContent='稳定态:engine LIVE,reconciler 看得到子进程,issue 进行中。'
+  $('badgeBad').textContent='分裂'
+  const ne=$('badNewEngine'); if(ne) ne.remove()
+  $('goodVer').textContent='v1'; $('goodBundle').classList.remove('swapping')
+  $('goodEngine').className='engine persist'
+  while($('goodEngine').querySelectorAll('.proc').length>3) $('goodEngine').querySelector('.pm').lastChild.remove()
+  $('goodPill').className='pill working'; $('goodPill').textContent='进行中'
+  $('goodNote').textContent='稳定态:engine 在 launcher 常驻;bundle 只是路由壳。'
+  $('badgeGood').textContent='连续'
+  narr.innerHTML='就绪。两边各有一个 engine 持有正在跑的子进程,reconciler 盯着它。'
+}
+async function run1(){
+  narr.innerHTML='⬆️ <b>升级到 v2</b> —— 两边各触发一次热替换…'; await sleep(1100)
+  $('badArrow').innerHTML='▼ import(<b style="color:#ff8a8a">v2</b>) 又一张模块图'
+  $('badBundle').classList.add('swapping')
+  narr.innerHTML='现在:热替换 = import 新 server.js → 诞生<b>第二个 engine</b>。'; await sleep(1000)
+  $('badBundle').classList.remove('swapping'); $('badVer').textContent='v2'
+  $('badEngine').className='engine stale'; $('badEngTag').textContent='STALE(旧)'; $('badEngTag').style.color='var(--gray)'
+  $('badEngine').querySelectorAll('.proc').forEach(p=>p.className='proc run orphan')
+  const ne=document.createElement('div'); ne.id='badNewEngine'; ne.className='engine live'; ne.style.marginTop='8px'
+  ne.innerHTML='<div class="et"><span>engine <b style="color:#9ecbff">v2(新)</b></span><span style="color:var(--green)">LIVE</span></div>'+
+    '<div class="pm"><div class="proc run">D</div></div>'+
+    '<div class="recon" style="border-color:var(--line)"><span class="dot" style="background:var(--gray)"></span><span>这个 engine 没有 reconciler</span></div>'
+  $('badBundle').appendChild(ne)
+  $('badConn').textContent='→ 仍盯旧 engine ✗'; $('badRecon').className='recon watch-stale'
+  narr.innerHTML='路由换到 <b>engine v2</b>(进程 D 在跑);但 <b>reconciler 还留在旧 engine v1</b>!A/B/C 成孤儿。'; await sleep(1600)
+  narr.innerHTML='⏱ 60s 后 reconciler(在 v1)发现 v2 的 issue「无进程」→ <b>误判</b>。'; await sleep(1100)
+  $('badPill').className='pill failed'; $('badPill').textContent='执行失败/审查中'
+  $('badNote').textContent='💥 升级后正在跑的 issue 被另一个 engine 的 reconciler 误杀。'
+  $('badgeBad').textContent='崩'
+  narr.innerHTML+=' &nbsp;|&nbsp; 方案 A:只换路由,engine 不动…'
+  $('goodBundle').classList.add('swapping'); await sleep(900)
+  $('goodBundle').classList.remove('swapping'); $('goodVer').textContent='v2'
+  const d=document.createElement('div'); d.className='proc run'; d.textContent='D'; $('goodEngine').querySelector('.pm').appendChild(d)
+  $('goodNote').textContent='✅ 只有路由换 v2;engine 常驻、A/B/C 不断、reconciler 还连同一 engine、看得到 D。'
+  $('goodPill').textContent='进行中(全程)'; $('badgeGood').textContent='零停机'; await sleep(300)
+  narr.innerHTML='对比完成 → 左:热替换造引擎分裂、状态误杀;右:engine 注入常驻,真零停机。'
+}
+
+/* ---------- TAB 2 reset/run ---------- */
+function reset2(){
+  $('front2').style.display='none'; $('front1').classList.remove('draining'); $('front1').style.display=''
+  $('front1').querySelector('.ver').textContent='v1'
+  $('dHttp').textContent='HTTP/SSE → :3000'; $('dHttp').style.color='#7db3ff'
+  $('dReconnectNote').textContent=''
+  $('daemon').classList.remove('pulse')
+  while($('dPm').querySelectorAll('.proc').length>3) $('dPm').lastChild.remove()
+  $('dRecon').className='recon watch-live'
+  $('dNote').textContent='稳定态:浏览器连前端 v1;v1 经 IPC 调 daemon;engine+子进程 A/B/C+reconciler 都在 daemon 常驻。'
+  narr.innerHTML='就绪。engine daemon 常驻持有所有活资源,前端只是无状态路由壳。'
+}
+async function run2(){
+  narr.innerHTML='⬆️ <b>升级到 v2</b> —— 只升级前端进程,daemon 完全不动。'; await sleep(1100)
+  $('front2').style.display=''
+  narr.innerHTML='起 <b>前端 v2</b>:用 SO_REUSEPORT 也绑 :3000,经 <b>同一个 IPC</b> 连上 daemon。'; await sleep(1300)
+  $('dHttp').innerHTML='HTTP/SSE → :3000<br><span style="color:#7ee2a8">(新连接落到 v2)</span>'
+  $('dReconnectNote').innerHTML='SSE 客户端<br>自动重连 → v2'
+  narr.innerHTML='新请求/新 SSE 落到 v2;daemon 经 IPC 把 <b>log/state/done</b> 事件继续推给(现在的)v2。'; await sleep(1500)
+  $('front1').classList.add('draining'); $('front1').querySelector('.ver').textContent='v1(排空中)'
+  narr.innerHTML='旧前端 v1 <b>drain 完在途请求后退出</b>。整个过程 daemon 里的子进程一直在跑。'; await sleep(1400)
+  $('front1').style.display='none'
+  $('daemon').classList.add('pulse')
+  // daemon untouched; show a new proc D started during upgrade, tracked in the SAME daemon
+  const d=document.createElement('div'); d.className='proc run'; d.textContent='D'; $('dPm').appendChild(d)
+  $('dNote').innerHTML='✅ 升级完成:前端 v1→v2 滚动换掉;daemon <b>从未重启</b> → 子进程 A/B/C(+升级中新起的 D)全活、reconciler 连续、状态零误判。HTTP 无丢连接,SSE 自动重连。'
+  await sleep(300)
+  narr.innerHTML='方案 D:把"socket 之外的活资源(engine+子进程+reconciler+连接状态)"关进常驻 daemon,前端随便滚动升级 → 真零停机。'
+}
+
+/* ---------- dispatch ---------- */
+function resetActive(){ busy=false; $('go').disabled=false; activeTab==='t1'?reset1():reset2() }
+async function runActive(){
+  if(busy) return; busy=true; $('go').disabled=true
+  resetActive(); busy=true; $('go').disabled=true; await sleep(60)
+  activeTab==='t1' ? await run1() : await run2()
+  busy=false; $('go').disabled=false
+}
+$('go').addEventListener('click',runActive)
+$('reset').addEventListener('click',()=>{ if(!busy) resetActive() })
+resetActive()
+</script>
+</body>
+</html>

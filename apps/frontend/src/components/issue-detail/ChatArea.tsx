@@ -12,8 +12,6 @@ import { useTerminalStore } from '@/stores/terminal-store'
 import { getIssueUrl } from '@/stores/server-store'
 import { MiniMatrix } from '@/components/cockpit/MiniMatrix'
 import { ChatBody } from './ChatBody'
-import { ParticipantPanel } from './ParticipantPanel'
-import { RoleCreatorModal } from './RoleCreatorModal'
 import { isProgrammaticScroll } from './scroll-coordination'
 import {
   createAutoHideState,
@@ -85,7 +83,6 @@ export function ChatArea({
   const [copied, setCopied] = useState(false)
   const [editingTitle, setEditingTitle] = useState(false)
   const [titleDraft, setTitleDraft] = useState('')
-  const [showRoleCreator, setShowRoleCreator] = useState(false)
   const isMobile = useIsMobile()
   const showFileBrowser = useFileBrowserStore(s => s.isOpen && !s.isDrawer && s.issueId === issueId)
   const closeFileBrowser = useFileBrowserStore(s => s.close)
@@ -411,21 +408,7 @@ export function ChatArea({
               onCloseSearch={() => setSearchOpen(false)}
             />
           </div>
-          {/* Participant panel — desktop only */}
-          {!isMobile && (
-            <ParticipantPanel
-              projectId={projectId}
-              issueId={issueId}
-            />
-          )}
         </div>
-
-        {/* Role creator modal */}
-        <RoleCreatorModal
-          projectId={projectId}
-          isOpen={showRoleCreator}
-          onClose={() => setShowRoleCreator(false)}
-        />
       </div>
 
       {/* Diff panel — full-screen overlay on mobile, inline on desktop */}

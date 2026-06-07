@@ -15,7 +15,6 @@ import processes from './processes'
 import search from './search'
 import templates from './templates'
 import projects from './projects'
-import rolesRoutes from './roles'
 import whiteboard from './whiteboard'
 import worktrees from './worktrees'
 
@@ -23,7 +22,6 @@ const apiRoutes = createOpenAPIRouter()
 
 // DB-backed routes
 apiRoutes.route('/projects', projects)
-apiRoutes.route('/projects/:projectId/roles', rolesRoutes)
 apiRoutes.route('/projects/:projectId/issues', issues)
 apiRoutes.route('/projects/:projectId/whiteboard', whiteboard)
 apiRoutes.route('/issues/review', reviewIssues)
