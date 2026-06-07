@@ -794,6 +794,15 @@
     "idle": "空闲",
     "stale": "异常"
   },
+  "dock": {
+    "terminal": "终端",
+    "files": "文件",
+    "diff": "Diff",
+    "collapse": "折叠",
+    "expand": "展开",
+    "close": "关闭",
+    "ctrlHint": "点击 = 单次，长按 = 锁定"
+  },
   "terminal": {
     "title": "终端",
     "close": "关闭终端",

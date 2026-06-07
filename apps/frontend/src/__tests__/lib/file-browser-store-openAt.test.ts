@@ -32,7 +32,9 @@ describe('useFileBrowserStore.openAt', () => {
     })
     const s = useFileBrowserStore.getState()
     expect(s.isOpen).toBe(true)
-    expect(s.isDrawer).toBe(true)
+    // PLAN-036: openAt now drives the issue-detail dock rail (Files tab),
+    // not the removed standalone drawer.
+    expect(s.isDrawer).toBe(false)
     expect(s.projectId).toBe('proj-1')
     expect(s.issueId).toBe('issue-1')
     expect(s.rootPath).toBe('/repo')

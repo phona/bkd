@@ -120,7 +120,9 @@ describe('chatInput density refactor (PLAN-012)', () => {
     expect(more).toBeInTheDocument()
     fireEvent.click(more)
     expect(screen.getByText('chat.refreshLogs')).toBeInTheDocument()
-    expect(screen.getByText('diff.openFiles')).toBeInTheDocument()
+    // PLAN-036: the overflow menu now opens the dock rail's Terminal / Files tabs.
+    expect(screen.getByText('dock.terminal')).toBeInTheDocument()
+    expect(screen.getByText('dock.files')).toBeInTheDocument()
     expect(screen.getByText('chat.clearSession')).toBeInTheDocument()
   })
 

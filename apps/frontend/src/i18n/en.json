@@ -798,6 +798,15 @@
     "idle": "Idle",
     "stale": "Stale"
   },
+  "dock": {
+    "terminal": "Terminal",
+    "files": "Files",
+    "diff": "Diff",
+    "collapse": "Collapse",
+    "expand": "Expand",
+    "close": "Close",
+    "ctrlHint": "Tap = one-shot, long-press = lock"
+  },
   "terminal": {
     "title": "Terminal",
     "close": "Close terminal",
