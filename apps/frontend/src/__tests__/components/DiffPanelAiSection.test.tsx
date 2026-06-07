@@ -22,6 +22,7 @@ vi.mock('@/hooks/use-kanban', () => ({
   useCreateRole: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useUpdateRole: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useDeleteRole: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useFollowUpIssue: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useIssueChanges: (...args: unknown[]) => useChangesMock(...args),
   useIssueAiChanges: (...args: unknown[]) => useAiChangesMock(...args),
   useIssueAiTimeline: () => ({

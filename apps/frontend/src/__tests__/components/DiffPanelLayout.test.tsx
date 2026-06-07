@@ -31,6 +31,7 @@ vi.mock('@/hooks/use-kanban', () => ({
   useIssueAiChanges: (...args: unknown[]) => useAiChangesMock(...args),
   useIssueAiTimeline: () => ({ data: null, isLoading: false, isError: false }),
   useIssueFilePatch: () => ({ data: undefined, isLoading: false, isError: false }),
+  useFollowUpIssue: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }))
 
 function Wrapper({ children }: { children: React.ReactNode }) {
