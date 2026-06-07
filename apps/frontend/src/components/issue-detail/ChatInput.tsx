@@ -206,11 +206,18 @@ export function ChatInput({
     if (!isMobile || typeof window === 'undefined') return
     const vv = window.visualViewport
     if (!vv) return
-    let keyboardOpen = false
+    let prevHeight = vv.height
     const onResize = () => {
-      const open = window.innerHeight - vv.height > 120
-      if (keyboardOpen && !open) textareaRef.current?.blur()
-      keyboardOpen = open
+      const h = vv.height
+      // Keyboard closed = the visual viewport grows back by a large amount. We
+      // track vv.height's own delta rather than `innerHeight - vv.height`: on
+      // Android/HarmonyOS the layout viewport (innerHeight) shrinks WITH the
+      // keyboard so that difference stays ~0 and never detects the keyboard. Only
+      // blur if OUR textarea is the focused element.
+      if (h - prevHeight > 120 && document.activeElement === textareaRef.current) {
+        textareaRef.current?.blur()
+      }
+      prevHeight = h
     }
     vv.addEventListener('resize', onResize)
     return () => vv.removeEventListener('resize', onResize)
