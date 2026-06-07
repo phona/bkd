@@ -1,8 +1,8 @@
 # PLAN-024 Installable PWA (manifest + service worker)
 
-- **status**: draft
+- **status**: completed
 - **createdAt**: 2026-06-06 13:48
-- **approvedAt**: (pending)
+- **approvedAt**: 2026-06-06 18:15
 - **relatedTask**: PWA-001
 
 ## Context

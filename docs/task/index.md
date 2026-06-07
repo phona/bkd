@@ -69,7 +69,7 @@ Each task is a single line linking to its detail file. All detailed information 
 - [-] [**COCKPIT-008 Cockpit secretary — AI-enriched decision cards + decision-stream UI**](COCKPIT-008.md) `P1`
 - [x] [**BUG-003 Fix create issue and process manager access in cockpit (ReviewPage)**](BUG-003.md) `P0`
 - [x] [**BUG-004 Fix terminal PTY session leak exhausting session limit**](BUG-004.md) `P0`
-- [ ] [**PWA-001 Make BKD an installable PWA**](PWA-001.md) `P2`
+- [x] [**PWA-001 Make BKD an installable PWA**](PWA-001.md) `P2`
 - [x] [**WT-001 Allow choosing worktree base branch and custom branch name**](WT-001.md) `P1`
 - [x] [**WT-002 Make terminal cwd worktree-aware**](WT-002.md) `P1`
 - [~] [**DOCK-001 Dockable, persistent terminal / diff / file-browser panels**](DOCK-001.md) `P1`

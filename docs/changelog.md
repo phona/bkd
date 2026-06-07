@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-06-06 18:20 [feat]
+
+PWA-001 / PLAN-024 — BKD is now an installable PWA.
+
+- `vite-plugin-pwa` with `registerType: 'autoUpdate'` (seamless SW updates).
+- Manifest "BKD", standalone, theme `#2563eb` / bg `#09090b`, icons 192 + 512 +
+  maskable-512 (generated with ImageMagick from the brand mark); apple-touch-icon
+  180 + apple-mobile-web-app meta + `viewport-fit=cover` in index.html.
+- Workbox precaches the app shell; `navigateFallbackDenylist: [/^\/api/]` keeps
+  the SW off API / SSE / WebSocket routes. Removed stale `public/manifest.json`.
+
+Build verified: `dist/sw.js` + `manifest.webmanifest` generated. Frontend-only →
+hot-reloadable.
+
 ## 2026-06-06 15:05 [feat]
 
 WT-001 / PLAN-025 — Choose worktree base branch + custom branch name. Fixes

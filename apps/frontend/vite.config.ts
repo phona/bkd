@@ -1,6 +1,7 @@
 import path from 'node:path'
 import tailwindcss from '@tailwindcss/vite'
 import viteReact from '@vitejs/plugin-react'
+import { VitePWA } from 'vite-plugin-pwa'
 import tsconfigPaths from 'vite-tsconfig-paths'
 import type { Plugin } from 'vitest/config'
 import { defineConfig } from 'vitest/config'
@@ -56,6 +57,38 @@ const config = defineConfig(() => {
       tsconfigPaths({ projects: ['./tsconfig.json'] }),
       tailwindcss(),
       viteReact(),
+      VitePWA({
+        registerType: 'autoUpdate',
+        includeAssets: ['favicon.svg', 'apple-touch-icon.png', 'robots.txt'],
+        manifest: {
+          name: 'BKD',
+          short_name: 'BKD',
+          description: 'Self-hosted mobile chat tool for driving coding agents',
+          theme_color: '#2563eb',
+          background_color: '#09090b',
+          display: 'standalone',
+          start_url: '/',
+          icons: [
+            { src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' },
+            { src: 'pwa-512x512.png', sizes: '512x512', type: 'image/png' },
+            {
+              src: 'pwa-maskable-512x512.png',
+              sizes: '512x512',
+              type: 'image/png',
+              purpose: 'maskable',
+            },
+          ],
+        },
+        workbox: {
+          globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
+          // SPA fallback, but never hijack the API / SSE / WebSocket routes.
+          navigateFallback: '/index.html',
+          navigateFallbackDenylist: [/^\/api/],
+          cleanupOutdatedCaches: true,
+          maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
+        },
+        devOptions: { enabled: false },
+      }),
     ],
     build: {
       rollupOptions: {
