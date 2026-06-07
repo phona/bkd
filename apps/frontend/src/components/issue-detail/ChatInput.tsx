@@ -198,6 +198,24 @@ export function ChatInput({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const isSendingRef = useRef(false)
 
+  // Mobile: dismissing the soft keyboard (iOS keyboard-down button, swipe-down)
+  // often does NOT blur the textarea, so the composer would stay expanded forever
+  // (BUG-010). Watch visualViewport: on the keyboard open→close transition, blur
+  // the textarea so the composer collapses back to the reading bar.
+  useEffect(() => {
+    if (!isMobile || typeof window === 'undefined') return
+    const vv = window.visualViewport
+    if (!vv) return
+    let keyboardOpen = false
+    const onResize = () => {
+      const open = window.innerHeight - vv.height > 120
+      if (keyboardOpen && !open) textareaRef.current?.blur()
+      keyboardOpen = open
+    }
+    vv.addEventListener('resize', onResize)
+    return () => vv.removeEventListener('resize', onResize)
+  }, [isMobile])
+
   const followUp = useFollowUpIssue(projectId ?? '')
   const clearSession = useClearIssueSession(projectId ?? '')
   const restartIssue = useRestartIssue(projectId ?? '')

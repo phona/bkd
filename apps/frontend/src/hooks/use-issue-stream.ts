@@ -589,6 +589,16 @@ export function useIssueStream({
 
     const cleanup = { unsub: (() => {}) as () => void }
     const doneTimers: Array<ReturnType<typeof setTimeout>> = []
+    // The final merged ("dbOnly") content is DB-only (not pushed over SSE) and can
+    // land up to a few seconds after settle. Re-pull across a widening window so the
+    // tail renders without a manual refresh. Fired on BOTH the terminal `state`
+    // event AND `done` — `done` alone proved unreliable (BUG-007).
+    const reconcileAfterSettle = () => {
+      setRefreshCounter(c => c + 1)
+      for (const d of [300, 900, 1800, 3000]) {
+        doneTimers.push(setTimeout(() => setRefreshCounter(c => c + 1), d))
+      }
+    }
 
     cleanup.unsub = eventBus.subscribe(issueId, {
       onLog: (entry) => {
@@ -622,6 +632,10 @@ export function useIssueStream({
             doneReceivedRef.current = true
             activeExecutionRef.current = null
             setSessionStatus(data.state)
+            // The terminal state event is the reliable settle signal the user
+            // actually sees (status → review); reconcile logs here too, not only
+            // on `done`, so the final response renders without a manual refresh.
+            reconcileAfterSettle()
           }
         }
         queryClient.invalidateQueries({
@@ -631,20 +645,7 @@ export function useIssueStream({
       onDone: () => {
         queryClient.invalidateQueries({ queryKey: queryKeys.issue(projectId, issueId) })
         queryClient.invalidateQueries({ queryKey: queryKeys.issues(projectId) })
-        // Final reconciliation: refetch the canonical timeline from the
-        // server. If any chunk was missed during streaming (drop, race,
-        // backend converter desync), this brings the client to ground truth.
-        // Cheap because the LRU cache already has most of it; the merge
-        // map dedupes by id so existing entries are unchanged.
-        setRefreshCounter(c => c + 1)
-        // BUG-007: the final merged ("dbOnly") content — the part NOT pushed over
-        // SSE (timeline-emit drops dbOnly entries) — can commit to the DB just
-        // AFTER `done` fires, so the first refetch may miss the tail and the user
-        // has to manually refresh. Two staggered reconciles cover that
-        // write-after-done race. Root fix (settle/persist ordering) is PLAN-032.
-        const t1 = setTimeout(() => setRefreshCounter(c => c + 1), 350)
-        const t2 = setTimeout(() => setRefreshCounter(c => c + 1), 1200)
-        doneTimers.push(t1, t2)
+        reconcileAfterSettle()
       },
     })
 

@@ -83,3 +83,4 @@ Each task is a single line linking to its detail file. All detailed information 
 - [-] [**BUG-007 Chat — final response not rendered live on settle; needs manual refresh**](BUG-007.md) `P1`
 - [x] [**BUG-008 Chat — edit-mode toolbar covers last message + unstable bottom scroll (mobile)**](BUG-008.md) `P1`
 - [-] [**BUG-009 Chat — entering a session lands a few turns back, not on latest**](BUG-009.md) `P1`
+- [-] [**BUG-010 Chat — composer stays expanded after keyboard dismiss (mobile)**](BUG-010.md) `P1`
