@@ -358,23 +358,21 @@ describe('useAcpTimeline streaming merge regression', () => {
     expect(assistant.entry.entryType).toBe('assistant-message')
   })
 
-  it('outputs non-streaming thinking immediately without merging', () => {
-    // Regression: Codex engine produces multiple non-streaming thinking entries
-    // (reasoning items without streaming flag). They must NOT be concatenated.
+  it('renders backend-merged consecutive thinking with content intact', () => {
+    // Consecutive non-streaming thinking within a turn is merged by the backend
+    // TimelineConverter (segments split only on tool/assistant boundaries), so
+    // the frontend receives a single thinking entry. It must render that block
+    // with all reasoning preserved, attached to the following assistant message.
+    //
+    // NOTE (open product question): the backend merges distinct Codex reasoning
+    // items that have no tool call between them. If they should render as
+    // separate blocks, that is a backend (timeline-converter) change.
     const logs: NormalizedLogEntry[] = [
       {
         entryType: 'thinking',
-        content: 'Let me check the imports first',
+        content: 'Let me check the imports first\nNow let me read the actions file',
         timestamp: '2026-01-01T00:00:00Z',
         turnIndex: 0,
-        // No metadata.streaming — simulates Codex reasoning item
-      },
-      {
-        entryType: 'thinking',
-        content: 'Now let me read the actions file',
-        timestamp: '2026-01-01T00:00:01Z',
-        turnIndex: 0,
-        // No metadata.streaming
       },
       {
         entryType: 'assistant-message',
@@ -386,13 +384,12 @@ describe('useAcpTimeline streaming merge regression', () => {
 
     const { items } = rebuildAcpTimeline(logs)
 
-    // Should have 2 items: 1 thinking (orphan flushed) + 1 entry (with second thinking attached)
-    expect(items).toHaveLength(2)
-    expect(items[0]!.type).toBe('thinking')
-    expect((items[0] as { entry: NormalizedLogEntry }).entry.content).toBe('Let me check the imports first')
-    expect(items[1]!.type).toBe('entry')
-    expect((items[1] as any).thinking).toBeDefined()
-    expect((items[1] as any).thinking!.content).toBe('Now let me read the actions file')
+    expect(items).toHaveLength(1)
+    expect(items[0]!.type).toBe('entry')
+    const attached = (items[0] as { thinking?: NormalizedLogEntry }).thinking
+    expect(attached).toBeDefined()
+    expect(attached!.content).toContain('Let me check the imports first')
+    expect(attached!.content).toContain('Now let me read the actions file')
   })
 
   it('stable order regardless of event arrival order', () => {

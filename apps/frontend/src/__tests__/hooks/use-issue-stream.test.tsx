@@ -458,10 +458,11 @@ describe('useIssueStream', () => {
     })
   })
 
-  it('end-to-end: cascading thinking + assistant chunks produce 1 assistant message', async () => {
+  it('end-to-end: cascading thinking + assistant chunks keep thinking as its own surface', async () => {
     // Full integration: data layer (useIssueStream) + message layer (useChatMessages).
     // OpenCode sends full accumulated text for BOTH thinking and assistant chunks.
-    // This test ensures the UI never shows duplicate thinking + assistant pairs.
+    // Thinking is its own surface — even when the assistant repeats the thinking's
+    // prefix, the thinking block is kept (no dedup heuristics).
     let handler: IssueEventHandler | null = null
     subscribeMock.mockImplementation((_issueId: string, nextHandler: IssueEventHandler) => {
       handler = nextHandler
@@ -521,10 +522,11 @@ describe('useIssueStream', () => {
       { wrapper: createWrapper() },
     )
 
-    // Should produce exactly 1 assistant message, no standalone thinking
+    // Thinking is kept as its own surface alongside the assistant message.
     await waitFor(() => {
-      expect(chatResult.current.messages).toHaveLength(1)
-      expect(chatResult.current.messages[0]?.type).toBe('assistant')
+      expect(chatResult.current.messages).toHaveLength(2)
+      expect(chatResult.current.messages[0]?.type).toBe('thinking')
+      expect(chatResult.current.messages[1]?.type).toBe('assistant')
     })
   })
 
