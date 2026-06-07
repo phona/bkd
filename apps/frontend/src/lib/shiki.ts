@@ -14,6 +14,13 @@ let shikiPromise: Promise<ShikiModule> | null = null
 async function getShiki(): Promise<ShikiModule> {
   if (!shikiPromise) {
     shikiPromise = import('shiki').then(m => ({ codeToHtml: m.codeToHtml }))
+    // If the dynamic import fails (network hiccup / chunk load error), clear the
+    // cache so the next call retries instead of being stuck forever with a
+    // permanently-rejected promise — which would break highlighting for the rest
+    // of the session (PLAN-034).
+    shikiPromise.catch(() => {
+      shikiPromise = null
+    })
   }
   return shikiPromise
 }

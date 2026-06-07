@@ -1,6 +1,7 @@
 import DOMPurify from 'dompurify'
 import { ChevronRight } from 'lucide-react'
-import { lazy, Suspense, useEffect, useState } from 'react'
+import type { ReactNode } from 'react'
+import { Component, lazy, Suspense, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useTheme } from '@/hooks/use-theme'
 import { codeToHtml } from '@/lib/shiki'
@@ -14,6 +15,23 @@ const LazyFileDiff = lazy(() =>
 )
 
 const lazyParsePatchFiles = () => import('@pierre/diffs').then(m => m.parsePatchFiles)
+
+// Error boundary so a failed @pierre/diffs dynamic import (network hiccup /
+// chunk load error) degrades to a raw fallback instead of crashing the
+// surrounding tool card (PLAN-034).
+class DiffErrorBoundary extends Component<
+  { fallback: ReactNode, children: ReactNode },
+  { failed: boolean }
+> {
+  state = { failed: false }
+  static getDerivedStateFromError() {
+    return { failed: true }
+  }
+
+  render() {
+    return this.state.failed ? this.props.fallback : this.props.children
+  }
+}
 
 // ── Shared helpers ───────────────────────────────────────
 
@@ -96,11 +114,24 @@ export function ShikiCodeBlock({
 
   useEffect(() => {
     let cancelled = false
-    void codeToHtml(content, language).then((h) => {
-      if (!cancelled) setHtml(h)
-    })
+    let attempt = 0
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const run = () => {
+      codeToHtml(content, language)
+        .then((h) => {
+          if (!cancelled) setHtml(h)
+        })
+        .catch(() => {
+          // Retry a couple of times, then fall through to the raw <pre> (PLAN-034).
+          if (cancelled || attempt >= 2) return
+          attempt++
+          timer = setTimeout(run, 400 * attempt)
+        })
+    }
+    run()
     return () => {
       cancelled = true
+      if (timer) clearTimeout(timer)
     }
   }, [content, language])
 
@@ -152,30 +183,34 @@ export function ShikiUnifiedDiff({
 
   return (
     <div className="overflow-x-auto rounded-md border border-border/40">
-      <Suspense
-        fallback={
-          <div className="px-2.5 py-2 text-[11px] text-muted-foreground">{t('common.loading')}</div>
-        }
+      <DiffErrorBoundary
+        fallback={<ShikiCodeBlock content={modified} language="text" maxHeightClass="max-h-80" />}
       >
-        <LazyMultiFileDiff
-          oldFile={{ name, contents: original }}
-          newFile={{ name, contents: modified }}
-          options={{
-            diffStyle: 'unified',
-            diffIndicators: 'bars',
-            expandUnchanged: false,
-            hunkSeparators: 'line-info',
-            disableLineNumbers: false,
-            overflow: 'wrap',
-            theme: {
-              light: 'github-light-default',
-              dark: 'github-dark-default',
-            },
-            themeType,
-            disableFileHeader: true,
-          }}
-        />
-      </Suspense>
+        <Suspense
+          fallback={
+            <div className="px-2.5 py-2 text-[11px] text-muted-foreground">{t('common.loading')}</div>
+          }
+        >
+          <LazyMultiFileDiff
+            oldFile={{ name, contents: original }}
+            newFile={{ name, contents: modified }}
+            options={{
+              diffStyle: 'unified',
+              diffIndicators: 'bars',
+              expandUnchanged: false,
+              hunkSeparators: 'line-info',
+              disableLineNumbers: false,
+              overflow: 'wrap',
+              theme: {
+                light: 'github-light-default',
+                dark: 'github-dark-default',
+              },
+              themeType,
+              disableFileHeader: true,
+            }}
+          />
+        </Suspense>
+      </DiffErrorBoundary>
     </div>
   )
 }
@@ -212,6 +247,8 @@ export function ShikiPatchDiff({ patch, filePath }: { patch: string, filePath?: 
       } catch {
         // parsing failed — stay null, fallback to code block
       }
+    }).catch(() => {
+      // @pierre/diffs import failed — stay null, fall back to the raw diff block
     })
     return () => {
       cancelled = true
@@ -238,17 +275,25 @@ export function ShikiPatchDiff({ patch, filePath }: { patch: string, filePath?: 
 
   return (
     <div className="overflow-x-auto rounded-md border border-border/40">
-      <Suspense
+      <DiffErrorBoundary
         fallback={(
           <pre className="px-2.5 py-2 text-[12px] font-mono overflow-x-auto whitespace-pre-wrap">
             {patch}
           </pre>
         )}
       >
-        {fileDiffs.map((fd, i) => (
-          <LazyFileDiff key={i} fileDiff={fd} options={options} />
-        ))}
-      </Suspense>
+        <Suspense
+          fallback={(
+            <pre className="px-2.5 py-2 text-[12px] font-mono overflow-x-auto whitespace-pre-wrap">
+              {patch}
+            </pre>
+          )}
+        >
+          {fileDiffs.map((fd, i) => (
+            <LazyFileDiff key={i} fileDiff={fd} options={options} />
+          ))}
+        </Suspense>
+      </DiffErrorBoundary>
     </div>
   )
 }

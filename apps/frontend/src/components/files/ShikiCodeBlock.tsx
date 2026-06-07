@@ -16,11 +16,25 @@ export function ShikiCodeBlock({ code, lang }: ShikiCodeBlockProps) {
   useEffect(() => {
     setHtml('')
     let cancelled = false
-    void codeToHtml(code, lang).then((result) => {
-      if (!cancelled) setHtml(result)
-    })
+    let attempt = 0
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const run = () => {
+      codeToHtml(code, lang)
+        .then((result) => {
+          if (!cancelled) setHtml(result)
+        })
+        .catch(() => {
+          // Highlight load failed — retry a couple of times (shiki clears its
+          // own cache on failure), then fall through to the raw <pre> (PLAN-034).
+          if (cancelled || attempt >= 2) return
+          attempt++
+          timer = setTimeout(run, 400 * attempt)
+        })
+    }
+    run()
     return () => {
       cancelled = true
+      if (timer) clearTimeout(timer)
     }
   }, [code, lang])
 

@@ -1,9 +1,9 @@
 # PLAN-034 Chat message rendering robustness
 
-- **status**: draft
+- **status**: completed
 - **createdAt**: 2026-06-06
-- **approvedAt**: (pending)
-- **relatedTask**: CHAT-011 (to be created)
+- **approvedAt**: 2026-06-06
+- **relatedTask**: CHAT-011
 
 ## Context
 

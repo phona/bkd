@@ -76,3 +76,4 @@ Each task is a single line linking to its detail file. All detailed information 
 - [-] [**CHAT-010 Chat input focus management**](CHAT-010.md) `P1`
 - [-] [**BUG-005 Chat scroll lands at wrong position when switching sessions**](BUG-005.md) `P1`
 - [x] [**DS-001 Design constitution landing — semantic color + motion tokens**](DS-001.md) `P1`
+- [x] [**CHAT-011 Chat message rendering robustness — async Shiki/diff fault tolerance**](CHAT-011.md) `P2`
