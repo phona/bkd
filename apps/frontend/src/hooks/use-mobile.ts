@@ -12,14 +12,20 @@ import * as React from 'react'
  * actual input device for the in-between widths while still keeping the cheap
  * width-only path for the unambiguous narrow case.
  *
- * Returns false on the first render (SSR / before-effect) — callers should
- * treat it as desktop-by-default and rely on the post-mount re-render.
+ * Initialized SYNCHRONOUSLY from matchMedia on the first render (bkd is a pure
+ * client-rendered SPA — `window` always exists, no SSR/hydration). This avoids
+ * the desktop→mobile flip that would otherwise change layout AFTER mount: e.g.
+ * the chat composer rendering in its expanded desktop style on the first frame,
+ * then collapsing once isMobile flips, shifting the scroll bottom so entry
+ * landed a few turns short of the latest message (BUG-009).
  */
 const MOBILE_MEDIA_QUERY =
   '(max-width: 767px), (pointer: coarse) and (max-width: 1024px)'
 
 export function useIsMobile() {
-  const [isMobile, setIsMobile] = React.useState(false)
+  const [isMobile, setIsMobile] = React.useState(() =>
+    typeof window !== 'undefined' && window.matchMedia(MOBILE_MEDIA_QUERY).matches,
+  )
 
   React.useEffect(() => {
     if (typeof window === 'undefined') return

@@ -411,6 +411,22 @@ export function ChatBody({
       return
     }
     el.scrollTop = el.scrollHeight
+    // Async content (code blocks, markdown, images) can grow the list AFTER this
+    // first pin, leaving entry a few turns short of the latest message. Re-pin
+    // across a short settle window so we always land on the newest message —
+    // unless the user has already scrolled away (gap > 600px → abort). BUG-009.
+    const repinTimers = [60, 180, 360, 600].map(delay =>
+      window.setTimeout(() => {
+        const e = scrollRef.current
+        if (!e) return
+        if (e.scrollHeight - e.scrollTop - e.clientHeight > 600) return
+        markProgrammaticScroll(e)
+        e.scrollTop = e.scrollHeight
+      }, delay),
+    )
+    return () => {
+      for (const t of repinTimers) clearTimeout(t)
+    }
   }, [issueId, logs.length, savedAnchor, scrollRef])
 
   const scrollToTop = useCallback(() => {
