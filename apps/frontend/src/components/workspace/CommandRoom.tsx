@@ -1,4 +1,3 @@
-import { useCallback, useState } from 'react'
 import { useIssue } from '@/hooks/use-kanban'
 import { ChatArea } from '@/components/issue-detail/ChatArea'
 
@@ -9,10 +8,6 @@ interface Props {
 
 export default function CommandRoom({ roomIssueId, projectId }: Props) {
   const { data: issue } = useIssue(projectId, roomIssueId)
-  const [showDiff, setShowDiff] = useState(false)
-
-  const onToggleDiff = useCallback(() => setShowDiff(v => !v), [])
-  const onCloseDiff = useCallback(() => setShowDiff(false), [])
 
   if (!issue) return <div className="p-4 text-gray-500">Room not found</div>
   return (
@@ -22,18 +17,7 @@ export default function CommandRoom({ roomIssueId, projectId }: Props) {
         {issue.title}
       </div>
       <div className="flex-1 overflow-hidden">
-        <ChatArea
-          projectId={projectId}
-          issueId={roomIssueId}
-          showDiff={showDiff}
-          diffWidth={400}
-          onToggleDiff={onToggleDiff}
-          onDiffWidthChange={() => {}}
-          onCloseDiff={onCloseDiff}
-          fileBrowserWidth={300}
-          onFileBrowserWidthChange={() => {}}
-          hideTitleBar
-        />
+        <ChatArea projectId={projectId} issueId={roomIssueId} hideTitleBar />
       </div>
     </div>
   )

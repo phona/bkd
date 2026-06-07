@@ -1,17 +1,20 @@
 import { ArrowLeft, Check, GitBranch, Link, Search, SquareTerminal } from 'lucide-react'
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { MobileSidebar } from '@/components/kanban/MobileSidebar'
 import { Button } from '@/components/ui/button'
+import { useChangesSummary } from '@/hooks/use-changes-summary'
 import { useIssue, useProject, useProjectWorktrees, useUpdateIssue } from '@/hooks/use-kanban'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { addRecentIssue } from '@/hooks/use-recent-issues'
-import { useFileBrowserStore } from '@/stores/file-browser-store'
+import { useDockStore } from '@/stores/dock-store'
 import { useTerminalStore } from '@/stores/terminal-store'
 import { getIssueUrl } from '@/stores/server-store'
 import { MiniMatrix } from '@/components/cockpit/MiniMatrix'
 import { ChatBody } from './ChatBody'
+import { DockRail } from './DockRail'
+import { MobileDockOverlay } from './MobileDockOverlay'
 import { isProgrammaticScroll } from './scroll-coordination'
 import {
   createAutoHideState,
@@ -19,32 +22,15 @@ import {
   nextAutoHideState,
 } from './title-auto-hide'
 
-const LazyDiffPanel = lazy(() => import('./DiffPanel').then(m => ({ default: m.DiffPanel })))
-const LazyFileBrowserPanel = lazy(() => import('../files/FileBrowserPanel').then(m => ({ default: m.FileBrowserPanel })))
-
 export function ChatArea({
   projectId,
   issueId,
-  showDiff,
-  diffWidth,
-  onToggleDiff,
-  onDiffWidthChange,
-  onCloseDiff,
-  fileBrowserWidth,
-  onFileBrowserWidthChange,
   showBackToList,
   backPath,
   hideTitleBar = false,
 }: {
   projectId: string
   issueId: string
-  showDiff: boolean
-  diffWidth: number
-  onToggleDiff: () => void
-  onDiffWidthChange: (w: number) => void
-  onCloseDiff: () => void
-  fileBrowserWidth: number
-  onFileBrowserWidthChange: (w: number) => void
   showBackToList?: boolean
   backPath?: string
   /**
@@ -64,6 +50,8 @@ export function ChatArea({
   // otherwise the project directory. Null → terminal opens in the default cwd.
   const terminalCwd
     = worktrees?.find(w => w.issueId === issueId)?.path ?? project?.directory ?? null
+  const changesSummary = useChangesSummary(projectId, issueId)
+  const changesRoot = (changesSummary as { root?: string } | null)?.root
   const scrollRef = useRef<HTMLDivElement>(null)
 
   // Track recently visited issues for global search
@@ -84,8 +72,47 @@ export function ChatArea({
   const [editingTitle, setEditingTitle] = useState(false)
   const [titleDraft, setTitleDraft] = useState('')
   const isMobile = useIsMobile()
-  const showFileBrowser = useFileBrowserStore(s => s.isOpen && !s.isDrawer && s.issueId === issueId)
-  const closeFileBrowser = useFileBrowserStore(s => s.close)
+
+  // Dock (PLAN-036): single right rail on desktop, summon overlays on mobile.
+  // The diff chip in the composer toggles the Diff surface here.
+  const dockOpen = useDockStore(s => s.open)
+  const dockCollapsed = useDockStore(s => s.collapsed)
+  const dockTab = useDockStore(s => s.tab)
+  const dockMobilePanel = useDockStore(s => s.mobilePanel)
+  const dockOpenTab = useDockStore(s => s.openTab)
+  const dockSetOpen = useDockStore(s => s.setOpen)
+  const dockOpenMobile = useDockStore(s => s.openMobile)
+  const dockCloseMobile = useDockStore(s => s.closeMobile)
+
+  const showDiff = isMobile
+    ? dockMobilePanel === 'diff'
+    : dockOpen && !dockCollapsed && dockTab === 'diff'
+
+  const handleToggleDiff = useCallback(() => {
+    if (isMobile) {
+      if (dockMobilePanel === 'diff') dockCloseMobile()
+      else dockOpenMobile('diff')
+      return
+    }
+    if (dockOpen && !dockCollapsed && dockTab === 'diff') dockSetOpen(false)
+    else dockOpenTab('diff')
+  }, [
+    isMobile,
+    dockMobilePanel,
+    dockOpen,
+    dockCollapsed,
+    dockTab,
+    dockCloseMobile,
+    dockOpenMobile,
+    dockSetOpen,
+    dockOpenTab,
+  ])
+
+  const handleOpenTerminal = useCallback(() => {
+    if (terminalCwd) useTerminalStore.getState().openInDir(terminalCwd)
+    if (isMobile) dockOpenMobile('terminal')
+    else dockOpenTab('terminal')
+  }, [terminalCwd, isMobile, dockOpenMobile, dockOpenTab])
 
   // Auto-hide title bar (mobile only) to maximise reading area.
   // Semantics align with Safari / Twitter / Instagram:
@@ -361,15 +388,7 @@ export function ChatArea({
               size="icon"
               className="h-6 w-6 md:h-7 md:w-7 shrink-0 text-muted-foreground hover:text-foreground transition-colors"
               title={t('chat.openTerminalHere', '在此工作目录打开终端')}
-              onClick={() => {
-                if (terminalCwd) {
-                  useTerminalStore.getState().openInDir(terminalCwd, isMobile)
-                } else if (isMobile) {
-                  useTerminalStore.getState().openFullscreen()
-                } else {
-                  useTerminalStore.getState().open()
-                }
-              }}
+              onClick={handleOpenTerminal}
             >
               <SquareTerminal className="h-3.5 w-3.5" />
             </Button>
@@ -400,7 +419,7 @@ export function ChatArea({
               issueId={issueId}
               issue={issue}
               showDiff={showDiff}
-              onToggleDiff={onToggleDiff}
+              onToggleDiff={handleToggleDiff}
               scrollRef={scrollRef}
               onAfterDelete={handleAfterDelete}
               titleVisible={titleVisible}
@@ -411,91 +430,28 @@ export function ChatArea({
         </div>
       </div>
 
-      {/* Diff panel — full-screen overlay on mobile, inline on desktop */}
-      {showDiff ?
-          (
-            isMobile ?
-                (
-                  <div className="fixed inset-0 z-40 bg-background flex flex-col">
-                    <Suspense
-                      fallback={(
-                        <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-                          {t('common.loading')}
-                        </div>
-                      )}
-                    >
-                      <LazyDiffPanel
-                        projectId={projectId}
-                        issueId={issueId}
-                        width={0}
-                        onWidthChange={onDiffWidthChange}
-                        onClose={onCloseDiff}
-                        fullScreen
-                        useWorktree={issue?.useWorktree}
-                      />
-                    </Suspense>
-                  </div>
-                ) :
-                (
-                  <Suspense
-                    fallback={(
-                      <div className="flex w-[360px] shrink-0 items-center justify-center border-l border-border bg-background text-sm text-muted-foreground">
-                        {t('common.loading')}
-                      </div>
-                    )}
-                  >
-                    <LazyDiffPanel
-                      projectId={projectId}
-                      issueId={issueId}
-                      width={diffWidth}
-                      onWidthChange={onDiffWidthChange}
-                      onClose={onCloseDiff}
-                      useWorktree={issue?.useWorktree}
-                    />
-                  </Suspense>
-                )
-          ) :
-        null}
-
-      {/* File browser panel — full-screen overlay on mobile, inline on desktop */}
-      {showFileBrowser
-        ? (
-            isMobile
-              ? (
-                  <div className="fixed inset-0 z-40 bg-background flex flex-col">
-                    <Suspense
-                      fallback={(
-                        <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-                          {t('common.loading')}
-                        </div>
-                      )}
-                    >
-                      <LazyFileBrowserPanel
-                        width={0}
-                        onWidthChange={onFileBrowserWidthChange}
-                        onClose={closeFileBrowser}
-                        fullScreen
-                      />
-                    </Suspense>
-                  </div>
-                )
-              : (
-                  <Suspense
-                    fallback={(
-                      <div className="flex w-[360px] shrink-0 items-center justify-center border-l border-border bg-background text-sm text-muted-foreground">
-                        {t('common.loading')}
-                      </div>
-                    )}
-                  >
-                    <LazyFileBrowserPanel
-                      width={fileBrowserWidth}
-                      onWidthChange={onFileBrowserWidthChange}
-                      onClose={closeFileBrowser}
-                    />
-                  </Suspense>
-                )
-          )
-        : null}
+      {/* Dock (PLAN-036): one persistent right rail on desktop hosting
+          Terminal / Files / Diff (resizable, collapsible, keep-alive);
+          full-screen summon overlays on mobile. */}
+      {isMobile ? (
+        <MobileDockOverlay
+          key={issueId}
+          projectId={projectId}
+          issueId={issueId}
+          terminalCwd={terminalCwd}
+          useWorktree={issue?.useWorktree}
+          changesRoot={changesRoot}
+        />
+      ) : (
+        <DockRail
+          key={issueId}
+          projectId={projectId}
+          issueId={issueId}
+          terminalCwd={terminalCwd}
+          useWorktree={issue?.useWorktree}
+          changesRoot={changesRoot}
+        />
+      )}
 
     </div>
   )

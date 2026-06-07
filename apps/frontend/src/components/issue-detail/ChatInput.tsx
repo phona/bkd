@@ -1,6 +1,7 @@
 import {
   ArrowUp,
   Eraser,
+  FileDiff,
   FileText,
   FolderOpen,
   Image as ImageIcon,
@@ -10,6 +11,7 @@ import {
   Play,
   RefreshCw,
   Square,
+  SquareTerminal,
   X,
 } from 'lucide-react'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
@@ -43,7 +45,8 @@ import { useIsMobile } from '@/hooks/use-mobile'
 import { apiErrorMessage } from '@/lib/api-error'
 import { formatFileSize, formatModelName } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import { useFileBrowserStore } from '@/stores/file-browser-store'
+import { useDockStore } from '@/stores/dock-store'
+import type { DockTab } from '@/stores/dock-store'
 import type { BusyAction, EngineModel, SessionStatus } from '@/types/kanban'
 
 // Mirrors apps/api/src/uploads.ts. Keep both sides in sync — backend
@@ -229,9 +232,17 @@ export function ChatInput({
   const changedCount = changesSummary?.fileCount ?? 0
   const additions = changesSummary?.additions ?? 0
   const deletions = changesSummary?.deletions ?? 0
-  const changesRoot = (changesSummary as { root?: string } | null)?.root
-  const openFileBrowser = useFileBrowserStore(s => s.openForIssue)
-  const fileBrowserOpen = useFileBrowserStore(s => s.isOpen)
+  // Dock (PLAN-036): the composer ⋯ menu summons Terminal / Files / Diff.
+  const dockOpenTab = useDockStore(s => s.openTab)
+  const dockOpenMobile = useDockStore(s => s.openMobile)
+  const dockMobilePanel = useDockStore(s => s.mobilePanel)
+  const openDock = useCallback(
+    (tab: DockTab) => {
+      if (isMobile) dockOpenMobile(tab)
+      else dockOpenTab(tab)
+    },
+    [isMobile, dockOpenMobile, dockOpenTab],
+  )
 
   // Fetch models for current engine, filtering out hidden ones
   const { data: discovery } = useEngineAvailability(!!engineType)
@@ -599,8 +610,8 @@ export function ChatInput({
   // Auto-grow textarea: shrink to content, expand up to ~8 lines, then scroll.
   // useLayoutEffect runs before paint so the resize never flashes a stale
   // height. Skipped while a manual override is active.
-  // Re-runs when fileBrowserOpen changes so the height recalculates after
-  // returning from the fullscreen file-browser overlay on mobile.
+  // Re-runs when the mobile dock overlay closes so the height recalculates
+  // after returning from a fullscreen summon overlay on mobile.
   useLayoutEffect(() => {
     if (manualHeight !== null) return
     const ta = textareaRef.current
@@ -608,7 +619,7 @@ export function ChatInput({
     ta.style.height = '0px'
     const next = Math.min(ta.scrollHeight, 200)
     ta.style.height = `${Math.max(next, 32)}px`
-  }, [input, manualHeight, fileBrowserOpen])
+  }, [input, manualHeight, dockMobilePanel])
 
   // Apply manual height when user drags the resize handle.
   useLayoutEffect(() => {
@@ -884,7 +895,7 @@ export function ChatInput({
                 showBusyAction={isSessionActive && !isThinking}
                 isSessionActive={isSessionActive}
                 onRefreshLogs={onRefreshLogs}
-                onOpenFileBrowser={() => projectId && issueId && openFileBrowser(projectId, issueId, changesRoot)}
+                onOpenDock={openDock}
                 onClearSession={() => setClearSessionOpen(true)}
                 clearSessionDisabled={!issueId || isSessionActive || clearSession.isPending}
                 compact
@@ -956,7 +967,7 @@ export function ChatInput({
           <div className="max-md:hidden">
             <DesktopMoreMenu
               onRefreshLogs={onRefreshLogs}
-              onOpenFileBrowser={() => projectId && issueId && openFileBrowser(projectId, issueId, changesRoot)}
+              onOpenDock={openDock}
               onClearSession={() => setClearSessionOpen(true)}
               clearSessionDisabled={!issueId || isSessionActive || clearSession.isPending}
             />
@@ -1001,7 +1012,7 @@ export function ChatInput({
               showBusyAction={isSessionActive && !isThinking}
               isSessionActive={isSessionActive}
               onRefreshLogs={onRefreshLogs}
-              onOpenFileBrowser={() => projectId && issueId && openFileBrowser(projectId, issueId, changesRoot)}
+              onOpenDock={openDock}
               onClearSession={() => setClearSessionOpen(true)}
               clearSessionDisabled={!issueId || isSessionActive || clearSession.isPending}
             />
@@ -1247,7 +1258,7 @@ function MobileMoreMenu({
   showBusyAction,
   isSessionActive,
   onRefreshLogs,
-  onOpenFileBrowser,
+  onOpenDock,
   onClearSession,
   clearSessionDisabled,
   compact = false,
@@ -1264,7 +1275,7 @@ function MobileMoreMenu({
   showBusyAction: boolean
   isSessionActive: boolean
   onRefreshLogs?: () => void
-  onOpenFileBrowser: () => void
+  onOpenDock: (tab: DockTab) => void
   onClearSession: () => void
   clearSessionDisabled: boolean
   /** Compact trigger size for the collapsed reading-mode input strip. */
@@ -1378,14 +1389,30 @@ function MobileMoreMenu({
           <span>{t('chat.refreshLogs')}</span>
         </button>
 
-        {/* Files */}
+        {/* Dock: Terminal / Files / Diff — summoned full-screen on mobile */}
         <button
           type="button"
-          onClick={onOpenFileBrowser}
+          onClick={() => onOpenDock('terminal')}
+          className="flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-xs text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors"
+        >
+          <SquareTerminal className="size-3.5" />
+          <span>{t('dock.terminal')}</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => onOpenDock('files')}
           className="flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-xs text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors"
         >
           <FolderOpen className="size-3.5" />
-          <span>{t('diff.openFiles')}</span>
+          <span>{t('dock.files')}</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => onOpenDock('diff')}
+          className="flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-xs text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors"
+        >
+          <FileDiff className="size-3.5" />
+          <span>{t('dock.diff')}</span>
         </button>
 
         {/* Clear session */}
@@ -1413,12 +1440,12 @@ function MobileMoreMenu({
 
 function DesktopMoreMenu({
   onRefreshLogs,
-  onOpenFileBrowser,
+  onOpenDock,
   onClearSession,
   clearSessionDisabled,
 }: {
   onRefreshLogs?: () => void
-  onOpenFileBrowser: () => void
+  onOpenDock: (tab: DockTab) => void
   onClearSession: () => void
   clearSessionDisabled: boolean
 }) {
@@ -1444,11 +1471,19 @@ function DesktopMoreMenu({
         </button>
         <button
           type="button"
-          onClick={onOpenFileBrowser}
+          onClick={() => onOpenDock('terminal')}
+          className="flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-xs text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors"
+        >
+          <SquareTerminal className="size-3.5" />
+          <span>{t('dock.terminal')}</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => onOpenDock('files')}
           className="flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-xs text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors"
         >
           <FolderOpen className="size-3.5" />
-          <span>{t('diff.openFiles')}</span>
+          <span>{t('dock.files')}</span>
         </button>
         <div className="h-px bg-border/30 my-1" />
         <button
