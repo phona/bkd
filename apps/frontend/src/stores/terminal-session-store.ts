@@ -2,6 +2,14 @@ import type { FitAddon } from '@xterm/addon-fit'
 import type { Terminal } from '@xterm/xterm'
 import { create } from 'zustand'
 
+/**
+ * Mobile terminal helper bar: the sticky Ctrl modifier.
+ *  - `off`  — no modifier armed
+ *  - `once` — one-shot: applied to the next typed key, then auto-clears
+ *  - `lock` — locked on until the user taps Ctrl off (long-press to engage)
+ */
+export type CtrlMode = 'off' | 'once' | 'lock'
+
 interface TerminalSessionStore {
   terminal: Terminal | null
   fitAddon: FitAddon | null
@@ -11,6 +19,8 @@ interface TerminalSessionStore {
   connecting: Promise<void> | null
   initialized: boolean
   disposed: boolean
+  /** Sticky Ctrl modifier for the mobile terminal helper key bar. */
+  ctrlMode: CtrlMode
   set: (partial: Partial<Omit<TerminalSessionStore, 'set' | 'reset'>>) => void
   reset: () => void
 }
@@ -24,6 +34,7 @@ const initialState = {
   connecting: null,
   initialized: false,
   disposed: false,
+  ctrlMode: 'off' as CtrlMode,
 }
 
 export const useTerminalSessionStore = create<TerminalSessionStore>(set => ({

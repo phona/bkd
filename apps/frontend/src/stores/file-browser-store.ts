@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { attachResizeClamp } from '@/lib/store-resize'
+import { useDockStore } from '@/stores/dock-store'
 
 const MIN_WIDTH = 320
 const DEFAULT_WIDTH_RATIO = 0.35
@@ -50,6 +51,12 @@ interface FileBrowserStore {
   open: (projectId: string, rootPath?: string) => void
   /** Open for a specific issue — tracks path per issue, opens as inline panel. */
   openForIssue: (projectId: string, issueId: string, rootPath?: string) => void
+  /**
+   * Point the browser at an issue's context WITHOUT toggling visibility.
+   * Used by the issue-detail dock rail (PLAN-036): the rail owns show/hide,
+   * the store only needs the right project/issue/root + restored path.
+   */
+  setIssueContext: (projectId: string, issueId: string, rootPath?: string) => void
   openFullscreen: (projectId: string, rootPath?: string) => void
   /**
    * Quick-preview entry: open the drawer (fullscreen on mobile) navigated
@@ -166,6 +173,22 @@ export const useFileBrowserStore = create<FileBrowserStore>(set => ({
         ...ctx,
       }
     }),
+  setIssueContext: (projectId, issueId, rootPath) =>
+    set((s) => {
+      // Already pointed at this issue — nothing to do (avoids resetting the
+      // browsed path every render).
+      if (!s.isDrawer && s.projectId === projectId && s.issueId === issueId) {
+        return {}
+      }
+      const ctx = switchContext(s, projectId, rootPath ?? null, issueId)
+      return {
+        isDrawer: false,
+        projectId,
+        issueId,
+        rootPath: rootPath ?? null,
+        ...ctx,
+      }
+    }),
   openAt: ({ projectId, issueId, rootPath, path, line }) =>
     set((s) => {
       // Normalize the incoming path: strip leading "./", flip backslashes.
@@ -181,10 +204,15 @@ export const useFileBrowserStore = create<FileBrowserStore>(set => ({
       // open for table extensions; user can manually shrink with the
       // existing minimize/back button.
       const isTable = /\.(xlsx?|csv|tsv)$/i.test(normalized)
+      // Surface the preview in the issue-detail dock rail (PLAN-036): the
+      // standalone file-browser drawer was removed, so path-chip clicks now
+      // drive the rail's Files tab (desktop) / mobile Files overlay.
+      if (isMobile) useDockStore.getState().openMobile('files')
+      else useDockStore.getState().openTab('files')
       return {
         isOpen: true,
         isMinimized: false,
-        isDrawer: true,
+        isDrawer: false,
         isFullscreen: isMobile || isTable,
         projectId,
         issueId: issueId ?? null,

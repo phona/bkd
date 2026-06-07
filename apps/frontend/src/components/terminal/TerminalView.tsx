@@ -79,6 +79,29 @@ function encodeInput(data: string): ArrayBuffer {
   return buf.buffer
 }
 
+/**
+ * Map a single printable character to its ASCII control code (Ctrl+X).
+ * `a`/`A` → 0x01 … `z`/`Z` → 0x1a, plus the standard @[\]^_ range.
+ * Non-single or non-mappable input passes through untouched.
+ */
+function applyCtrl(data: string): string {
+  if (data.length !== 1) return data
+  const code = data.toUpperCase().charCodeAt(0)
+  if (code >= 0x40 && code <= 0x5F) return String.fromCharCode(code & 0x1F)
+  return data
+}
+
+/**
+ * Send a raw input sequence to the live terminal PTY (mobile helper keys:
+ * Esc / Tab / arrows / symbols). No-op when the socket is not open.
+ */
+export function sendTerminalInput(data: string): void {
+  const { ws } = useTerminalSessionStore.getState()
+  if (ws?.readyState === WebSocket.OPEN) {
+    ws.send(encodeInput(data))
+  }
+}
+
 function encodeResize(cols: number, rows: number): ArrayBuffer {
   const buf = new ArrayBuffer(5)
   const view = new DataView(buf)
@@ -439,12 +462,18 @@ export function TerminalView({ className }: { className?: string }) {
       void initConnection(terminal, fitAddon)
     })
 
-    // Terminal input -> WS binary
+    // Terminal input -> WS binary. The mobile helper bar's sticky Ctrl
+    // modifier (ctrlMode) rewrites the next printable keystroke into its
+    // control code; a one-shot arm auto-clears after a single key.
     const inputDisposable = terminal.onData((data) => {
       const s = store.getState()
-      if (s.ws?.readyState === WebSocket.OPEN) {
-        s.ws.send(encodeInput(data))
+      if (s.ws?.readyState !== WebSocket.OPEN) return
+      let out = data
+      if (s.ctrlMode !== 'off') {
+        out = applyCtrl(data)
+        if (s.ctrlMode === 'once') s.set({ ctrlMode: 'off' })
       }
+      s.ws.send(encodeInput(out))
     })
 
     // Observe container resize
