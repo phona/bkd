@@ -64,4 +64,4 @@ Each plan is a single line linking to its detail file. All detailed information 
 - [-] [**PLAN-033 Chat input focus management**](PLAN-033.md) `2026-06-06`
 - [x] [**PLAN-034 Chat message rendering robustness**](PLAN-034.md) `2026-06-06`
 - [x] [**PLAN-035 Diff inline comments → send to agent**](PLAN-035.md) `2026-06-06`
-- [ ] [**PLAN-036 Desktop dock rail + mobile summon panels (terminal/files/diff)**](PLAN-036.md) `2026-06-07`
+- [-] [**PLAN-036 Desktop dock rail + mobile summon panels (terminal/files/diff)**](PLAN-036.md) `2026-06-07`

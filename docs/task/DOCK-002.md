@@ -1,7 +1,7 @@
 ---
 id: DOCK-002
 title: Desktop dock rail + mobile summon panels (terminal / files / diff)
-status: todo
+status: in_progress
 priority: P1
 owner: claude
 created: 2026-06-07
