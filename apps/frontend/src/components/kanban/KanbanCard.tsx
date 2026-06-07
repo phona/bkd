@@ -8,9 +8,10 @@ import {
   draggable,
   dropTargetForElements,
 } from '@atlaskit/pragmatic-drag-and-drop/element/adapter'
-import { Pin } from 'lucide-react'
+import { GitBranch, Pin } from 'lucide-react'
 import { memo, useEffect, useRef, useState } from 'react'
 import { IssueContextMenu, IssueContextMenuButton } from '@/components/issue-detail/IssueContextMenu'
+import { StatusGlyph } from '@/components/ui/status-glyph'
 import type { Issue } from '@/types/kanban'
 import { DoneDiffHover } from './DoneDiffHover'
 
@@ -113,6 +114,27 @@ export const KanbanCard = memo(({
                   {t}
                 </span>
               ))}
+            </div>
+          )
+        : null}
+
+      {/* Workspace + run state (PLAN-030): glanceable status glyph + worktree
+          branch chip (teal accent), visible on mobile too. */}
+      {(issue.sessionStatus || issue.useWorktree)
+        ? (
+            <div className="mt-1.5 flex items-center gap-1.5 text-[10px] text-muted-foreground">
+              <StatusGlyph status={issue.sessionStatus} />
+              {issue.useWorktree
+                ? (
+                    <span
+                      className="inline-flex min-w-0 items-center gap-0.5 truncate font-mono"
+                      style={{ color: 'var(--accent-brand)' }}
+                    >
+                      <GitBranch className="size-2.5 shrink-0" aria-hidden />
+                      {issue.worktreeBranchName ? <span className="truncate">{issue.worktreeBranchName}</span> : null}
+                    </span>
+                  )
+                : null}
             </div>
           )
         : null}

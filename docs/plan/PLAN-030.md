@@ -1,9 +1,9 @@
 # PLAN-030 Branch/workspace interaction redesign — visibility + merge-back
 
-- **status**: draft
+- **status**: implementing
 - **createdAt**: 2026-06-06
-- **approvedAt**: (pending)
-- **relatedTask**: WT-003 (to be created)
+- **approvedAt**: 2026-06-06
+- **relatedTask**: WT-003
 - **depends on**: PLAN-028
 - **builds on**: PLAN-025 / WT-001 (base branch + custom branch name — already done)
 
