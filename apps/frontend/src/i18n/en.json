@@ -280,6 +280,18 @@
   },
   "diff": {
     "changes": "Changes",
+    "review": {
+      "add": "Add comment",
+      "placeholder": "Write a comment…",
+      "save": "Save",
+      "count": "{{count}} comments",
+      "send": "Send to agent",
+      "sending": "Sending…",
+      "clear": "Clear",
+      "introPlaceholder": "Intro for the agent (optional)…",
+      "outroPlaceholder": "Closing note (optional)…",
+      "clearAfter": "Clear comments after sending"
+    },
     "closeDiffPanel": "Close diff panel",
     "sharedWorkspaceHint": "This issue shares the project's working directory — the changes below include every dirty file in that workspace (other issues, manual edits, …), not just what this issue produced.",
     "aiEditedTitle": "Files the agent edited",

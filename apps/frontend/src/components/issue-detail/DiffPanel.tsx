@@ -10,6 +10,7 @@ import {
 import { useTheme } from '@/hooks/use-theme'
 import type { IssueChangedFile } from '@/types/kanban'
 import { DIFF_MIN_WIDTH } from './diff-constants'
+import { ReviewSendBar, useReviewAnnotations } from './DiffReview'
 
 const LazyMultiFileDiff = lazy(() =>
   import('@pierre/diffs/react').then(m => ({ default: m.MultiFileDiff })),
@@ -188,6 +189,7 @@ export function DiffPanel({
                       null}
                   </div>
                 )}
+        <ReviewSendBar projectId={projectId} issueId={issueId} />
       </div>
     </div>
   )
@@ -612,6 +614,8 @@ function DiffFileCard({
         { oldText: patch.oldText, newText: patch.newText } :
       null
 
+  const review = useReviewAnnotations(issueId, path)
+
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const handleCopyPath = useCallback(
     (e: React.MouseEvent) => {
@@ -730,6 +734,9 @@ function DiffFileCard({
                                   themeType,
                                   disableFileHeader: true,
                                 }}
+                                lineAnnotations={review.lineAnnotations}
+                                renderHoverUtility={review.renderHoverUtility}
+                                renderAnnotation={review.renderAnnotation}
                               />
                             </Suspense>
                           </div>

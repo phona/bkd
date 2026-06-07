@@ -276,6 +276,18 @@
   },
   "diff": {
     "changes": "更改",
+    "review": {
+      "add": "添加评论",
+      "placeholder": "写下评论…",
+      "save": "保存",
+      "count": "{{count}} 条评论",
+      "send": "发给 agent",
+      "sending": "发送中…",
+      "clear": "清空",
+      "introPlaceholder": "给 agent 的开头说明（可选）…",
+      "outroPlaceholder": "结尾补充（可选）…",
+      "clearAfter": "发送后清空评论"
+    },
     "closeDiffPanel": "关闭更改面板",
     "sharedWorkspaceHint": "此 issue 与项目共用工作目录，下方更改包含整个工作区的所有脏改动（含其他 issue 与手动编辑），并非仅此 issue 产生。",
     "aiEditedTitle": "Agent 编辑过的文件",
