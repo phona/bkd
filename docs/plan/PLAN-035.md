@@ -1,9 +1,9 @@
 # PLAN-035 Diff inline comments → send to agent (borrowed from AoE)
 
-- **status**: draft
+- **status**: implementing
 - **createdAt**: 2026-06-06
-- **approvedAt**: (pending)
-- **relatedTask**: DIFF-001 (to be created)
+- **approvedAt**: 2026-06-06
+- **relatedTask**: DIFF-001
 
 ## Context
 
