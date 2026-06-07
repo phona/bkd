@@ -12,11 +12,9 @@ import { useAuth } from './hooks/use-auth'
 import { useReviewNotifications } from './hooks/use-review-notifications'
 import { useSystemInfo } from './hooks/use-kanban'
 import { eventBus } from './lib/event-bus'
-import { useFileBrowserStore } from './stores/file-browser-store'
 import { useNotesStore } from './stores/notes-store'
 import { useProcessManagerStore } from './stores/process-manager-store'
 import { useServerStore } from './stores/server-store'
-import { useTerminalStore } from './stores/terminal-store'
 import './i18n'
 import './index.css'
 
@@ -88,16 +86,6 @@ const WorkspacePage = lazy(() => import('./pages/WorkspacePage'))
 const SearchPage = lazy(() => import('./pages/SearchPage'))
 const LoginPage = lazy(() => import('./pages/LoginPage'))
 const LoginCallbackPage = lazy(() => import('./pages/LoginCallbackPage'))
-const LazyTerminalDrawer = lazy(() =>
-  import('./components/terminal/TerminalDrawer').then(m => ({
-    default: m.TerminalDrawer,
-  })),
-)
-const LazyFileBrowserDrawer = lazy(() =>
-  import('./components/files/FileBrowserDrawer').then(m => ({
-    default: m.FileBrowserDrawer,
-  })),
-)
 const LazyProcessManagerDrawer = lazy(() =>
   import('./components/processes/ProcessManagerDrawer').then(m => ({
     default: m.ProcessManagerDrawer,
@@ -136,30 +124,6 @@ function AppShell({ children }: { children: React.ReactNode }) {
 function ReviewNotificationsMount() {
   useReviewNotifications()
   return null
-}
-
-function TerminalDrawerMount() {
-  const isOpen = useTerminalStore(s => s.isOpen)
-
-  if (!isOpen) return null
-
-  return (
-    <Suspense fallback={null}>
-      <LazyTerminalDrawer />
-    </Suspense>
-  )
-}
-
-function FileBrowserDrawerMount() {
-  const isOpen = useFileBrowserStore(s => s.isOpen)
-
-  if (!isOpen) return null
-
-  return (
-    <Suspense fallback={null}>
-      <LazyFileBrowserDrawer />
-    </Suspense>
-  )
 }
 
 function ProcessManagerDrawerMount() {
@@ -436,8 +400,6 @@ if (!rootElement.innerHTML) {
               </Routes>
             </Suspense>
           </AppShell>
-          <TerminalDrawerMount />
-          <FileBrowserDrawerMount />
           <ProcessManagerDrawerMount />
           <NotesDrawerMount />
           <EventBusManager />

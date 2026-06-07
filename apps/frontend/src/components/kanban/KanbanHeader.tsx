@@ -1,10 +1,9 @@
-import { Activity, FolderOpen, Network, Plus, Search, Settings } from 'lucide-react'
+import { Activity, Network, Plus, Search, Settings } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { ProjectSettingsDialog } from '@/components/ProjectSettingsDialog'
 import { Button } from '@/components/ui/button'
-import { useFileBrowserStore } from '@/stores/file-browser-store'
 import { usePanelStore } from '@/stores/panel-store'
 import { useProcessManagerStore } from '@/stores/process-manager-store'
 import type { Project } from '@/types/kanban'
@@ -26,7 +25,6 @@ export function KanbanHeader({
 }) {
   const { t } = useTranslation()
   const openCreateDialog = usePanelStore(s => s.openCreateDialog)
-  const toggleFileBrowser = useFileBrowserStore(s => s.toggleDrawer)
   const toggleProcessManager = useProcessManagerStore(s => s.toggle)
   const navigate = useNavigate()
   const [showSettings, setShowSettings] = useState(false)
@@ -47,17 +45,6 @@ export function KanbanHeader({
           >
             <Settings className="h-3.5 w-3.5" />
           </button>
-          {project.directory && (
-            <button
-              type="button"
-              onClick={() => toggleFileBrowser(project.alias, project.directory ?? undefined)}
-              className="rounded-md p-1 text-muted-foreground hover:text-foreground hover:bg-foreground/[0.07] transition-colors shrink-0"
-              aria-label={t('viewMode.files')}
-              title={t('viewMode.files')}
-            >
-              <FolderOpen className="h-3.5 w-3.5" />
-            </button>
-          )}
           <button
             type="button"
             onClick={() => toggleProcessManager()}

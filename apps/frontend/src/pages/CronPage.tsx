@@ -14,7 +14,7 @@ import {
 } from 'lucide-react'
 import { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { AppLogo } from '@/components/AppLogo'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -23,7 +23,6 @@ import { useCronJobs } from '@/hooks/use-kanban'
 import type { CronJob, CronJobLog, CronJobLogsResponse } from '@/lib/kanban-api'
 import { kanbanApi } from '@/lib/kanban-api'
 import { useNotesStore } from '@/stores/notes-store'
-import { useTerminalStore } from '@/stores/terminal-store'
 
 const LOG_PAGE_SIZE = 20
 
@@ -380,6 +379,7 @@ function LogEntry({ log }: { log: CronJobLog }) {
 
 export default function CronPage() {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const { data: jobs, isLoading } = useCronJobs()
   const [selectedJob, setSelectedJob] = useState<CronJob | null>(null)
   const [showDeleted, setShowDeleted] = useState(false)
@@ -414,7 +414,7 @@ export default function CronPage() {
               variant="ghost"
               size="icon"
               className="h-8 w-8 text-muted-foreground"
-              onClick={useTerminalStore.getState().toggle}
+              onClick={() => navigate('/terminal')}
               aria-label={t('terminal.title')}
             >
               <TerminalSquare className="h-4 w-4" />

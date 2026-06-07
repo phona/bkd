@@ -43,7 +43,6 @@ import { useIsMobile } from '@/hooks/use-mobile'
 import { useProjectStats } from '@/hooks/use-project-stats'
 import { getProjectInitials } from '@/lib/format'
 import { useNotesStore } from '@/stores/notes-store'
-import { useTerminalStore } from '@/stores/terminal-store'
 import { useViewModeStore } from '@/stores/view-mode-store'
 import type { Project } from '@/types/kanban'
 
@@ -375,7 +374,7 @@ function MobileHomeMenu({
                 type="button"
                 onClick={() => {
                   setOpen(false)
-                  useTerminalStore.getState().openFullscreen()
+                  navigate('/terminal')
                 }}
                 className="flex items-center gap-3 w-full px-4 min-h-[48px] text-sm text-foreground/80 hover:bg-accent/50 active:bg-accent transition-colors"
               >
@@ -467,7 +466,7 @@ function DesktopHeaderControls({
         variant="ghost"
         size="icon"
         className="h-8 w-8 text-muted-foreground"
-        onClick={useTerminalStore.getState().toggle}
+        onClick={() => navigate('/terminal')}
         aria-label={t('terminal.title')}
       >
         <TerminalSquare className="h-4 w-4" />

@@ -1,6 +1,5 @@
 import {
   Activity,
-  FolderOpen,
   MoreHorizontal,
   Network,
   Plus,
@@ -17,7 +16,6 @@ import { useIssues, useProject } from '@/hooks/use-kanban'
 import { tStatus } from '@/lib/i18n-utils'
 import type { StatusDefinition } from '@/lib/statuses'
 import { STATUSES } from '@/lib/statuses'
-import { useFileBrowserStore } from '@/stores/file-browser-store'
 import { usePanelStore } from '@/stores/panel-store'
 import { useProcessManagerStore } from '@/stores/process-manager-store'
 import type { Issue } from '@/types/kanban'
@@ -42,7 +40,6 @@ export function IssueListPanel({
   const { data: issues } = useIssues(projectId)
   const { data: project } = useProject(projectId)
   const openCreateDialog = usePanelStore(s => s.openCreateDialog)
-  const toggleFileBrowser = useFileBrowserStore(s => s.toggleDrawer)
   const toggleProcessManager = useProcessManagerStore(s => s.toggle)
   const [search, setSearch] = useState('')
   const [showSettings, setShowSettings] = useState(false)
@@ -96,18 +93,6 @@ export function IssueListPanel({
           >
             <Settings className="h-3.5 w-3.5" />
           </Button>
-          {project?.directory && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 text-muted-foreground hover:text-foreground"
-              onClick={() => toggleFileBrowser(projectId, project?.directory ?? undefined)}
-              aria-label={t('viewMode.files')}
-              title={t('viewMode.files')}
-            >
-              <FolderOpen className="h-3.5 w-3.5" />
-            </Button>
-          )}
           <Button
             variant="ghost"
             size="icon"

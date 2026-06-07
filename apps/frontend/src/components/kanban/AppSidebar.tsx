@@ -13,7 +13,6 @@ import { useProjects } from '@/hooks/use-kanban'
 import { useReviewReadStatus } from '@/hooks/use-review-read-status'
 import { getProjectInitials } from '@/lib/format'
 import { useNotesStore } from '@/stores/notes-store'
-import { useTerminalStore } from '@/stores/terminal-store'
 import { useViewModeStore } from '@/stores/view-mode-store'
 import type { Project } from '@/types/kanban'
 
@@ -89,8 +88,6 @@ export function AppSidebar({ activeProjectId }: { activeProjectId: string }) {
   const [showSettings, setShowSettings] = useState(false)
   const projectPath = useViewModeStore(s => s.projectPath)
   const connected = useEventConnection()
-  const toggleTerminal = useTerminalStore(s => s.toggle)
-  const isTerminalMinimized = useTerminalStore(s => s.isMinimized)
   const toggleNotes = useNotesStore(s => s.toggle)
   const isNotesMinimized = useNotesStore(s => s.isMinimized)
   const collapsed = useViewModeStore(s => s.sidebarCollapsed)
@@ -184,15 +181,12 @@ export function AppSidebar({ activeProjectId }: { activeProjectId: string }) {
         <Button
           variant="ghost"
           size="icon"
-          onClick={toggleTerminal}
+          onClick={() => navigate('/terminal')}
           className="relative h-9 w-9 text-muted-foreground"
           aria-label={t('terminal.title')}
           title={t('terminal.title')}
         >
           <TerminalSquare className="h-4 w-4" />
-          {isTerminalMinimized && (
-            <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-primary" />
-          )}
         </Button>
         <Button
           variant="ghost"

@@ -12,7 +12,6 @@ import { useProjects } from '@/hooks/use-kanban'
 import { useReviewReadStatus } from '@/hooks/use-review-read-status'
 import { getProjectInitials } from '@/lib/format'
 import { useNotesStore } from '@/stores/notes-store'
-import { useTerminalStore } from '@/stores/terminal-store'
 import type { Project } from '@/types/kanban'
 
 export function MobileSidebarTrigger({ onOpen, badge }: { onOpen: () => void, badge?: boolean }) {
@@ -162,7 +161,7 @@ export function MobileSidebar({
                 type="button"
                 onClick={() => {
                   setOpen(false)
-                  useTerminalStore.getState().openFullscreen()
+                  void navigate('/terminal')
                 }}
                 className="flex items-center gap-3 w-full px-4 min-h-[44px] text-sm text-foreground/80 hover:bg-accent/50 active:bg-accent transition-colors"
               >

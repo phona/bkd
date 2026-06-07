@@ -23,7 +23,6 @@ import {
   CommandList,
   CommandSeparator,
 } from '@/components/ui/command'
-import { useTerminalStore } from '@/stores/terminal-store'
 import { useViewModeStore } from '@/stores/view-mode-store'
 import { formatRelativeTime } from '@/lib/format'
 import type { ProcessInfo } from '@/types/kanban'
@@ -69,7 +68,7 @@ export function SearchContent({
         id: 'terminal',
         icon: TerminalSquare,
         label: t('search.openTerminal', '终端'),
-        action: () => useTerminalStore.getState().openFullscreen(),
+        action: () => navigate('/terminal'),
       },
       {
         id: 'cron',
