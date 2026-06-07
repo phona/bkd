@@ -893,7 +893,22 @@ export function ChatInput({
             onChange={handleInput}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
-            onFocus={() => setIsFocused(true)}
+            onFocus={() => {
+              setIsFocused(true)
+              // Entering edit mode expands the collapsed mobile toolbar (taller
+              // composer). If the user was at the bottom, re-pin to bottom after
+              // the expand lays out so the toolbar never covers the last message
+              // (BUG-008). Mirrors the post-send auto-scroll above.
+              const el = scrollRef?.current
+              if (el && el.scrollHeight - el.scrollTop - el.clientHeight < 120) {
+                setTimeout(() => {
+                  scrollRef?.current?.scrollTo({
+                    top: scrollRef.current.scrollHeight,
+                    behavior: 'smooth',
+                  })
+                }, 180)
+              }
+            }}
             onBlur={() => setIsFocused(false)}
             placeholder={
               isDoneIssue ?
