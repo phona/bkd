@@ -24,11 +24,8 @@ import {
 // chat-body padding follows visibility. These tests pin the state machine
 // semantics so the direction cannot silently flip.
 //
-// NOTE (open UX question): bkd's chat is bottom-anchored, so "hide on
-// down-scroll" means the bar hides as you return to the latest message and
-// shows while reading history — the opposite of giving space while reading.
-// If on-device use says that feels wrong, the fix is in title-auto-hide.ts,
-// not here.
+// Decided (2026-06-06): align with mainstream apps (down-scroll → hide,
+// up-scroll → show) and keep it, even though bkd's chat is bottom-anchored.
 
 const FAR_FROM_EDGES: Pick<ScrollSample, 'scrollHeight' | 'clientHeight'> = {
   scrollHeight: 5000,
