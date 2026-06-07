@@ -85,7 +85,6 @@ export function ChatInput({
   onRefreshLogs,
   pendingEditContent,
   onPendingEditConsumed,
-  titleVisible = true,
   searchOpen = false,
 }: {
   projectId?: string
@@ -107,13 +106,6 @@ export function ChatInput({
   pendingEditContent?: string | null
   onPendingEditConsumed?: () => void
   searchOpen?: boolean
-  /**
-   * Mobile reading signal from ChatArea's title auto-hide. When the title bar
-   * is hidden (user scrolled away to read), collapse the input too so chrome
-   * shrinks consistently — even if the textarea is still focused (mobile
-   * doesn't blur on scroll). Empty-input gate still protects unsent drafts.
-   */
-  titleVisible?: boolean
 }) {
   const { t } = useTranslation()
   const isMobile = useIsMobile()
@@ -687,9 +679,12 @@ export function ChatInput({
 
   const hasChanges = changedCount > 0
 
+  // Composer collapse depends ONLY on focus — NOT on scroll/titleVisible — so
+  // the composer height never changes mid-scroll (which would reflow the list
+  // and make the bottom a moving target). Feed-style auto-hide must not reflow.
   const mobileCollapsed =
     isMobile
-    && (!isFocused || !titleVisible)
+    && !isFocused
     && input.length === 0
     && attachedFiles.length === 0
     && !isDoneIssue

@@ -469,10 +469,13 @@ export function ChatBody({
               the padding to 8px so the chat content reclaims the freed space
               (otherwise the user gets no real benefit from auto-hide). Desktop
               keeps the tight `py-1` baseline. */}
+          {/* Top padding is STABLE (always reserves the title-bar height on
+              mobile). The title auto-hide is a pure absolute overlay; toggling
+              this padding with titleVisible used to reflow the whole list during
+              scroll, making the bottom a moving target (BUG-008 — feed-style
+              auto-hide must not change layout). */}
           <div
-            className={`flex flex-col min-h-full justify-end py-1 transition-[padding-top] duration-200 ease-out ${
-              titleVisible ? 'max-md:pt-[44px]' : 'max-md:pt-2'
-            }`}
+            className="flex flex-col min-h-full justify-end py-1 max-md:pt-[44px]"
           >
             <Suspense
               fallback={
@@ -699,7 +702,6 @@ export function ChatBody({
         diffOpen={showDiff}
         onToggleDiff={onToggleDiff}
         scrollRef={scrollRef}
-        titleVisible={titleVisible}
         searchOpen={searchOpen}
         engineType={issue.engineType ?? undefined}
         model={issue.model ?? undefined}
