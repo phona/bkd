@@ -45,3 +45,7 @@ Big-bang rewrite — rejected; incremental splits with test coverage are safer.
 
 - 2026-06-06: Created. Lowest sequencing priority; do after constitution + the
   user-facing wins (029/030).
+- 2026-06-06: Ride-along from AoE sweep — when splitting ChatInput, adopt AoE's
+  **composer shape** (clean bar, progressive disclosure) and add an **@file picker**
+  for context; ToolItems split should use a **kind→component registry** (from PLAN-034
+  cross-ref).

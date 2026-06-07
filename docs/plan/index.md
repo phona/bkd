@@ -52,7 +52,7 @@ Each plan is a single line linking to its detail file. All detailed information 
 - [x] [**PLAN-021 One-click fork current issue into a new spawned issue**](PLAN-021.md) `2026-05-19`
 - [-] [**PLAN-022 Cockpit secretary — AI-enriched decision cards + single decision-stream UI**](PLAN-022.md) `2026-05-20`
 - [x] [**PLAN-023 Terminal PTY leak fix and slot accounting**](PLAN-023.md) `2026-06-06`
-- [ ] [**PLAN-024 Installable PWA (manifest + service worker)**](PLAN-024.md) `2026-06-06`
+- [x] [**PLAN-024 Installable PWA (manifest + service worker)**](PLAN-024.md) `2026-06-06`
 - [x] [**PLAN-025 Worktree base branch and custom branch name**](PLAN-025.md) `2026-06-06`
 - [x] [**PLAN-026 Worktree-aware terminal cwd**](PLAN-026.md) `2026-06-06`
 - [~] [**PLAN-027 Dockable, persistent panels (terminal / diff / file browser)**](PLAN-027.md) `2026-06-06`
@@ -60,3 +60,7 @@ Each plan is a single line linking to its detail file. All detailed information 
 - [ ] [**PLAN-029 Secretary — cockpit reborn as a push inbox (supersedes PLAN-022)**](PLAN-029.md) `2026-06-06`
 - [ ] [**PLAN-030 Branch/workspace interaction redesign — visibility + merge-back**](PLAN-030.md) `2026-06-06`
 - [ ] [**PLAN-031 Decompose giant components per DESIGN.md C**](PLAN-031.md) `2026-06-06`
+- [ ] [**PLAN-032 Chat reliability — single seq-indexed array**](PLAN-032.md) `2026-06-06`
+- [ ] [**PLAN-033 Chat input focus management**](PLAN-033.md) `2026-06-06`
+- [ ] [**PLAN-034 Chat message rendering robustness**](PLAN-034.md) `2026-06-06`
+- [ ] [**PLAN-035 Diff inline comments → send to agent**](PLAN-035.md) `2026-06-06`

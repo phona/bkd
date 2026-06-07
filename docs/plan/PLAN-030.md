@@ -50,3 +50,6 @@ covers the actual daily pain without a new PM-ish surface.
 
 - 2026-06-06: Created. Scoped down after finding WT-001/PLAN-025 already shipped the
   branch-name/base-branch part.
+- 2026-06-06: Ride-along from AoE sweep — adopt **status glyphs (shape + color, not
+  color-only)**: ● running / ◐ waiting / ○ idle / ✕ error / ◌ starting / ■ stopped,
+  for the card/list visibility work. Also consider per-session diff base-branch override.

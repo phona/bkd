@@ -126,6 +126,14 @@ in favor of (c) rebuild as push secretary.
 ## Annotations
 
 - 2026-06-06: Created. Next action = dedicated brainstorm for the secretary.
+- 2026-06-06: Borrow AoE's **notification suppression/escalation rules** into Delivery:
+  in-app toast when the dashboard is focused, suppress when any browser is active,
+  send a real push immediately for blocking items / past the aged threshold, per-issue
+  cooldown. This is the concrete plumbing for the tiered (C) delivery.
+- 2026-06-06: **Auto-mode adjustment** — the user runs agents in auto/bypass mode and
+  rarely approves per-permission. So weight signals **② stalled / ⑤ failed / ③
+  mergeable** over ① waiting-for-reply, and do NOT build heavy approval-card UX.
+  Steering happens post-hoc via diff review (see PLAN-035), not approval gates.
 - 2026-06-06: Brainstormed full design. Decided — name **Dispatch**; delivery = C
   (tiered ambient→push); autonomy = L1 everywhere + L2 small whitelist; surface = B
   (thin flat stream = upgrade of the all-issues view); brain = configurable global

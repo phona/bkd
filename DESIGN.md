@@ -69,6 +69,14 @@ semantic token layer**; `statuses.ts` must reference these tokens, not hold hex.
 Rule: **no raw color hex in TS/TSX or component CSS.** Every color resolves
 through a token. One concept, one token, one place.
 
+**Status glyph (shape + color, not color-only)** — borrowed from AoE. Shape carries
+the meaning so status survives color-blindness, low contrast, and grayscale:
+
+`● running · ◐ waiting · ○ idle/todo · ✕ error · ◌ starting · ■ stopped`
+
+Glyph + the A.3 semantic color always travel together, rendered identically on card,
+list, and detail (see B-3).
+
 ### A.4 Typography
 
 - **v1: keep the system font stack** (`--font-sans`, `--font-mono` as-is). It's
@@ -145,6 +153,24 @@ Structure discipline — the antidote to 700–1700-line files and homeless comp
   on demand, never the main stage.
 - **Rule of thumb:** persistent destination → page; contextual companion to the
   current page → panel; transient utility → drawer.
+
+### C.2 Component patterns (borrowed from AoE)
+
+Concrete, reusable shapes — the discipline of A/B/D applied to specific components:
+
+- **Glanceable dense row** — list/card rows are two lines: title (13px) + meta (11px),
+  with the secondary identifier (e.g. branch name) in `--accent-brand` (teal). Row
+  height ~28–32px. Used for issue lists, Dispatch stream, anywhere "scan many fast".
+- **Empty state is first-class** — not a blank area: a dim ~48px icon + a muted message
+  + a dim hint. For Dispatch this is the trust contract made visible
+  (e.g. "✅ Nothing needs you · N running").
+- **Composer shape** — the chat input is ONE clean bar; advanced controls
+  (model/@file/queue/mode) live behind progressive disclosure (B-1), never crammed
+  inline. This is the target shape for the ChatInput rewrite (PLAN-031).
+- **Tool cards** — per-kind cards; **collapsed by default for history, expanded while
+  streaming**. New tool kinds register via a kind→component map, not a growing if/else.
+- **Mobile-first stacking** — on narrow screens, cards/controls stack vertically and
+  actions go full-width; never a desktop layout crammed into a phone (B-6).
 
 ---
 
