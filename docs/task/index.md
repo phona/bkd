@@ -79,4 +79,4 @@ Each task is a single line linking to its detail file. All detailed information 
 - [x] [**CHAT-011 Chat message rendering robustness — async Shiki/diff fault tolerance**](CHAT-011.md) `P2`
 - [-] [**DIFF-001 Diff inline comments → send to agent**](DIFF-001.md) `P1`
 - [-] [**WT-003 Branch/workspace visibility + merge-back**](WT-003.md) `P1`
-- [-] [**BUG-006 Terminal/WebSocket fail — launcher Bun.serve missing websocket handler**](BUG-006.md) `P0`
+- [x] [**BUG-006 Terminal/WebSocket fail — launcher Bun.serve missing websocket handler**](BUG-006.md) `P0`
