@@ -1,6 +1,6 @@
 # PLAN-039 Worktree experience parity with AoE — global Worktree settings panel + strategy knobs
 
-- **status**: implementing
+- **status**: completed
 - **approvedAt**: 2026-06-08 (user: "一起搞" — P1+P2+P3)
 - **createdAt**: 2026-06-08
 - **relatedTask**: WT-004
@@ -74,3 +74,4 @@ Backend: `general.ts` (or new `settings/worktree.ts`) setting keys + GET/PATCH; 
 
 ## Annotations
 - 2026-06-08: Investigated AoE `[worktree]` config + base-branch/fetch/hooks/delete (very thorough) and bkd settings infra + current knobs. Mapped parity; filtered container/tmux-only items. Proposal P1 (panel) / P2 (strategy behaviors) / P3 (setup script). Pending `proceed` + which phases/knobs the user wants.
+- 2026-06-08: **Implemented (P1+P2+P3), not yet deployed** — backend (5406dec range): new `settings/worktree.ts` + `worktree-keys.ts`, GET/PATCH `/api/settings/worktree` (KV, no schema); `tryFetch` honors fetchStrategy; `resolveBaseBranch` (per-issue>global>auto-detect origin/HEAD); `deriveWorktreeBranch` async template ({slug}{id}{repo}, must contain {id}); submodule init; on_create setup script (bash -lc, 300s, run-once via createWorktreeEx `created` + markWorktreeActive transition, timeline留痕). Frontend: WorktreeSection (8 controls) + nav + hooks + client; autoCleanup moved here (CleanupSection dup removed); delete-dialog "delete branch" seeded from deleteBranchDefault; i18n worktreeSettings.* 22 keys en==zh. Verified: api tsc 0 net-new (49) + 33 settings/worktree tests; FE tsc 0 + 414 tests; lint clean. N/A (no container/tmux): in-container preclean, on_launch/on_destroy, .git relativize, sandbox stages.
