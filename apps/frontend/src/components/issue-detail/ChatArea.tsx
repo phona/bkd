@@ -1,4 +1,4 @@
-import { ArrowLeft, Check, GitBranch, Link, Search, SquareTerminal } from 'lucide-react'
+import { ArrowLeft, Check, GitBranch, Link, Search } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
@@ -9,7 +9,6 @@ import { useIssue, useProject, useProjectWorktrees, useUpdateIssue } from '@/hoo
 import { useIsMobile } from '@/hooks/use-mobile'
 import { addRecentIssue } from '@/hooks/use-recent-issues'
 import { useDockStore } from '@/stores/dock-store'
-import { useTerminalStore } from '@/stores/terminal-store'
 import { getIssueUrl } from '@/stores/server-store'
 import { MiniMatrix } from '@/components/cockpit/MiniMatrix'
 import { ChatBody } from './ChatBody'
@@ -107,12 +106,6 @@ export function ChatArea({
     dockSetOpen,
     dockOpenTab,
   ])
-
-  const handleOpenTerminal = useCallback(() => {
-    if (terminalCwd) useTerminalStore.getState().openInDir(terminalCwd)
-    if (isMobile) dockOpenMobile('terminal')
-    else dockOpenTab('terminal')
-  }, [terminalCwd, isMobile, dockOpenMobile, dockOpenTab])
 
   // Auto-hide title bar (mobile only) to maximise reading area.
   // Semantics align with Safari / Twitter / Instagram:
@@ -382,15 +375,6 @@ export function ChatArea({
               }}
             >
               {copied ? <Check className="h-3.5 w-3.5" /> : <Link className="h-3.5 w-3.5" />}
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6 md:h-7 md:w-7 shrink-0 text-muted-foreground hover:text-foreground transition-colors"
-              title={t('chat.openTerminalHere', '在此工作目录打开终端')}
-              onClick={handleOpenTerminal}
-            >
-              <SquareTerminal className="h-3.5 w-3.5" />
             </Button>
             {/* Mobile-only quick access to terminal / settings / notes / project switch.
               Without this, reaching settings from the chat required two back-navs
