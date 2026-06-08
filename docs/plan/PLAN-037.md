@@ -110,8 +110,11 @@ flexible multi-repo workspaces (B, developed) — heavier, defer.
   (select-all); DockRepoSwitcher + use-dock-repo wired into DockRail + MobileDockOverlay
   (terminal/files/diff retarget the selected repo); LinkedReposBadge on card + detail;
   i18n. Single-repo behavior unchanged. Verified: FE tsc 0 + 414 tests. Deployed 0.0.213.
-- 2026-06-08: **P3 remaining** — (a) Diff for a LINKED repo 404s: the changes endpoint's
-  getProjectOwnedIssue check rejects non-primary projects (issue owned by primary only);
-  needs the changes/diff path to accept any linked project + resolve that repo's worktree
-  root. (b) merge-back + delete must iterate all linked repos. Terminal + Files already
-  work for linked repos.
+- 2026-06-08: **P3 done** (not yet committed) — implemented together with PLAN-038 P3.
+  (a) Diff for a LINKED repo fixed: new `getIssueForProjectOrLinked` helper in
+  `routes/issues/_shared.ts`; all 4 changes handlers accept the issue's primary OR any
+  linked project (else 404); root resolves the requested project's own worktree; SEC
+  path checks preserved. (b) delete iterates primary + linked repos (worktree + branch,
+  best-effort). NOTE: "merge-back" iteration — clean/recreate/delete now iterate linked
+  repos; the Merge-to-base action itself still merges the primary (linked merge-back is a
+  future item if needed). See PLAN-038 Annotations for full P3 detail + verification.

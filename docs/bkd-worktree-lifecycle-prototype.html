@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>BKD worktree 生命周期原型</title>
+<style>
+  :root{--bg:#f7f8fa;--card:#fff;--border:#e4e7ec;--muted:#8a93a2;--fg:#1c2433;--primary:#3b6cf6;--accent:#10a4ab;--accentSoft:rgba(16,164,171,.10);--warn:#d97706;--warnSoft:rgba(217,119,6,.10);--gray:#9aa3b2}
+  *{box-sizing:border-box}html,body{margin:0;height:100%}
+  body{font:14px/1.5 -apple-system,system-ui,"PingFang SC",sans-serif;background:var(--bg);color:var(--fg)}
+  .app{max-width:980px;margin:0 auto;padding:18px;display:flex;gap:16px;height:100dvh}
+  .col{flex:1;min-width:0;display:flex;flex-direction:column;gap:12px}
+  .col.log{flex:0 0 340px}
+  h2{font-size:15px;margin:.2em 0}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px}
+  .badge{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:600;border:1px solid}
+  .b-active{color:var(--accent);border-color:var(--accent);background:var(--accentSoft)}
+  .b-cleaned{color:var(--gray);border-color:var(--gray);background:rgba(154,163,178,.10)}
+  .row{display:flex;align-items:center;gap:8px;margin:8px 0}
+  .lbl{font-size:12px;color:var(--muted);width:88px;flex:0 0 auto}
+  code{font-family:ui-monospace,monospace;font-size:12.5px}
+  .path.cleaned{color:var(--gray);text-decoration:line-through}
+  .seg{display:inline-flex;background:#eef0f4;border-radius:9px;padding:3px}
+  .seg button{border:0;background:transparent;padding:5px 14px;border-radius:7px;font-size:13px;color:var(--muted);cursor:pointer}
+  .seg button.on{background:var(--card);color:var(--fg);box-shadow:0 1px 2px rgba(0,0,0,.08);font-weight:600}
+  .btns{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+  .btn{border:1px solid var(--border);background:var(--card);border-radius:10px;padding:8px 13px;font-size:13px;cursor:pointer}
+  .btn.primary{background:var(--primary);color:#fff;border-color:var(--primary)}
+  .btn.accent{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .btn:disabled{opacity:.4;cursor:not-allowed}
+  .chk{display:inline-flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;color:#41506a}
+  .log{}
+  .logbox{flex:1;min-height:0;overflow:auto;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:10px;font:12px/1.6 ui-monospace,monospace}
+  .li{padding:5px 8px;border-radius:7px;margin-bottom:4px}
+  .li.create{background:var(--accentSoft);color:var(--accent)}
+  .li.clean{background:rgba(154,163,178,.12);color:#5b6472}
+  .li.recreate{background:rgba(59,108,246,.10);color:var(--primary)}
+  .li.warn{background:var(--warnSoft);color:var(--warn)}
+  .hint{font-size:12px;color:var(--muted)}
+  /* modal */
+  .mask{position:fixed;inset:0;background:rgba(20,28,44,.32);display:none;align-items:center;justify-content:center;z-index:20}
+  .mask.on{display:flex}
+  .dlg{width:420px;max-width:92vw;background:var(--card);border-radius:16px;box-shadow:0 16px 48px rgba(0,0,0,.2);padding:18px 20px}
+  .dlg h3{margin:.1em 0 .5em;font-size:15px}
+  .dlg p{font-size:13px;color:#41506a;margin:.3em 0}
+  .dlg .actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
+  .warnbox{background:var(--warnSoft);border:1px solid var(--warn);border-radius:10px;padding:8px 10px;font-size:12.5px;color:var(--warn);margin:8px 0}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="col">
+    <h2>Issue · 修复登录态</h2>
+    <div class="card">
+      <div class="row"><span class="lbl">worktree</span>
+        <span id="badge" class="badge b-active">● active</span>
+      </div>
+      <div class="row"><span class="lbl">分支</span><code>bkd/fix-login-iioianio</code> <span class="hint">（清理时默认保留）</span></div>
+      <div class="row"><span class="lbl">目录</span><code id="path" class="path">/workspace/worktrees/jdk28ssa/iioianio</code></div>
+      <div class="row"><span class="lbl">状态</span>
+        <div class="seg" id="seg">
+          <button data-s="working" class="on">working</button>
+          <button data-s="review">review</button>
+          <button data-s="done">done</button>
+        </div>
+      </div>
+      <div class="row"><span class="lbl"></span>
+        <label class="chk"><input type="checkbox" id="dirty"> 工作树有未提交改动（脏）</label>
+      </div>
+      <div class="btns">
+        <button class="btn accent" id="mergeBtn">Merge to base</button>
+        <button class="btn" id="cleanBtn">清理 worktree</button>
+        <button class="btn primary" id="runBtn">再次执行</button>
+      </div>
+      <div class="hint" style="margin-top:10px">规则:done/merge 会<b>问你</b>是否清理;清理只删目录、留分支;<b>cleaned 后转回 working 或再次执行会先问你重建</b>。全程显式、留痕,无静默操作。</div>
+    </div>
+  </div>
+
+  <div class="col log">
+    <h2>操作留痕 / 日志</h2>
+    <div class="logbox" id="logbox"></div>
+  </div>
+</div>
+
+<!-- cleanup modal -->
+<div class="mask" id="cleanMask">
+  <div class="dlg">
+    <h3 id="cleanTitle">清理 worktree?</h3>
+    <p id="cleanMsg">把这个 issue 的 worktree 目录删掉(分支保留,随时可重拉)。</p>
+    <div class="warnbox" id="dirtyWarn" style="display:none">⚠ 工作树有未提交改动 —— 默认拒绝清理以免丢活。勾选下面才会强制删。</div>
+    <label class="chk" id="forceWrap" style="display:none"><input type="checkbox" id="force"> 强制删除(丢弃未提交改动)</label>
+    <div class="actions">
+      <button class="btn" onclick="closeMask('cleanMask')">取消</button>
+      <button class="btn accent" id="cleanConfirm">清理</button>
+    </div>
+  </div>
+</div>
+
+<!-- recreate modal -->
+<div class="mask" id="recreateMask">
+  <div class="dlg">
+    <h3>重建 worktree?</h3>
+    <p>该 issue 的 worktree 之前已被清理。继续需要<b>重新拉取分支 bkd/fix-login-iioianio 并重建 worktree</b>。</p>
+    <p class="hint">本地有分支 → 直接 attach;只在远端 → fetch 后 checkout;都没了 → 从 base 新建。</p>
+    <div class="actions">
+      <button class="btn" onclick="cancelRecreate()">取消</button>
+      <button class="btn primary" id="recreateConfirm">重建并继续</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  let state='active';      // active | cleaned
+  let status='working';    // working | review | done
+  let pendingStatus=null;  // for recreate-cancel rollback
+  const $=id=>document.getElementById(id);
+  function log(cls,msg){const d=$('logbox');const el=document.createElement('div');el.className='li '+cls;el.textContent='• '+msg;d.appendChild(el);d.scrollTop=d.scrollHeight;}
+  function render(){
+    const b=$('badge');
+    if(state==='active'){b.className='badge b-active';b.textContent='● active';$('path').classList.remove('cleaned');$('path').textContent='/workspace/worktrees/jdk28ssa/iioianio';}
+    else{b.className='badge b-cleaned';b.textContent='○ cleaned';$('path').classList.add('cleaned');$('path').textContent='/workspace/worktrees/jdk28ssa/iioianio（已清理）';}
+    $('cleanBtn').disabled=state!=='active';
+    $('mergeBtn').disabled=state!=='active';
+  }
+  // status segment
+  $('seg').addEventListener('click',e=>{const btn=e.target.closest('button');if(!btn)return;const s=btn.dataset.s;setStatus(s);});
+  function setStatus(s){
+    // cleaned -> moving back to working/review needs recreate confirm
+    if(state==='cleaned' && (s==='working'||s==='review')){
+      pendingStatus=s; openMask('recreateMask'); return;
+    }
+    applyStatus(s);
+    if(s==='done' && state==='active'){ openCleanPrompt('done'); }
+  }
+  function applyStatus(s){status=s;document.querySelectorAll('#seg button').forEach(b=>b.classList.toggle('on',b.dataset.s===s));}
+  // merge
+  $('mergeBtn').onclick=()=>{ log('create','Merge to base 成功 — 已并入 base 分支'); openCleanPrompt('merge'); };
+  // clean button
+  $('cleanBtn').onclick=()=>openCleanPrompt('manual');
+  // run
+  $('runBtn').onclick=()=>{
+    if(state==='cleaned'){ pendingStatus='working'; openMask('recreateMask'); return; }
+    log('create','已在 worktree 中执行(cwd=/workspace/worktrees/jdk28ssa/iioianio)');
+  };
+  // cleanup prompt
+  function openCleanPrompt(trigger){
+    const dirty=$('dirty').checked;
+    $('cleanTitle').textContent = trigger==='merge'?'已合并,清理 worktree?' : trigger==='done'?'已转 done,清理 worktree?' : '清理 worktree?';
+    $('dirtyWarn').style.display=dirty?'block':'none';
+    $('forceWrap').style.display=dirty?'inline-flex':'none';
+    $('force').checked=false;
+    openMask('cleanMask');
+  }
+  $('cleanConfirm').onclick=()=>{
+    const dirty=$('dirty').checked, force=$('force').checked;
+    if(dirty && !force){ log('warn','清理被拒:工作树脏且未强制 —— 保护未提交改动'); return; }
+    state='cleaned'; $('dirty').checked=false;
+    log('clean','已清理 worktree(目录删除,分支 bkd/fix-login-iioianio 保留)→ worktreeState = cleaned');
+    closeMask('cleanMask'); render();
+  };
+  // recreate
+  $('recreateConfirm').onclick=()=>{
+    state='active';
+    log('recreate','已重建 worktree on bkd/fix-login-iioianio(fetch + checkout)→ worktreeState = active');
+    if(pendingStatus){applyStatus(pendingStatus);pendingStatus=null;}
+    closeMask('recreateMask'); render();
+  };
+  function cancelRecreate(){ pendingStatus=null; closeMask('recreateMask'); }
+  function openMask(id){$(id).classList.add('on');}
+  function closeMask(id){$(id).classList.remove('on');}
+  log('create','已创建 worktree on bkd/fix-login-iioianio → worktreeState = active');
+  render();
+</script>
+</body>
+</html>
