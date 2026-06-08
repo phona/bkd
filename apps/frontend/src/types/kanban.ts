@@ -28,6 +28,7 @@ export type {
   IssueFilePatchResponse,
   IssueForkRef,
   IssueLogsResponse,
+  LinkedIssueProject,
   LogEntryType,
   NormalizedLogEntry,
   Note,

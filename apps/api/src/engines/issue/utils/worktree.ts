@@ -1,5 +1,8 @@
 import { mkdir, rm } from 'node:fs/promises'
 import { join, resolve, sep } from 'node:path'
+import { and, eq } from 'drizzle-orm'
+import { db } from '@/db'
+import { issueProjects as issueProjectsTable, projects as projectsTable } from '@/db/schema'
 import { WORKTREE_DIR } from '@/engines/issue/constants'
 import { runCommand } from '@/engines/spawn'
 import { logger } from '@/logger'
@@ -321,6 +324,94 @@ export async function isWorktreeRegistered(baseDir: string, worktreeDir: string)
   } catch {
     return false
   }
+}
+
+/** A bkd project linked to an issue (PLAN-037), excluding the primary. */
+export interface LinkedProjectRow {
+  id: string
+  name: string
+  directory: string | null
+}
+
+/**
+ * Load the non-primary linked projects for an issue (PLAN-037). Returns only
+ * projects that still exist (not soft-deleted) and have a directory on disk.
+ */
+export async function getLinkedProjects(issueId: string): Promise<LinkedProjectRow[]> {
+  const rows = await db
+    .select({
+      id: projectsTable.id,
+      name: projectsTable.name,
+      directory: projectsTable.directory,
+    })
+    .from(issueProjectsTable)
+    .innerJoin(projectsTable, eq(issueProjectsTable.projectId, projectsTable.id))
+    .where(
+      and(
+        eq(issueProjectsTable.issueId, issueId),
+        eq(issueProjectsTable.isPrimary, false),
+        eq(issueProjectsTable.isDeleted, 0),
+        eq(projectsTable.isDeleted, 0),
+      ),
+    )
+  return rows
+}
+
+/** A successfully materialized linked worktree. */
+export interface LinkedWorktree {
+  projectId: string
+  projectName: string
+  path: string
+}
+
+/**
+ * Materialize worktrees for an issue's linked projects (PLAN-037) on the SAME
+ * branch as the primary worktree. Each linked repo uses its OWN default base +
+ * fetch (handled inside `createWorktree`). Partial-failure tolerant: a failing
+ * repo is reported via `onError` and skipped; it never aborts the others.
+ *
+ * @param issueId - The issue whose linked projects to materialize.
+ * @param branchName - The issue's resolved branch name (same in every repo).
+ * @param onError - Called for each linked repo that fails, so the caller can
+ *   surface a chat-visible note. The materialization itself never throws.
+ */
+export async function materializeLinkedWorktrees(
+  issueId: string,
+  branchName: string,
+  onError?: (projectName: string, reason: string) => void,
+): Promise<LinkedWorktree[]> {
+  const linked = await getLinkedProjects(issueId)
+  const results: LinkedWorktree[] = []
+  for (const project of linked) {
+    if (!project.directory) {
+      onError?.(project.name, 'project has no directory configured')
+      continue
+    }
+    try {
+      const path = await createWorktree(project.directory, project.id, issueId, {
+        branchNameOverride: branchName,
+      })
+      results.push({ projectId: project.id, projectName: project.name, path })
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error)
+      logger.warn({ issueId, linkedProjectId: project.id, err: error }, 'linked_worktree_creation_failed')
+      onError?.(project.name, reason)
+    }
+  }
+  return results
+}
+
+/**
+ * Build the prompt suffix that tells the agent where the linked repos are
+ * checked out (same branch). Empty string when there are none.
+ */
+export function buildLinkedReposPromptSuffix(linked: LinkedWorktree[]): string {
+  if (linked.length === 0) return ''
+  const list = linked.map(w => `${w.path} (${w.projectName})`).join(', ')
+  return (
+    '\n\n[BKD] Additional linked repos are checked out on this same branch at: '
+    + `${list} — cd into them as needed.`
+  )
 }
 
 /**

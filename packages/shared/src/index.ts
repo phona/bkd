@@ -96,6 +96,19 @@ export interface IssueForkRef {
 }
 
 /**
+ * A bkd project associated with an issue (multi-project association, PLAN-037).
+ * `worktreePath` is the on-disk worktree for that project+issue, or null if it
+ * has not been materialized yet. The primary project mirrors `issue.projectId`.
+ */
+export interface LinkedIssueProject {
+  projectId: string
+  name: string
+  directory: string | null
+  worktreePath: string | null
+  isPrimary: boolean
+}
+
+/**
  * Fork timing (PLAN-021 / FORK-002):
  * - `now` — runs immediately, in parallel with the parent.
  * - `after-parent` — waits in `todo`, auto-runs when the parent issue settles.

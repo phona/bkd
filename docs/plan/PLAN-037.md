@@ -1,6 +1,6 @@
 # PLAN-037 Multi-project association — same-branch worktrees across linked projects
 
-- **status**: draft
+- **status**: implementing
 - **createdAt**: 2026-06-08
 - **approvedAt**: (pending)
 - **relatedTask**: WS-001 (to be created)

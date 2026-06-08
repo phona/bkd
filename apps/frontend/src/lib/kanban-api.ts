@@ -14,6 +14,7 @@ import type {
   IssueChangesResponse,
   IssueFilePatchResponse,
   IssueLogsResponse,
+  LinkedIssueProject,
   Note,
   PermissionMode,
   ProbeResult,
@@ -553,6 +554,8 @@ export const kanbanApi = {
       engineType?: string
       model?: string
       permissionMode?: string
+      // Multi-project association (PLAN-037): extra bkd project IDs to link.
+      linkedProjectIds?: string[]
     },
   ) => post<Issue>(`/api/projects/${projectId}/issues`, data),
   updateIssue: (projectId: string, id: string, data: Partial<Issue>) =>
@@ -691,6 +694,9 @@ export const kanbanApi = {
     get<CategorizedCommands>(`/api/projects/${projectId}/issues/${issueId}/slash-commands`),
   getIssueChanges: (projectId: string, issueId: string) =>
     get<IssueChangesResponse>(`/api/projects/${projectId}/issues/${issueId}/changes`),
+  // Multi-project association (PLAN-037): projects linked to an issue.
+  getIssueLinkedProjects: (projectId: string, issueId: string) =>
+    get<LinkedIssueProject[]>(`/api/projects/${projectId}/issues/${issueId}/linked`),
   getIssueFilePatch: (projectId: string, issueId: string, path: string) =>
     get<IssueFilePatchResponse>(
       `/api/projects/${projectId}/issues/${issueId}/changes/file?path=${encodeURIComponent(path)}`,

@@ -146,6 +146,15 @@ export const IssueSchema = z.object({
   forks: z.array(IssueForkRefSchema).optional(),
 }).openapi('Issue')
 
+// Multi-project association (PLAN-037): one row per project linked to an issue.
+export const LinkedIssueProjectSchema = z.object({
+  projectId: z.string(),
+  name: z.string(),
+  directory: z.string().nullable(),
+  worktreePath: z.string().nullable(),
+  isPrimary: z.boolean(),
+}).openapi('LinkedIssueProject')
+
 export const ForkIssueSchema = z.object({
   instruction: z.string().min(1).max(8000),
   runWhen: z.enum(['now', 'after-parent']),
@@ -172,6 +181,7 @@ export const CreateIssueSchema = z.object({
   engineType: z.string().regex(/^(claude-code|claude-code-sdk|codex|acp(:.+)?)$/).optional().openapi({ description: 'claude-code | claude-code-sdk | codex | acp | acp:<agent>:<model>' }),
   model: z.string().regex(/^[\w./:\-[\]]{1,160}$/).optional(),
   permissionMode: z.enum(['auto', 'supervised', 'plan']).optional(),
+  linkedProjectIds: z.array(z.string().min(1).max(64)).max(20).optional().openapi({ description: 'Additional bkd project IDs to associate (PLAN-037). Each linked repo gets a worktree on the same branch.' }),
 }).openapi('CreateIssue')
 
 export const UpdateIssueSchema = z.object({

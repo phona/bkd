@@ -36,6 +36,7 @@ import {
   IssueLogsResponseSchema,
   IssueRoleSchema,
   IssueSchema,
+  LinkedIssueProjectSchema,
   NoteSchema,
   ParseWhiteboardResponseSchema,
   ParseWhiteboardResultSchema,
@@ -666,6 +667,19 @@ export const getIssueChanges = createRoute({
   responses: {
     200: successResponse(IssueChangesResponseSchema, 'File changes'),
     400: errorResponse('Bad request'),
+    404: errorResponse('Issue not found'),
+  },
+})
+
+export const getIssueLinkedProjects = createRoute({
+  method: 'get',
+  path: '/{issueId}/linked',
+  tags: ['Issues'],
+  summary: 'List projects linked to an issue (multi-project association, PLAN-037)',
+  operationId: 'getIssueLinkedProjects',
+  request: { params: projectIssueParams },
+  responses: {
+    200: successResponse(z.array(LinkedIssueProjectSchema), 'Linked projects'),
     404: errorResponse('Issue not found'),
   },
 })

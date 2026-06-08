@@ -112,6 +112,30 @@ export const issues = sqliteTable(
   ],
 )
 
+/**
+ * Multi-project association (PLAN-037). Links an issue to one or more bkd
+ * projects. The primary row (`isPrimary = true`) mirrors `issues.projectId`;
+ * additional rows are linked repos that get a worktree on the SAME branch.
+ */
+export const issueProjects = sqliteTable(
+  'issue_projects',
+  {
+    id: id(),
+    issueId: text('issue_id')
+      .notNull()
+      .references(() => issues.id),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id),
+    isPrimary: integer('is_primary', { mode: 'boolean' }).notNull().default(false),
+    ...commonFields,
+  },
+  table => [
+    uniqueIndex('issue_projects_issue_id_project_id_uniq').on(table.issueId, table.projectId),
+    index('issue_projects_issue_id_idx').on(table.issueId),
+  ],
+)
+
 export const appSettings = sqliteTable('app_settings', {
   key: text('key').primaryKey(),
   value: text('value').notNull(),

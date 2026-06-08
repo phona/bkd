@@ -18,6 +18,8 @@ export const queryKeys = {
     ['projects', projectId, 'issues', issueId] as const,
   issueChanges: (projectId: string, issueId: string) =>
     ['projects', projectId, 'issues', issueId, 'changes'] as const,
+  issueLinkedProjects: (projectId: string, issueId: string) =>
+    ['projects', projectId, 'issues', issueId, 'linked'] as const,
   issueAiChanges: (projectId: string, issueId: string) =>
     ['projects', projectId, 'issues', issueId, 'ai-changes'] as const,
   issueAiTimeline: (projectId: string, issueId: string, path: string) =>
@@ -256,6 +258,20 @@ export function useIssueChanges(projectId: string, issueId: string, enabled = tr
   return useQuery({
     queryKey: queryKeys.issueChanges(projectId, issueId),
     queryFn: () => kanbanApi.getIssueChanges(projectId, issueId),
+    enabled: !!projectId && !!issueId && enabled,
+    staleTime: STALE_TIME.STANDARD,
+  })
+}
+
+/**
+ * Multi-project association (PLAN-037): projects linked to an issue, with each
+ * project's worktree path (if materialized). The P2 dock-rail repo switcher will
+ * consume this; for now it just exposes the data.
+ */
+export function useIssueLinkedProjects(projectId: string, issueId: string, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.issueLinkedProjects(projectId, issueId),
+    queryFn: () => kanbanApi.getIssueLinkedProjects(projectId, issueId),
     enabled: !!projectId && !!issueId && enabled,
     staleTime: STALE_TIME.STANDARD,
   })

@@ -12,7 +12,7 @@ import { persistUserMessage } from '@/engines/issue/user-message'
 import { formatSpawnError, getPermissionOptions } from '@/engines/issue/utils/helpers'
 import { createLogNormalizer } from '@/engines/issue/utils/normalizer'
 import { getPidFromSubprocess } from '@/engines/issue/utils/pid'
-import { createWorktree } from '@/engines/issue/utils/worktree'
+import { buildLinkedReposPromptSuffix, createWorktree, materializeLinkedWorktrees } from '@/engines/issue/utils/worktree'
 import { parseAcpEngineType } from '@/engines/startup-probe'
 import type { EngineType, PermissionPolicy, SpawnedProcess } from '@/engines/types'
 import { logger } from '@/logger'
@@ -69,6 +69,9 @@ export async function executeIssue(
     const baseDir = opts.workingDir ?? ROOT_DIR
     let workingDir = baseDir
     let worktreePath: string | undefined
+    // PLAN-037: prompt fed to the engine; gains a suffix listing the linked
+    // repos' worktree paths when multi-project association is in play.
+    let effectivePrompt = opts.prompt
 
     if (issue.useWorktree) {
       try {
@@ -83,6 +86,28 @@ export async function executeIssue(
           },
         )
         workingDir = worktreePath
+
+        // Multi-project association (PLAN-037): materialize a worktree on the
+        // SAME branch in every linked repo (each repo's own base + fetch).
+        // Partial-failure tolerant — a failing repo is surfaced in chat and
+        // skipped; the primary execution always proceeds. The agent's cwd
+        // stays the primary worktree; linked paths are injected into the prompt.
+        const resolvedBranch = issue.worktreeBranchName ?? undefined
+        if (resolvedBranch) {
+          const linked = await materializeLinkedWorktrees(
+            issueId,
+            resolvedBranch,
+            (projectName, reason) => {
+              emitDiagnosticLog(
+                issueId,
+                '',
+                `[BKD] linked repo ${projectName} worktree failed: ${reason}`,
+                { event: 'linked_worktree_failed', projectName },
+              )
+            },
+          )
+          effectivePrompt += buildLinkedReposPromptSuffix(linked)
+        }
       } catch (error) {
         // `err` (not `error`) so pino's error serializer records the real
         // message/stack instead of an empty {} — the fallback reason matters.
@@ -110,7 +135,7 @@ export async function executeIssue(
       spawned = await executor.spawn(
         {
           workingDir,
-          prompt: opts.prompt,
+          prompt: effectivePrompt,
           model,
           permissionMode: permOptions.permissionMode,
           externalSessionId,

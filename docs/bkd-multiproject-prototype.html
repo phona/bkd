@@ -104,7 +104,7 @@
     <div class="chat">
       <div class="body">
         <div class="bub u">在 bkd 和 ttpos-server 同一分支上改登录态</div>
-        <div class="bub a">已在两个仓库建好 worktree（分支 bkd/fix-login-sync-iioianio）。主仓 cwd 在 bkd，ttpos-server 也备好了，可在右侧切换查看/操作。</div>
+        <div class="bub a">已在两个仓库建好 worktree（分支 bkd/fix-login-sync-iioianio）。agent cwd = 主仓 worktree <b>/workspace/worktrees/jdk28ssa/iioianio</b>；ttpos-server 的 worktree 也备好了，可在右侧切仓查看/操作。</div>
       </div>
       <div class="composer">继续处理此任务…</div>
     </div>
@@ -126,8 +126,8 @@
         <button class="tab" data-t="diff" onclick="pickTab('diff')">Diff</button>
       </div>
       <div class="panel">
-        <div class="pathline">当前仓库 worktree：<b id="wtpath">~/wt/bkd/iioianio</b>（分支 bkd/fix-login-sync-iioianio）</div>
-        <div class="term" id="termbox"><div>~/wt/bkd/iioianio $ git status</div><div style="color:#9fb3c8"> On branch bkd/fix-login-sync-iioianio</div><div>$ ▍</div></div>
+        <div class="pathline">worktree 目录：<b id="wtpath">/workspace/worktrees/jdk28ssa/iioianio</b> · 分支 <b>bkd/fix-login-sync-iioianio</b></div>
+        <div class="term" id="termbox"><div>/workspace/worktrees/jdk28ssa/iioianio $ git status</div><div style="color:#9fb3c8"> On branch bkd/fix-login-sync-iioianio</div><div>$ ▍</div></div>
       </div>
     </div>
   </div>
@@ -149,7 +149,7 @@
   function pickRepo(name,tag){document.getElementById('curRepo').textContent=name;
     document.querySelectorAll('#repomenu button').forEach(b=>b.classList.toggle('cur',b.textContent.includes(name)));
     document.getElementById('repomenu').classList.remove('on');
-    const path=name==='bkd'?'~/wt/bkd/iioianio':'~/wt/ttpos-server/iioianio';
+    const path=name==='bkd'?'/workspace/worktrees/jdk28ssa/iioianio':'/workspace/worktrees/tsrvk2p9/iioianio';
     document.getElementById('wtpath').textContent=path;
     document.getElementById('termbox').innerHTML=`<div>${path} $ git status</div><div style="color:#9fb3c8"> On branch bkd/fix-login-sync-iioianio</div><div>$ ▍</div>`;}
   function pickTab(t){document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('on',x.dataset.t===t));}

@@ -1,9 +1,9 @@
-import { and, desc, eq, max } from 'drizzle-orm'
+import { and, desc, eq, inArray, max } from 'drizzle-orm'
 import { generateKeyBetween } from 'jittered-fractional-indexing'
 import { cacheDel } from '@/cache'
 import { db } from '@/db'
 import { findProject, getDefaultEngine, getEngineDefaultModel, getServerUrl } from '@/db/helpers'
-import { issues as issuesTable } from '@/db/schema'
+import { issueProjects as issueProjectsTable, issues as issuesTable, projects as projectsTable } from '@/db/schema'
 import { deriveWorktreeBranch } from '@/engines/issue/utils/worktree'
 import type { EngineType } from '@/engines/types'
 import { logger } from '@/logger'
@@ -28,6 +28,35 @@ create.openapi(R.createIssue, async (c) => {
   }
 
   const body = c.req.valid('json')
+
+  // Multi-project association (PLAN-037): validate the linked project ids up
+  // front. Dedup, drop the primary if included, then require each to exist,
+  // not be soft-deleted, and not be archived.
+  let linkedProjectIds: string[] = []
+  if (body.linkedProjectIds && body.linkedProjectIds.length > 0) {
+    const requested = [...new Set(body.linkedProjectIds)].filter(pid => pid !== project.id)
+    if (requested.length > 0) {
+      const rows = await db
+        .select({ id: projectsTable.id })
+        .from(projectsTable)
+        .where(
+          and(
+            inArray(projectsTable.id, requested),
+            eq(projectsTable.isDeleted, 0),
+            eq(projectsTable.isArchived, 0),
+          ),
+        )
+      const valid = new Set(rows.map(r => r.id))
+      const invalid = requested.filter(pid => !valid.has(pid))
+      if (invalid.length > 0) {
+        return c.json(
+          { success: false, error: `Invalid or archived linked project(s): ${invalid.join(', ')}` },
+          400 as const,
+        )
+      }
+      linkedProjectIds = requested
+    }
+  }
 
   // Resolve engine/model defaults when not explicitly provided
   let resolvedEngine = body.engineType ?? null
@@ -76,7 +105,7 @@ create.openapi(R.createIssue, async (c) => {
         .limit(1)
       const sortOrder = generateKeyBetween(lastItem?.sortOrder ?? null, null)
 
-      return tx
+      const inserted = await tx
         .insert(issuesTable)
         .values({
           projectId: project.id,
@@ -96,6 +125,22 @@ create.openapi(R.createIssue, async (c) => {
           prompt: issuePrompt,
         })
         .returning()
+
+      // Multi-project association rows (PLAN-037): one primary (= the issue's
+      // own project) plus one per validated linked project.
+      const createdIssue = inserted[0]
+      if (createdIssue) {
+        await tx.insert(issueProjectsTable).values([
+          { issueId: createdIssue.id, projectId: project.id, isPrimary: true },
+          ...linkedProjectIds.map(pid => ({
+            issueId: createdIssue.id,
+            projectId: pid,
+            isPrimary: false,
+          })),
+        ])
+      }
+
+      return inserted
     })
 
     // Worktree branch name: when the user left it blank, derive a readable,
