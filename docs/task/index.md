@@ -90,3 +90,4 @@ Each task is a single line linking to its detail file. All detailed information 
 - [-] [**WS-001 Multi-project association — same-branch worktrees across linked projects**](WS-001.md) `P1`
 - [x] [**WT-004 Worktree experience parity with AoE — settings panel + strategy knobs**](WT-004.md) `P1`
 - [-] [**CHAT-012 Smooth issue switching — replace remount-on-switch with explicit resets**](CHAT-012.md) `P1`
+- [x] [**CHAT-013 Streaming + interleaved tool/text timeline (claude-code)**](CHAT-013.md) `P1`

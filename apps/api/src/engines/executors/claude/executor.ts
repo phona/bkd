@@ -365,6 +365,11 @@ export class ClaudeCodeExecutor implements EngineExecutor {
 
     const builder = CommandBuilder.create(resolveBaseCmd())
       .params(['-p', '--output-format=stream-json', '--verbose', '--no-chrome'])
+      // Emit partial `stream_event` wrappers (message_start, content_block_*,
+      // message_delta/stop) so assistant text + thinking stream token-by-token
+      // (mirrors codex/acp delta streaming). The terminal `assistant` message
+      // still arrives as the authoritative full-text reconciliation. PLAN-041.
+      .param('--include-partial-messages')
       .param('--input-format', 'stream-json')
       .param('--permission-prompt-tool', 'stdio')
       .env('NPM_CONFIG_LOGLEVEL', 'error')

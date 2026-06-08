@@ -221,7 +221,7 @@ describe('ClaudeLogNormalizer', () => {
   describe('streaming events', () => {
     const normalizer = new ClaudeLogNormalizer()
 
-    test('content_block_delta text is ignored (complete assistant message used instead)', () => {
+    test('content_block_delta text streams an assistant chunk (PLAN-041)', () => {
       const entries = parseAll(
         normalizer,
         line({
@@ -229,10 +229,12 @@ describe('ClaudeLogNormalizer', () => {
           delta: { type: 'text_delta', text: 'Hi' },
         }),
       )
-      expect(entries).toHaveLength(0)
+      expect(entries).toHaveLength(1)
+      expect(entries[0]!.entryType).toBe('assistant-message')
+      expect(entries[0]!.metadata?.streaming).toBe(true)
     })
 
-    test('content_block_delta thinking is ignored (complete assistant message used instead)', () => {
+    test('content_block_delta thinking streams a thinking chunk (PLAN-041)', () => {
       const entries = parseAll(
         normalizer,
         line({
@@ -240,7 +242,9 @@ describe('ClaudeLogNormalizer', () => {
           delta: { type: 'thinking_delta', thinking: 'pondering...' },
         }),
       )
-      expect(entries).toHaveLength(0)
+      expect(entries).toHaveLength(1)
+      expect(entries[0]!.entryType).toBe('thinking')
+      expect(entries[0]!.metadata?.streaming).toBe(true)
     })
 
     test('message_start with model emits system init', () => {
@@ -713,9 +717,9 @@ describe('ClaudeLogNormalizer', () => {
   })
 
   describe('content_block_delta', () => {
-    const normalizer = new ClaudeLogNormalizer()
-
-    test('text_delta is ignored (complete assistant message used instead)', () => {
+    // PLAN-041: text/thinking deltas now stream as `streaming: true` chunks.
+    test('text_delta streams an assistant chunk', () => {
+      const normalizer = new ClaudeLogNormalizer()
       const entries = parseAll(
         normalizer,
         line({
@@ -723,15 +727,34 @@ describe('ClaudeLogNormalizer', () => {
           delta: { type: 'text_delta', text: 'Hi' },
         }),
       )
-      expect(entries).toHaveLength(0)
+      expect(entries).toHaveLength(1)
+      expect(entries[0]!.entryType).toBe('assistant-message')
+      expect(entries[0]!.content).toBe('Hi')
+      expect(entries[0]!.metadata?.streaming).toBe(true)
     })
 
-    test('thinking_delta is ignored (complete assistant message used instead)', () => {
+    test('thinking_delta streams a thinking chunk', () => {
+      const normalizer = new ClaudeLogNormalizer()
       const entries = parseAll(
         normalizer,
         line({
           type: 'content_block_delta',
           delta: { type: 'thinking_delta', thinking: 'deep thought' },
+        }),
+      )
+      expect(entries).toHaveLength(1)
+      expect(entries[0]!.entryType).toBe('thinking')
+      expect(entries[0]!.content).toBe('deep thought')
+      expect(entries[0]!.metadata?.streaming).toBe(true)
+    })
+
+    test('input_json_delta is ignored', () => {
+      const normalizer = new ClaudeLogNormalizer()
+      const entries = parseAll(
+        normalizer,
+        line({
+          type: 'content_block_delta',
+          delta: { type: 'input_json_delta', partial_json: '{"a":1}' },
         }),
       )
       expect(entries).toHaveLength(0)
@@ -1000,5 +1023,126 @@ describe('generateToolContent — Agent (sub-agent)', () => {
       description: 'x',
       isolation: 'container',
     })).toBe('x')
+  })
+})
+
+// PLAN-041 — partial-message streaming (--include-partial-messages).
+describe('ClaudeLogNormalizer — streaming deltas (PLAN-041)', () => {
+  function streamEvent(event: Record<string, unknown>): Record<string, unknown> {
+    return { type: 'stream_event', timestamp: '2025-01-01T00:00:00Z', event }
+  }
+
+  test('text_delta chunks stream then terminal assistant is dbOnly', () => {
+    const normalizer = new ClaudeLogNormalizer()
+    const msgId = 'msg_stream_1'
+
+    // message_start carries the message id used to reconcile chunks ↔ terminal.
+    // (First model seen also surfaces a one-off "System initialized" message.)
+    parseAll(normalizer, line(streamEvent({
+      type: 'message_start',
+      message: { id: msgId, model: 'claude-sonnet-4', content: [] },
+    })))
+
+    const chunks = ['Hel', 'lo ', 'world']
+    const streamed: NormalizedLogEntry[] = []
+    for (const text of chunks) {
+      const entries = parseAll(normalizer, line(streamEvent({
+        type: 'content_block_delta',
+        index: 0,
+        delta: { type: 'text_delta', text },
+      })))
+      streamed.push(...entries)
+    }
+
+    // N streaming assistant entries, same messageId, streaming:true, delta content.
+    expect(streamed).toHaveLength(chunks.length)
+    for (const [i, entry] of streamed.entries()) {
+      expect(entry.entryType).toBe('assistant-message')
+      expect(entry.content).toBe(chunks[i])
+      expect(entry.metadata?.streaming).toBe(true)
+      expect(entry.metadata?.messageId).toBe(msgId)
+    }
+
+    // content_block_stop — no user-facing entry.
+    expect(parseAll(normalizer, line(streamEvent({ type: 'content_block_stop', index: 0 })))).toEqual([])
+
+    // Terminal assistant message → full text, flagged dbOnly (persist-only).
+    const finalEntries = parseAll(normalizer, line({
+      type: 'assistant',
+      timestamp: '2025-01-01T00:00:01Z',
+      message: { id: msgId, content: [{ type: 'text', text: 'Hello world' }] },
+    }))
+    const finalText = finalEntries.find(e => e.entryType === 'assistant-message')
+    expect(finalText).toBeDefined()
+    expect(finalText!.content).toBe('Hello world')
+    expect(finalText!.metadata?.dbOnly).toBe(true)
+    expect(finalText!.metadata?.messageId).toBe(msgId)
+  })
+
+  test('thinking_delta streams and terminal thinking is dbOnly', () => {
+    const normalizer = new ClaudeLogNormalizer()
+    const msgId = 'msg_think_1'
+
+    parseAll(normalizer, line(streamEvent({
+      type: 'message_start',
+      message: { id: msgId, model: 'claude-sonnet-4', content: [] },
+    })))
+
+    const thinking = parseAll(normalizer, line(streamEvent({
+      type: 'content_block_delta',
+      index: 0,
+      delta: { type: 'thinking_delta', thinking: 'pondering...' },
+    })))
+    expect(thinking).toHaveLength(1)
+    expect(thinking[0]!.entryType).toBe('thinking')
+    expect(thinking[0]!.content).toBe('pondering...')
+    expect(thinking[0]!.metadata?.streaming).toBe(true)
+    expect(thinking[0]!.metadata?.messageId).toBe(msgId)
+
+    const finalEntries = parseAll(normalizer, line({
+      type: 'assistant',
+      timestamp: '2025-01-01T00:00:01Z',
+      message: {
+        id: msgId,
+        content: [{ type: 'thinking', thinking: 'pondering...' }],
+      },
+    }))
+    const finalThinking = finalEntries.find(e => e.entryType === 'thinking')
+    expect(finalThinking).toBeDefined()
+    expect(finalThinking!.metadata?.dbOnly).toBe(true)
+  })
+
+  test('input_json_delta and signature_delta yield no entry', () => {
+    const normalizer = new ClaudeLogNormalizer()
+    parseAll(normalizer, line(streamEvent({
+      type: 'message_start',
+      message: { id: 'msg_tool', model: 'claude-sonnet-4', content: [] },
+    })))
+
+    expect(parseAll(normalizer, line(streamEvent({
+      type: 'content_block_delta',
+      index: 0,
+      delta: { type: 'input_json_delta', partial_json: '{"path":' },
+    })))).toEqual([])
+
+    expect(parseAll(normalizer, line(streamEvent({
+      type: 'content_block_delta',
+      index: 0,
+      delta: { type: 'signature_delta', signature: 'abc' },
+    })))).toEqual([])
+  })
+
+  test('non-streamed terminal assistant stays normal (no dbOnly)', () => {
+    const normalizer = new ClaudeLogNormalizer()
+    // No deltas streamed for this message → terminal entry must render live.
+    const entries = parseAll(normalizer, line({
+      type: 'assistant',
+      timestamp: '2025-01-01T00:00:00Z',
+      message: { id: 'msg_plain', content: [{ type: 'text', text: 'Direct reply' }] },
+    }))
+    const textEntry = entries.find(e => e.entryType === 'assistant-message')
+    expect(textEntry).toBeDefined()
+    expect(textEntry!.content).toBe('Direct reply')
+    expect(textEntry!.metadata?.dbOnly).toBeUndefined()
   })
 })

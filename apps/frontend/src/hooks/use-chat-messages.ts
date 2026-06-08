@@ -236,8 +236,10 @@ function rebuildMessages(entries: NormalizedLogEntry[]): ChatMessage[] {
       continue
     }
 
-    // error-message: display inline, never breaks tool groups
+    // error-message: a rendered error is a segment boundary — close any open
+    // tool cluster before it so adjacent-only tools cluster and order holds.
     if (entry.entryType === 'error-message') {
+      flushToolBuffer()
       messages.push({
         type: 'error',
         id: entryId(entry, nextId('err')),
@@ -246,8 +248,12 @@ function rebuildMessages(entries: NormalizedLogEntry[]): ChatMessage[] {
       continue
     }
 
-    // thinking: defer for next tool group description, never breaks tool groups
+    // thinking: a thinking entry is a real segment boundary — flush any open
+    // tool cluster BEFORE it so tools that precede the thinking don't merge
+    // with tools that follow it (PLAN-041 interleave: only genuinely adjacent
+    // tools — no intervening thinking/assistant/user/system — cluster together).
     if (entry.entryType === 'thinking') {
+      flushToolBuffer()
       flushPendingThinking()
       pendingThinking = entry.content ? { content: entry.content, entry } : null
       if (!pendingThinking) {
@@ -260,11 +266,17 @@ function rebuildMessages(entries: NormalizedLogEntry[]): ChatMessage[] {
       continue
     }
 
-    // system-message: display inline, never breaks tool groups
+    // system-message: a rendered system entry (plan / info) is a segment
+    // boundary — close any open tool cluster BEFORE it so tools on either
+    // side don't merge across it and so it renders at its sequence position
+    // (PLAN-041 interleave). The noisy/hidden subtypes (task_progress,
+    // stop_hook_summary, task_notification, thinking_tokens) already `continue`
+    // above and never reach here, so real tool bursts stay intact.
     if (entry.entryType === 'system-message') {
       if (entry.metadata?.subtype === 'plan') {
         const todos = extractTodos(entry)
         if (todos) {
+          flushToolBuffer()
           messages.push({
             type: 'task-plan',
             id: entryId(entry, nextId('tp')),
@@ -276,6 +288,7 @@ function rebuildMessages(entries: NormalizedLogEntry[]): ChatMessage[] {
         }
       }
       if (consumedOutputIdx.has(i)) continue
+      flushToolBuffer()
       flushPendingThinking()
       messages.push({
         type: 'system',

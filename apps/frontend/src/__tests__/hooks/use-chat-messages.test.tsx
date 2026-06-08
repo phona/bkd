@@ -120,6 +120,106 @@ describe('useChatMessages — thinking + tool-group rendering', () => {
   })
 })
 
+describe('useChatMessages — PLAN-041 interleaved tool/text timeline', () => {
+  function asst(text: string, seq: number): NormalizedLogEntry {
+    return {
+      entryType: 'assistant-message',
+      content: text,
+      timestamp: `2026-01-01T00:00:${String(seq).padStart(2, '0')}Z`,
+      turnIndex: 0,
+      messageId: `am-${text}`,
+      sequence: seq,
+    } as NormalizedLogEntry
+  }
+  function tool(id: string, seq: number): NormalizedLogEntry {
+    return {
+      entryType: 'tool-use',
+      content: `Read ${id}`,
+      timestamp: `2026-01-01T00:00:${String(seq).padStart(2, '0')}Z`,
+      turnIndex: 0,
+      messageId: id,
+      sequence: seq,
+      metadata: { toolCallId: id, isResult: false, toolName: 'Read' },
+      toolDetail: { kind: 'file-read', toolName: 'Read', toolCallId: id, isResult: false },
+    } as NormalizedLogEntry
+  }
+  function think(seq: number): NormalizedLogEntry {
+    return {
+      entryType: 'thinking',
+      content: 'hmm',
+      timestamp: `2026-01-01T00:00:${String(seq).padStart(2, '0')}Z`,
+      turnIndex: 0,
+      sequence: seq,
+    } as NormalizedLogEntry
+  }
+
+  // The core interleave case from PLAN-041: a turn shaped as
+  // text → tool → text → tool → text (monotonic sequence) must render with
+  // tool cards BETWEEN the assistant segments they fall between — NOT all the
+  // text merged into one bubble with the tools yanked into a trailing group.
+  it('interleaves tools between assistant text segments by sequence', () => {
+    const logs: NormalizedLogEntry[] = [
+      asst('a', 0),
+      tool('t1', 1),
+      asst('b', 2),
+      tool('t2', 3),
+      asst('c', 4),
+    ]
+    const { result } = renderHook(() => useChatMessages(logs))
+    const msgs = result.current.messages
+
+    expect(msgs.map(m => m.type)).toEqual([
+      'assistant',
+      'tool-group',
+      'assistant',
+      'tool-group',
+      'assistant',
+    ])
+    // The three assistant segments stay separate (no cross-tool text merge).
+    expect(msgs.filter(m => m.type === 'assistant').map(m => (m as { entry: { content?: string } }).entry.content))
+      .toEqual(['a', 'b', 'c'])
+    // Each tool-group holds exactly the single tool that falls in that slot.
+    const groups = msgs.filter(m => m.type === 'tool-group') as Array<{ count: number }>
+    expect(groups.map(g => g.count)).toEqual([1, 1])
+  })
+
+  // Genuinely adjacent tools (no intervening non-tool entry) must still
+  // cluster into ONE card — don't explode into one card per parallel call.
+  it('clusters genuinely adjacent tools into a single tool-group', () => {
+    const logs: NormalizedLogEntry[] = [
+      asst('a', 0),
+      tool('t1', 1),
+      tool('t2', 2),
+      asst('b', 3),
+    ]
+    const { result } = renderHook(() => useChatMessages(logs))
+    const msgs = result.current.messages
+
+    expect(msgs.map(m => m.type)).toEqual(['assistant', 'tool-group', 'assistant'])
+    expect((msgs[1] as { count: number }).count).toBe(2)
+  })
+
+  // A thinking entry between two tool bursts is a real boundary: the two
+  // bursts must NOT merge across it, and order must follow sequence.
+  it('does not merge tools across an intervening thinking entry', () => {
+    const logs: NormalizedLogEntry[] = [tool('t1', 1), think(2), tool('t2', 3)]
+    const { result } = renderHook(() => useChatMessages(logs))
+    expect(result.current.messages.map(m => m.type)).toEqual([
+      'tool-group',
+      'thinking',
+      'tool-group',
+    ])
+  })
+
+  // Thinking that PRECEDES a burst still describes it (renders above the
+  // group) — the original PLAN-009 UX must not regress.
+  it('keeps thinking-before-burst rendering above the group', () => {
+    const logs: NormalizedLogEntry[] = [think(1), tool('t1', 2), tool('t2', 3)]
+    const { result } = renderHook(() => useChatMessages(logs))
+    expect(result.current.messages.map(m => m.type)).toEqual(['thinking', 'tool-group'])
+  })
+})
+
 describe('useChatMessages', () => {
   it('maps ACP plan system messages into task-plan messages', () => {
     const logs: NormalizedLogEntry[] = [{

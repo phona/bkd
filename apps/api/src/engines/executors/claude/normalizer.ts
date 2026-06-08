@@ -36,6 +36,23 @@ export class ClaudeLogNormalizer {
   private modelName: string | undefined
   /** Last assistant message text (used to deduplicate result.result text). */
   private lastAssistantMessage: string | undefined
+  /**
+   * Id of the assistant message currently being streamed (from `message_start`
+   * → `message.id`). Streaming `content_block_delta` chunks carry this id so the
+   * client can reconcile them with the terminal `assistant` message that shares
+   * the same `message.id`. PLAN-041.
+   */
+  private currentMessageId: string | undefined
+  /**
+   * Message ids for which ≥1 streaming text/thinking delta was emitted. When the
+   * terminal `assistant` message arrives, its text/thinking blocks are flagged
+   * `dbOnly` (persist-only, no live re-emit) ONLY for ids we actually streamed —
+   * so the growing streamed bubble isn't duplicated. Messages with no deltas
+   * (e.g. partial messages disabled, or short replies the CLI never chunked)
+   * fall back to a normal terminal entry so their content still renders live.
+   */
+  private readonly streamedTextMessageIds = new Set<string>()
+  private readonly streamedThinkingMessageIds = new Set<string>()
 
   parse(rawLine: string): NormalizedLogEntry | NormalizedLogEntry[] | null {
     let data: ClaudeJson
@@ -185,27 +202,38 @@ export class ClaudeLogNormalizer {
     }
 
     const contentBlocks = Array.isArray(data.message.content) ? data.message.content : null
+    const messageId = data.message.id
 
     // Text content
     const text = extractTextContent(contentBlocks ?? data.message.content)
     if (text) {
       this.lastAssistantMessage = text
+      // If we already streamed this message's text token-by-token, the live
+      // bubble already shows it. Flag the terminal full-text entry `dbOnly` so
+      // the persist stage lands it in `issue_logs` (reload shows full text) but
+      // the timeline-emit stage skips it — no duplicate bubble. PLAN-041.
+      const streamed = messageId !== undefined && this.streamedTextMessageIds.has(messageId)
       entries.push({
         entryType: 'assistant-message',
         content: text,
         timestamp: data.timestamp,
-        metadata: { messageId: data.message.id },
+        metadata: streamed
+          ? { messageId, dbOnly: true }
+          : { messageId },
       })
     }
 
     // Thinking blocks (including redacted)
     if (contentBlocks) {
+      const thinkingStreamed = messageId !== undefined && this.streamedThinkingMessageIds.has(messageId)
       for (const block of contentBlocks) {
         if (block.type === 'thinking' && block.thinking) {
           entries.push({
             entryType: 'thinking',
             content: block.thinking,
             timestamp: data.timestamp,
+            // Same dbOnly reconciliation as text: persist-only when streamed.
+            ...(thinkingStreamed && { metadata: { dbOnly: true } }),
           })
         } else if (block.type === 'redacted_thinking') {
           entries.push({
@@ -510,12 +538,49 @@ export class ClaudeLogNormalizer {
     }
   }
 
-  private parseContentBlockDelta(_data: ClaudeStreamEvent): NormalizedLogEntry | null {
-    // Ignore streaming deltas — complete assistant messages contain the full content.
+  private parseContentBlockDelta(data: ClaudeStreamEvent): NormalizedLogEntry | null {
+    const delta = data.delta
+    if (!delta) return null
+    const messageId = this.currentMessageId
+
+    // Streaming assistant text — emit just this delta as a `streaming` chunk.
+    // The downstream `liveConverter.mergeChunk` accumulates chunks into one
+    // growing bubble; the terminal `assistant` message reconciles the full text.
+    if (delta.type === 'text_delta') {
+      if (!delta.text) return null
+      if (messageId) this.streamedTextMessageIds.add(messageId)
+      return {
+        entryType: 'assistant-message',
+        content: delta.text,
+        timestamp: data.timestamp,
+        metadata: { streaming: true, ...(messageId && { messageId }) },
+      }
+    }
+
+    // Streaming thinking text (extended thinking) — same shape as codex reasoning
+    // deltas. Only flagged `dbOnly` on the terminal message for ids we streamed.
+    if (delta.type === 'thinking_delta') {
+      if (!delta.thinking) return null
+      if (messageId) this.streamedThinkingMessageIds.add(messageId)
+      return {
+        entryType: 'thinking',
+        content: delta.thinking,
+        timestamp: data.timestamp,
+        metadata: { streaming: true, ...(messageId && { messageId }) },
+      }
+    }
+
+    // input_json_delta (partial tool-call input) and signature_delta must NOT
+    // render as assistant text — the terminal `assistant`/`tool_use` path emits
+    // the authoritative tool entry.
     return null
   }
 
   private parseMessageStart(data: ClaudeStreamEvent): NormalizedLogEntry | null {
+    // Track the streaming message id so delta chunks + the terminal `assistant`
+    // message (which shares `message.id`) reconcile on the client. PLAN-041.
+    if (data.message?.id) this.currentMessageId = data.message.id
+
     if (data.message?.model && !this.modelName) {
       this.modelName = data.message.model
       return {
