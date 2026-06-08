@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { useIssueStream } from '@/hooks/use-issue-stream'
+import { __resetIssueLogsCache, useIssueStream } from '@/hooks/use-issue-stream'
 import type { IssueEventHandler } from '@/lib/event-bus'
 import type { NormalizedLogEntry, TimelineEntry } from '@/types/kanban'
 
@@ -83,6 +83,7 @@ describe('invariant: user follow-up message appears immediately at the bottom', 
   beforeEach(() => {
     subscribeMock.mockReset()
     getIssueLogsMock.mockReset()
+    __resetIssueLogsCache()
   })
 
   it('"我的回复直接就没了，刷新就出来了" — optimistic + canonical produce ONE visible entry', async () => {
@@ -381,6 +382,7 @@ describe('invariant: no entry has stale streaming=true after a new turn starts',
   beforeEach(() => {
     subscribeMock.mockReset()
     getIssueLogsMock.mockReset()
+    __resetIssueLogsCache()
   })
 
   it('"思考块和后面的助手回复粘成一团" — closing thinking marks streaming=false on client too', async () => {
@@ -435,6 +437,7 @@ describe('invariant: refresh after backend restart converges to canonical state'
   beforeEach(() => {
     subscribeMock.mockReset()
     getIssueLogsMock.mockReset()
+    __resetIssueLogsCache()
   })
 
   it('onDone refetches /logs as final reconciliation (mask any stream drops)', async () => {
@@ -479,6 +482,7 @@ describe('invariant: optimistic position survives intermediate entries', () => {
   beforeEach(() => {
     subscribeMock.mockReset()
     getIssueLogsMock.mockReset()
+    __resetIssueLogsCache()
   })
 
   it('user message stays at bottom even when a loading entry lands between optimistic and canonical', async () => {
@@ -572,6 +576,7 @@ describe('invariant: LRU cache survives issue-switch effects', () => {
   beforeEach(() => {
     subscribeMock.mockReset()
     getIssueLogsMock.mockReset()
+    __resetIssueLogsCache()
   })
 
   it('switching to issue B then back to A restores A’s logs from cache without blanking', async () => {
@@ -647,6 +652,7 @@ describe('invariant: removeEntries deletes by raw messageId from backend events'
   beforeEach(() => {
     subscribeMock.mockReset()
     getIssueLogsMock.mockReset()
+    __resetIssueLogsCache()
   })
 
   it('onLogRemoved with the canonical ULID drops the entry from the timeline', async () => {
@@ -696,6 +702,7 @@ describe('invariant: post-restart sequences sort live entries to the bottom', ()
   beforeEach(() => {
     subscribeMock.mockReset()
     getIssueLogsMock.mockReset()
+    __resetIssueLogsCache()
   })
 
   it('"刚发的消息跑到时间线顶端" — new SSE entry sorts after old batch entries', async () => {

@@ -3,7 +3,7 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useChatMessages } from '@/hooks/use-chat-messages'
-import { useIssueStream } from '@/hooks/use-issue-stream'
+import { __resetIssueLogsCache, useIssueStream } from '@/hooks/use-issue-stream'
 import type { IssueEventHandler } from '@/lib/event-bus'
 import type { NormalizedLogEntry, TimelineEntry } from '@/types/kanban'
 
@@ -51,6 +51,7 @@ describe('useIssueStream', () => {
   beforeEach(() => {
     subscribeMock.mockReset()
     getIssueLogsMock.mockReset()
+    __resetIssueLogsCache()
   })
 
   it('replaces an existing pending message when log-updated arrives', async () => {

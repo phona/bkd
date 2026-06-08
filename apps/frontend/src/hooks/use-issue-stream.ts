@@ -142,6 +142,16 @@ function setCachedLogs(scope: string, entries: TimelineEntry[]): void {
   logsCache.set(scope, entries)
 }
 
+/**
+ * Test-only: clear the module-level LRU log cache. The hook now seeds initial
+ * `liveLogs` from this cache on mount (PLAN-040 instant-repaint), so tests that
+ * reuse the same `projectId:issueId` scope across cases must reset it in
+ * beforeEach to avoid one case's logs seeding the next.
+ */
+export function __resetIssueLogsCache(): void {
+  logsCache.clear()
+}
+
 export function useIssueStream({
   projectId,
   issueId,
@@ -157,7 +167,17 @@ export function useIssueStream({
   const typesSetRef = useRef<Set<string> | null>(null)
   typesSetRef.current = typesFilter ? new Set(typesFilter) : null
 
-  const [liveLogs, setLiveLogs] = useState<TimelineEntry[]>([])
+  // Seed the initial logs from the LRU cache so a fresh MOUNT (issue switch that
+  // remounts this hook — e.g. ChatBody's key={issueId}) paints the previously
+  // loaded history instantly instead of flashing blank until the fetch lands.
+  // The scope-change branch below already seeds from cache for in-place swaps;
+  // this covers the remount path with the same source. Computed once.
+  const seededLogsRef = useRef<TimelineEntry[] | null>(null)
+  if (seededLogsRef.current === null) {
+    seededLogsRef.current = getCachedLogs(`${projectId}:${issueId}:${typesKey}`) ?? []
+  }
+
+  const [liveLogs, setLiveLogs] = useState<TimelineEntry[]>(seededLogsRef.current)
   const [olderLogs, setOlderLogs] = useState<TimelineEntry[]>([])
   const [sessionStatus, setSessionStatus] = useState<SessionStatus | null>(externalStatus ?? null)
   const [hasOlderLogs, setHasOlderLogs] = useState(false)
@@ -169,7 +189,7 @@ export function useIssueStream({
   const activeExecutionRef = useRef<string | null>(null)
   const streamScopeRef = useRef<string | null>(null)
   const olderCursorRef = useRef<string | null>(null)
-  const liveLogsRef = useRef<TimelineEntry[]>([])
+  const liveLogsRef = useRef<TimelineEntry[]>(seededLogsRef.current)
   const olderLogsRef = useRef<TimelineEntry[]>([])
   const trimCursorSetRef = useRef(false)
 

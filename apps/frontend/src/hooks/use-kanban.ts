@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { ApiError, kanbanApi } from '@/lib/kanban-api'
 import { STALE_TIME } from '@/lib/query-config'
@@ -248,11 +248,20 @@ export function useIssues(projectId: string) {
 }
 
 export function useIssue(projectId: string, issueId: string) {
+  const queryClient = useQueryClient()
   return useQuery({
     queryKey: queryKeys.issue(projectId, issueId),
     queryFn: () => kanbanApi.getIssue(projectId, issueId),
     enabled: !!projectId && !!issueId,
     staleTime: STALE_TIME.STANDARD,
+    // Seed from the issues-list cache so opening an issue paints instantly
+    // instead of flashing ChatArea's full-area loading screen on switch
+    // (PLAN-040). This is the CORRECT issue (looked up by id), not stale
+    // previous-issue data, so it's safe to feed ChatBody's status logic.
+    placeholderData: () => {
+      const list = queryClient.getQueryData<Issue[]>(queryKeys.issues(projectId))
+      return list?.find(i => i.id === issueId)
+    },
   })
 }
 
@@ -262,6 +271,9 @@ export function useIssueChanges(projectId: string, issueId: string, enabled = tr
     queryFn: () => kanbanApi.getIssueChanges(projectId, issueId),
     enabled: !!projectId && !!issueId && enabled,
     staleTime: STALE_TIME.STANDARD,
+    // Keep the previous issue's diff visible while the new one loads, so
+    // switching doesn't flash an empty/loading diff panel (PLAN-040).
+    placeholderData: keepPreviousData,
   })
 }
 
@@ -285,6 +297,7 @@ export function useIssueAiChanges(projectId: string, issueId: string, enabled = 
     queryFn: () => kanbanApi.getIssueAiChanges(projectId, issueId),
     enabled: !!projectId && !!issueId && enabled,
     staleTime: STALE_TIME.STANDARD,
+    placeholderData: keepPreviousData,
   })
 }
 

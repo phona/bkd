@@ -127,8 +127,14 @@ export default function IssueDetailPage() {
       {/* Chat area when issue is selected */}
       {issueId ?
           (
+            // No key={issueId} here: remounting the whole ChatArea on every
+            // switch (header / title bar / dock / worktree context + the
+            // useIssue/useProject queries) is what made switching feel like a
+            // full reload (PLAN-040). ChatArea reacts to the issueId prop;
+            // ChatBody keeps its own key={issueId} so the chat's intricate
+            // per-issue state still resets cleanly via remount, and
+            // useIssueStream seeds from cache for an instant repaint.
             <ChatArea
-              key={issueId}
               projectId={projectId}
               issueId={issueId}
               showBackToList

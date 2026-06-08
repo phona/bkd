@@ -68,3 +68,4 @@ Each plan is a single line linking to its detail file. All detailed information 
 - [-] [**PLAN-037 Multi-project association — same-branch worktrees across linked projects**](PLAN-037.md) `2026-06-08`
 - [x] [**PLAN-038 Worktree lifecycle — explicit completion, tracked state, no silent ops**](PLAN-038.md) `2026-06-08`
 - [x] [**PLAN-039 Worktree experience parity with AoE — global settings panel + strategy knobs**](PLAN-039.md) `2026-06-08`
+- [-] [**PLAN-040 Smooth issue switching — replace remount-on-switch with explicit per-issue resets**](PLAN-040.md) `2026-06-08`

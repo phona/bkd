@@ -234,6 +234,18 @@ export function ChatArea({
   // browser's native page find keeps working.
   const [searchOpen, setSearchOpen] = useState(false)
 
+  // ChatArea no longer remounts on issue switch (PLAN-040 — the key={issueId}
+  // was dropped to kill the "reload" feel). So per-issue UI state that used to
+  // reset via remount must be reset explicitly when issueId changes. ChatBody
+  // keeps its own key={issueId}, so its chat/stream state still resets there.
+  useEffect(() => {
+    setEditingTitle(false)
+    setTitleDraft('')
+    setSearchOpen(false)
+    setCopied(false)
+    setTitleVisible(true)
+  }, [issueId])
+
   if (isLoading) {
     return (
       <div className="flex flex-1 items-center justify-center">
