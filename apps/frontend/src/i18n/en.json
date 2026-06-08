@@ -949,5 +949,35 @@
     "taskConfig": "Task Configuration",
     "deleted": "Deleted",
     "deletedJobs": "Deleted Jobs"
+  },
+  "worktree": {
+    "state": {
+      "active": "worktree",
+      "cleaned": "worktree cleaned",
+      "activeTitle": "Worktree is active",
+      "cleanedTitle": "Worktree cleaned (branch kept, can be recreated)"
+    },
+    "clean": "Clean worktree",
+    "cleanup": {
+      "title": "Clean worktree?",
+      "titleDone": "Moved to done — clean worktree?",
+      "titleMerged": "Merged — clean worktree?",
+      "body": "Delete this issue's worktree directory (the branch is kept and can be re-pulled anytime).",
+      "confirm": "Clean",
+      "cancel": "Cancel",
+      "dirtyWarn": "The worktree has uncommitted changes — cleanup is refused by default to avoid losing work.",
+      "force": "Force delete (discard uncommitted changes)",
+      "success": "Worktree cleaned (branch kept)",
+      "error": "Failed to clean worktree"
+    },
+    "recreate": {
+      "title": "Recreate worktree?",
+      "body": "This issue's worktree was previously cleaned. Continuing requires re-pulling the branch and recreating the worktree.",
+      "hint": "If the branch exists locally it is attached; if only on the remote it is fetched then checked out; otherwise it is created from base.",
+      "confirm": "Recreate and continue",
+      "cancel": "Cancel",
+      "success": "Worktree recreated",
+      "error": "Failed to recreate worktree"
+    }
   }
 }

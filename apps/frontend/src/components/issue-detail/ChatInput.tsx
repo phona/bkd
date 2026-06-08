@@ -87,6 +87,7 @@ export function ChatInput({
   pendingEditContent,
   onPendingEditConsumed,
   searchOpen = false,
+  beforeSend,
 }: {
   projectId?: string
   issueId?: string
@@ -107,6 +108,12 @@ export function ChatInput({
   pendingEditContent?: string | null
   onPendingEditConsumed?: () => void
   searchOpen?: boolean
+  /**
+   * Worktree-lifecycle gate (PLAN-038): return `false` to abort the send and
+   * surface the recreate dialog instead (for `cleaned` worktree issues). The
+   * `retry` callback re-invokes the send after the user confirms recreate.
+   */
+  beforeSend?: (retry: () => void) => boolean
 }) {
   const { t } = useTranslation()
   const isMobile = useIsMobile()
@@ -387,6 +394,14 @@ export function ChatInput({
 
   const handleSend = async () => {
     if (!canSend || !issueId || isSendingRef.current) return
+    // Worktree-lifecycle gate: a `cleaned` issue needs its worktree rebuilt
+    // before we run anything. beforeSend opens the recreate dialog and returns
+    // false; on confirm the `retry` callback re-triggers this send.
+    if (beforeSend && !beforeSend(() => {
+      void handleSend()
+    })) {
+      return
+    }
     isSendingRef.current = true
     const prompt = normalizedPrompt
     const filesToSend = [...attachedFiles]

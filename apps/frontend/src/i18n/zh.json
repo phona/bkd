@@ -945,5 +945,35 @@
     "taskConfig": "任务配置",
     "deleted": "已删除",
     "deletedJobs": "已删除的任务"
+  },
+  "worktree": {
+    "state": {
+      "active": "worktree",
+      "cleaned": "worktree 已清理",
+      "activeTitle": "worktree 处于活动状态",
+      "cleanedTitle": "worktree 已清理（分支保留，可重建）"
+    },
+    "clean": "清理 worktree",
+    "cleanup": {
+      "title": "清理 worktree?",
+      "titleDone": "已转 done，清理 worktree?",
+      "titleMerged": "已合并，清理 worktree?",
+      "body": "把这个 issue 的 worktree 目录删掉（分支保留，随时可重拉）。",
+      "confirm": "清理",
+      "cancel": "取消",
+      "dirtyWarn": "工作树有未提交改动 —— 默认拒绝清理以免丢活。",
+      "force": "强制删除（丢弃未提交改动）",
+      "success": "已清理 worktree（分支保留）",
+      "error": "清理 worktree 失败"
+    },
+    "recreate": {
+      "title": "重建 worktree?",
+      "body": "该 issue 的 worktree 之前已被清理。继续需要重新拉取分支并重建 worktree。",
+      "hint": "本地有分支则直接 attach；只在远端则 fetch 后 checkout；都没了则从 base 新建。",
+      "confirm": "重建并继续",
+      "cancel": "取消",
+      "success": "已重建 worktree",
+      "error": "重建 worktree 失败"
+    }
   }
 }

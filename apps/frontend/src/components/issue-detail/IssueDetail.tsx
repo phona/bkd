@@ -3,6 +3,8 @@ import { useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { LinkedReposBadge } from '@/components/issue-detail/LinkedReposBadge'
+import { useWorktreeLifecycle } from '@/components/issue-detail/useWorktreeLifecycle'
+import { WorktreeStateBadge } from '@/components/issue-detail/WorktreeStateBadge'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { useClickOutside } from '@/hooks/use-click-outside'
@@ -62,14 +64,41 @@ export function IssueDetail({
     ?? issue.worktreeBranchName
     ?? (issue.id ? `bkd/${issue.id}` : '')
 
+  // Worktree lifecycle (PLAN-038): shared cleanup/recreate dialogs + the
+  // imperative offer/gate controllers reused by status-change, merge and the
+  // explicit "clean worktree" button.
+  const worktreeState = issue.worktreeState ?? 'none'
+  const { dialogs: worktreeDialogs, offerCleanup, gateRecreate }
+    = useWorktreeLifecycle(projectId, issue.id)
+
+  // Intercept status changes so worktree issues honor the two prompt moments:
+  //   - cleaned issue moved back to working/review → gate on recreate first
+  //   - active issue moved to done → offer cleanup AFTER the status commits
+  const handleStatusChange = (id: StatusId) => {
+    if (issue.useWorktree && worktreeState === 'cleaned' && (id === 'working' || id === 'review')) {
+      gateRecreate(() => onUpdate?.({ statusId: id }))
+      return
+    }
+    onUpdate?.({ statusId: id })
+    if (issue.useWorktree && worktreeState === 'active' && id === 'done') {
+      offerCleanup('done')
+    }
+  }
+
   const mergeWorktree = useMergeWorktree()
   const handleMergeWorktree = async () => {
     if (!projectId || !issue.id) return
     try {
       const res = await mergeWorktree.mutateAsync({ projectId, issueId: issue.id })
-      if (res.status === 'merged') toast.success(res.message)
-      else if (res.status === 'conflict') toast.error(`${res.message}: ${res.conflicts?.join(', ') ?? ''}`)
-      else toast(res.message)
+      if (res.status === 'merged') {
+        toast.success(res.message)
+        // Merge success is a prompt moment — offer (never auto) cleanup.
+        if (worktreeState === 'active') offerCleanup('merged')
+      } else if (res.status === 'conflict') {
+        toast.error(`${res.message}: ${res.conflicts?.join(', ') ?? ''}`)
+      } else {
+        toast(res.message)
+      }
     } catch {
       toast.error(t('chat.worktreeMerge'))
     } finally {
@@ -90,8 +119,10 @@ export function IssueDetail({
           'py-1.5'
       }`}
     >
-      {/* Status — editable */}
-      <StatusSelect status={status} onChange={id => onUpdate?.({ statusId: id })} />
+      {/* Status — editable (routed through the worktree-lifecycle interceptor
+          so done offers cleanup and reopening a cleaned issue gates recreate) */}
+      <StatusSelect status={status} onChange={handleStatusChange} />
+      {worktreeDialogs}
 
       {/* Keep Alive — power-user toggle */}
       <label
@@ -226,6 +257,10 @@ export function IssueDetail({
               />
             )
           : null}
+        <WorktreeStateBadge
+          issue={issue}
+          className={`${badgeBase} ${worktreeState === 'cleaned' ? 'border-border/50 bg-muted/20' : 'border-accent-brand/40 bg-accent-brand/10'}`}
+        />
         {issue.useWorktree ?
             (
               <div ref={worktreeRef} className="relative flex">
@@ -265,12 +300,25 @@ export function IssueDetail({
                         <button
                           type="button"
                           onClick={handleMergeWorktree}
-                          disabled={mergeWorktree.isPending}
+                          disabled={mergeWorktree.isPending || worktreeState !== 'active'}
                           className="mt-1 inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-border/60 px-2 py-1 text-xs text-foreground hover:bg-muted/60 disabled:opacity-50"
                           style={{ color: 'var(--accent-brand)' }}
                         >
                           <GitBranch className="h-3 w-3" />
                           {mergeWorktree.isPending ? t('chat.worktreeMerging') : t('chat.worktreeMerge')}
+                        </button>
+                        {/* Explicit "clean worktree" trigger (PLAN-038). Only
+                            meaningful while a worktree is active. */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowWorktree(false); offerCleanup('manual')
+                          }}
+                          disabled={worktreeState !== 'active'}
+                          className="inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-border/60 px-2 py-1 text-xs text-muted-foreground hover:bg-muted/60 disabled:opacity-50"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                          {t('worktree.clean')}
                         </button>
                       </div>
                     ) :

@@ -443,6 +443,34 @@ export function useForkIssue(projectId: string) {
   })
 }
 
+// --- Worktree lifecycle hooks (PLAN-038) ---
+
+export function useCleanWorktree(projectId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (args: { issueId: string, force?: boolean }) =>
+      kanbanApi.cleanIssueWorktree(projectId, args.issueId, args.force),
+    onSuccess: (_data, args) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.issue(projectId, args.issueId) })
+      queryClient.invalidateQueries({ queryKey: queryKeys.issues(projectId) })
+      queryClient.invalidateQueries({ queryKey: queryKeys.projectWorktrees(projectId) })
+    },
+  })
+}
+
+export function useRecreateWorktree(projectId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (args: { issueId: string }) =>
+      kanbanApi.recreateIssueWorktree(projectId, args.issueId),
+    onSuccess: (_data, args) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.issue(projectId, args.issueId) })
+      queryClient.invalidateQueries({ queryKey: queryKeys.issues(projectId) })
+      queryClient.invalidateQueries({ queryKey: queryKeys.projectWorktrees(projectId) })
+    },
+  })
+}
+
 // --- Issue session hooks ---
 
 export function useExecuteIssue(projectId: string) {

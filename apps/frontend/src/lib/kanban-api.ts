@@ -587,6 +587,11 @@ export const kanbanApi = {
     post<Issue>(`/api/projects/${projectId}/issues/${issueId}/duplicate`, {}),
   forkIssue: (projectId: string, issueId: string, data: ForkIssuePayload) =>
     post<ForkIssueResult>(`/api/projects/${projectId}/issues/${issueId}/fork`, data),
+  // Worktree lifecycle (PLAN-038): explicit clean / recreate.
+  cleanIssueWorktree: (projectId: string, issueId: string, force?: boolean) =>
+    post<Issue>(`/api/projects/${projectId}/issues/${issueId}/worktree/clean`, { force: force ?? false }),
+  recreateIssueWorktree: (projectId: string, issueId: string) =>
+    post<Issue>(`/api/projects/${projectId}/issues/${issueId}/worktree/recreate`, {}),
   exportIssueUrl: (projectId: string, issueId: string) =>
     `/api/projects/${projectId}/issues/${issueId}/export?format=json`,
 

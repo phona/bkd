@@ -1,7 +1,8 @@
 import { extractClosestEdge } from '@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge'
 import { monitorForElements } from '@atlaskit/pragmatic-drag-and-drop/element/adapter'
-import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useWorktreeLifecycle } from '@/components/issue-detail/useWorktreeLifecycle'
 import { useBulkUpdateIssues, useIssues } from '@/hooks/use-kanban'
 import { STATUSES } from '@/lib/statuses'
 import { useBoardStore } from '@/stores/board-store'
@@ -25,9 +26,19 @@ export function KanbanBoard({
   const { groupedItems, syncFromServer } = useBoardStore()
   const selectedIssueId = useSelectedIssueId()
 
+  // Worktree-lifecycle (PLAN-038): when a card is dragged into `done`, offer
+  // (never auto) to clean its worktree. The hook re-binds to whichever issue
+  // was just moved via `cleanupIssueId`.
+  const [cleanupIssueId, setCleanupIssueId] = useState<string | undefined>()
+  const { dialogs: worktreeDialogs, offerCleanup } = useWorktreeLifecycle(projectId, cleanupIssueId)
+  const offerCleanupRef = useRef(offerCleanup)
+  offerCleanupRef.current = offerCleanup
+
   // Use refs for values accessed inside monitor callbacks to avoid re-registering
   const bulkUpdateRef = useRef(bulkUpdate)
   bulkUpdateRef.current = bulkUpdate
+  const issuesRef = useRef(issues)
+  issuesRef.current = issues
   const groupedItemsRef = useRef(groupedItems)
   groupedItemsRef.current = groupedItems
 
@@ -69,10 +80,25 @@ export function KanbanBoard({
     const updates = useBoardStore.getState().commitDrag({ cardId, toColumnId, toIndex })
     if (updates.length > 0) {
       bulkUpdateRef.current.mutate(updates)
+      // Offer worktree cleanup when an active-worktree card lands in `done`.
+      const moved = updates.find(u => u.id === cardId)
+      const issue = issuesRef.current?.find(i => i.id === cardId)
+      if (
+        moved?.statusId === 'done'
+        && issue?.useWorktree
+        && (issue.worktreeState ?? 'none') === 'active'
+      ) {
+        setCleanupIssueId(cardId)
+      }
     } else {
       useBoardStore.getState().resetDragging()
     }
   }, [])
+
+  // After the cleanup target binds to the just-dropped issue, open the offer.
+  useEffect(() => {
+    if (cleanupIssueId) offerCleanupRef.current('done')
+  }, [cleanupIssueId])
 
   useEffect(() => {
     return monitorForElements({
@@ -110,17 +136,20 @@ export function KanbanBoard({
   }
 
   return (
-    <div className="flex h-full gap-3 overflow-x-auto p-3 snap-x snap-mandatory md:snap-none">
-      {STATUSES.map(status => (
-        <KanbanColumn
-          key={status.id}
-          status={status}
-          issues={issuesByStatus.get(status.id) ?? []}
-          projectId={projectId}
-          selectedIssueId={selectedIssueId}
-          onCardClick={onCardClick}
-        />
-      ))}
-    </div>
+    <>
+      <div className="flex h-full gap-3 overflow-x-auto p-3 snap-x snap-mandatory md:snap-none">
+        {STATUSES.map(status => (
+          <KanbanColumn
+            key={status.id}
+            status={status}
+            issues={issuesByStatus.get(status.id) ?? []}
+            projectId={projectId}
+            selectedIssueId={selectedIssueId}
+            onCardClick={onCardClick}
+          />
+        ))}
+      </div>
+      {worktreeDialogs}
+    </>
   )
 }

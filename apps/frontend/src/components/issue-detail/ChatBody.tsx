@@ -25,6 +25,7 @@ import { ChatSearchBar } from './ChatSearchBar'
 import { CurrentPromptHover } from './CurrentPromptHover'
 import { IssueDetail } from './IssueDetail'
 import { ThinkingHover } from './ThinkingHover'
+import { useWorktreeLifecycle } from './useWorktreeLifecycle'
 
 const LazySessionMessages = lazy(() =>
   import('./SessionMessages').then(m => ({ default: m.SessionMessages })),
@@ -173,6 +174,19 @@ export function ChatBody({
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [isCancelling, setIsCancelling] = useState(false)
   const [pendingEditContent, setPendingEditContent] = useState<string | null>(null)
+
+  // Worktree-lifecycle recreate gate (PLAN-038) for the send/re-execute path:
+  // a `cleaned` worktree issue must rebuild its worktree before running. The
+  // backend also auto-recreates on execute, so this is the explicit
+  // "no silent op" gate, not a correctness requirement.
+  const { dialogs: worktreeSendDialogs, gateRecreate } = useWorktreeLifecycle(projectId, issueId)
+  const handleBeforeSend = useCallback((retry: () => void) => {
+    if (issue.useWorktree && (issue.worktreeState ?? 'none') === 'cleaned') {
+      gateRecreate(retry)
+      return false
+    }
+    return true
+  }, [issue.useWorktree, issue.worktreeState, gateRecreate])
 
   const handleDelete = useCallback(() => {
     setDeleteDialogOpen(true)
@@ -722,7 +736,9 @@ export function ChatBody({
         }}
         pendingEditContent={pendingEditContent}
         onPendingEditConsumed={() => setPendingEditContent(null)}
+        beforeSend={handleBeforeSend}
       />
+      {worktreeSendDialogs}
 
       <DeleteIssueDialog
         open={deleteDialogOpen}
