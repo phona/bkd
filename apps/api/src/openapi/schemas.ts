@@ -131,6 +131,7 @@ export const IssueSchema = z.object({
   worktreeBaseBranch: z.string().nullable().optional(),
   worktreeBranchName: z.string().nullable().optional(),
   worktreeAttachExisting: z.boolean().optional(),
+  worktreeState: z.enum(['none', 'active', 'cleaned']).optional(),
   isPinned: z.boolean(),
   keepAlive: z.boolean(),
   isHidden: z.boolean(),

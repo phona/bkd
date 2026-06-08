@@ -51,6 +51,13 @@ export interface CategorizedCommands {
 export type PermissionMode = 'auto' | 'supervised' | 'plan'
 export type BusyAction = 'queue' | 'cancel'
 export type SessionStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
+/**
+ * Explicit, tracked worktree lifecycle state (PLAN-038). `none` = never
+ * materialized (or creation fell back to the shared repo); `active` = a
+ * worktree dir exists on disk; `cleaned` = the dir was removed by an explicit
+ * user action (the branch is kept).
+ */
+export type WorktreeState = 'none' | 'active' | 'cleaned'
 
 export interface Issue {
   id: string
@@ -68,6 +75,8 @@ export interface Issue {
   worktreeBaseBranch?: string | null
   worktreeBranchName?: string | null
   worktreeAttachExisting?: boolean
+  // Explicit, tracked worktree lifecycle state (PLAN-038).
+  worktreeState?: WorktreeState
   isPinned: boolean
   keepAlive: boolean
   // Hidden from default listings (e.g. whiteboard-bound sessions). The issue

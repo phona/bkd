@@ -12,7 +12,7 @@ registerAction('upload-cleanup', {
 })
 
 registerAction('worktree-cleanup', {
-  description: 'Remove git worktrees for done issues older than 1 day',
+  description: 'Prune orphaned git worktrees whose issue row was hard-deleted',
   category: 'builtin',
   defaultCron: '0 */30 * * * *', // every 30 minutes
   runOnStartup: true,

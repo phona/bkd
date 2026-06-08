@@ -1,3 +1,4 @@
+import { stat } from 'node:fs/promises'
 import { and, eq, inArray } from 'drizzle-orm'
 import { cacheDel } from '@/cache'
 import { db } from '@/db'
@@ -8,6 +9,7 @@ import {
   ensureWorktreeAutoCleanupDefault,
 } from '@/db/helpers'
 import { issues as issuesTable, projects as projectsTable } from '@/db/schema'
+import { resolveWorktreePath } from '@/engines/issue/utils/worktree'
 import { getBus } from '@/events'
 import { emitIssueUpdated } from '@/events/issue-events'
 import { logger } from '@/logger'
@@ -140,6 +142,49 @@ export async function reconcileStaleWorkingIssues(): Promise<number> {
   return stillReconciledIssues.length
 }
 
+// ---------- Worktree-state backfill (PLAN-038) ----------
+
+/**
+ * One-shot startup backfill for the `worktreeState` column (PLAN-038). For
+ * worktree-enabled issues still at the default `none`, classify by what is
+ * actually on disk: a worktree dir present → `active`. Issues with no dir keep
+ * `none` (honest — the UI never claims a worktree that isn't there). Bounded
+ * (only `useWorktree=true` + `worktreeState='none'` rows) and best-effort.
+ */
+export async function backfillWorktreeState(): Promise<number> {
+  let updated = 0
+  try {
+    const rows = await db
+      .select({ id: issuesTable.id, projectId: issuesTable.projectId })
+      .from(issuesTable)
+      .where(
+        and(
+          eq(issuesTable.useWorktree, true),
+          eq(issuesTable.worktreeState, 'none'),
+          eq(issuesTable.isDeleted, 0),
+        ),
+      )
+    for (const row of rows) {
+      try {
+        const dir = resolveWorktreePath(row.projectId, row.id)
+        const s = await stat(dir)
+        if (!s.isDirectory()) continue
+        await db
+          .update(issuesTable)
+          .set({ worktreeState: 'active' })
+          .where(eq(issuesTable.id, row.id))
+        await cacheDel(`issue:${row.projectId}:${row.id}`)
+        updated++
+      } catch {
+        // No dir on disk (ENOENT) — keep 'none'. Best-effort per row.
+      }
+    }
+  } catch (err) {
+    logger.warn({ err }, 'backfill_worktree_state_failed')
+  }
+  return updated
+}
+
 // ---------- Active process check ----------
 
 /**
@@ -162,6 +207,12 @@ export async function startupReconciliation(): Promise<void> {
   await ensureWorktreeAutoCleanupDefault()
   await ensureServerInfoDefaults()
   await backfillSortOrders()
+
+  // PLAN-038: classify existing worktree-enabled issues by on-disk state.
+  const backfilled = await backfillWorktreeState()
+  if (backfilled > 0) {
+    logger.info({ count: backfilled }, 'reconciler_backfilled_worktree_state')
+  }
 
   // First, mark stale sessions (running/pending sessionStatus) as failed.
   // This was previously done by cleanupStaleSessions in db/helpers.

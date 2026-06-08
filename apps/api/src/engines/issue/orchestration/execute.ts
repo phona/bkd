@@ -13,6 +13,7 @@ import { formatSpawnError, getPermissionOptions } from '@/engines/issue/utils/he
 import { createLogNormalizer } from '@/engines/issue/utils/normalizer'
 import { getPidFromSubprocess } from '@/engines/issue/utils/pid'
 import { buildLinkedReposPromptSuffix, createWorktree, materializeLinkedWorktrees } from '@/engines/issue/utils/worktree'
+import { markWorktreeActive } from '@/engines/issue/utils/worktree-state'
 import { parseAcpEngineType } from '@/engines/startup-probe'
 import type { EngineType, PermissionPolicy, SpawnedProcess } from '@/engines/types'
 import { logger } from '@/logger'
@@ -86,6 +87,9 @@ export async function executeIssue(
           },
         )
         workingDir = worktreePath
+        // PLAN-038: track the worktree as active (no-op + no chat note if it
+        // was already active) — surfaces a留痕 note on a real transition.
+        await markWorktreeActive(issue)
 
         // Multi-project association (PLAN-037): materialize a worktree on the
         // SAME branch in every linked repo (each repo's own base + fetch).

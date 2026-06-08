@@ -684,6 +684,42 @@ export const getIssueLinkedProjects = createRoute({
   },
 })
 
+// ── Worktree lifecycle (PLAN-038) ──────────────────────
+
+export const cleanIssueWorktree = createRoute({
+  method: 'post',
+  path: '/{issueId}/worktree/clean',
+  tags: ['Issues'],
+  summary: 'Clean an issue worktree (remove dir, keep branch). Explicit, tracked.',
+  operationId: 'cleanIssueWorktree',
+  request: {
+    params: projectIssueParams,
+    body: {
+      content: { 'application/json': { schema: z.object({ force: z.boolean().optional() }) } },
+    },
+  },
+  responses: {
+    200: successResponse(IssueSchema, 'Worktree cleaned'),
+    409: errorResponse('Worktree is dirty — pass force to discard changes'),
+    400: errorResponse('Bad request'),
+    404: errorResponse('Issue not found'),
+  },
+})
+
+export const recreateIssueWorktree = createRoute({
+  method: 'post',
+  path: '/{issueId}/worktree/recreate',
+  tags: ['Issues'],
+  summary: 'Re-create an issue worktree (fetch + attach/checkout existing branch). Explicit, tracked.',
+  operationId: 'recreateIssueWorktree',
+  request: { params: projectIssueParams },
+  responses: {
+    200: successResponse(IssueSchema, 'Worktree recreated'),
+    400: errorResponse('Bad request'),
+    404: errorResponse('Issue not found'),
+  },
+})
+
 export const summarizeIssue = createRoute({
   method: 'post',
   path: '/{issueId}/summarize',

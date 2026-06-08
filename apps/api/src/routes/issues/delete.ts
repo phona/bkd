@@ -7,6 +7,7 @@ import { issues as issuesTable } from '@/db/schema'
 import { getEngine } from '@/engines/issue'
 import {
   deleteBranch as deleteGitBranch,
+  getLinkedProjects,
   isWorktreeRegistered,
   removeWorktree,
   resolveWorktreePath,
@@ -72,32 +73,48 @@ del.openapi(R.deleteIssue, async (c) => {
     const wantDeleteBranch = deleteBranch === 'true'
 
     if (wantDeleteWorktree || wantDeleteBranch) {
-      const baseDir = project.directory ? resolve(project.directory) : process.cwd()
-      const worktreePath = resolveWorktreePath(project.id, issueId)
       const branchName = existing.worktreeBranchName?.trim() || `bkd/${issueId}`
 
-      if (wantDeleteWorktree) {
-        try {
-          await removeWorktree(baseDir, worktreePath, wantForce)
-          logger.info({ projectId: project.id, issueId, worktreePath }, 'issue_delete_worktree_removed')
-        } catch (err) {
-          logger.warn({ projectId: project.id, issueId, worktreePath, err }, 'issue_delete_worktree_remove_failed')
-        }
+      // The issue's worktree set spans the primary + every linked project
+      // (PLAN-037 P3). Same branch name in each repo; each repo uses its own
+      // directory as baseDir. Best-effort per repo — never blocks soft-delete.
+      const linked = await getLinkedProjects(issueId)
+      const repos = [
+        { id: project.id, dir: project.directory },
+        ...linked.map(l => ({ id: l.id, dir: l.directory })),
+      ].filter((r): r is { id: string, dir: string } => !!r.dir)
+      // Primary always cleaned even if its directory is unset (cwd fallback).
+      if (!project.directory && !repos.some(r => r.id === project.id)) {
+        repos.unshift({ id: project.id, dir: process.cwd() })
       }
 
-      if (wantDeleteBranch) {
-        try {
-          // If the worktree is still registered (e.g. removal skipped/failed),
-          // git refuses to delete the checked-out branch — that is expected.
-          const stillRegistered = wantDeleteWorktree ?
-            false :
-              await isWorktreeRegistered(baseDir, worktreePath)
-          if (!stillRegistered) {
-            await deleteGitBranch(baseDir, branchName, true)
-            logger.info({ projectId: project.id, issueId, branchName }, 'issue_delete_branch_removed')
+      for (const repo of repos) {
+        const baseDir = resolve(repo.dir)
+        const worktreePath = resolveWorktreePath(repo.id, issueId)
+
+        if (wantDeleteWorktree) {
+          try {
+            await removeWorktree(baseDir, worktreePath, wantForce)
+            logger.info({ projectId: repo.id, issueId, worktreePath }, 'issue_delete_worktree_removed')
+          } catch (err) {
+            logger.warn({ projectId: repo.id, issueId, worktreePath, err }, 'issue_delete_worktree_remove_failed')
           }
-        } catch (err) {
-          logger.warn({ projectId: project.id, issueId, branchName, err }, 'issue_delete_branch_remove_failed')
+        }
+
+        if (wantDeleteBranch) {
+          try {
+            // If the worktree is still registered (e.g. removal skipped/failed),
+            // git refuses to delete the checked-out branch — that is expected.
+            const stillRegistered = wantDeleteWorktree ?
+              false :
+                await isWorktreeRegistered(baseDir, worktreePath)
+            if (!stillRegistered) {
+              await deleteGitBranch(baseDir, branchName, true)
+              logger.info({ projectId: repo.id, issueId, branchName }, 'issue_delete_branch_removed')
+            }
+          } catch (err) {
+            logger.warn({ projectId: repo.id, issueId, branchName, err }, 'issue_delete_branch_remove_failed')
+          }
         }
       }
     }

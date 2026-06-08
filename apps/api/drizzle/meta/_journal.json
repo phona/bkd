@@ -225,6 +225,13 @@
       "when": 1780896866128,
       "tag": "0031_yielding_pepper_potts",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "6",
+      "when": 1780915926062,
+      "tag": "0032_violet_gargoyle",
+      "breakpoints": true
     }
   ]
 }

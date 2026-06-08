@@ -13,6 +13,7 @@ import {
   isWorktreeRegistered,
   resolveWorktreePath,
 } from '@/engines/issue/utils/worktree'
+import { markWorktreeActive } from '@/engines/issue/utils/worktree-state'
 import { runCommand } from '@/engines/spawn'
 import { logger } from '@/logger'
 import { createOpenAPIRouter } from '@/openapi/hono'
@@ -185,6 +186,7 @@ fork.openapi(R.forkIssue, async (c) => {
           parent,
         )
         const childWorktree = await createWorktree(baseDir, project.id, child.id, headRef)
+        await markWorktreeActive(child) // PLAN-038: track active + 留痕
         carryWarning = (await carryUncommitted(parentDir, childWorktree)) ?? undefined
       } catch (err) {
         logger.warn({ childId: child.id, err }, 'fork_worktree_seed_failed')

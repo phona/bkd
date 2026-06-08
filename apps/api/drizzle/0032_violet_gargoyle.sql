@@ -1,0 +1,1 @@
+ALTER TABLE `issues` ADD `worktree_state` text DEFAULT 'none' NOT NULL;

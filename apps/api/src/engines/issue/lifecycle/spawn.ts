@@ -25,6 +25,7 @@ import {
   isWorktreeRegistered,
   resolveWorktreePath,
 } from '@/engines/issue/utils/worktree'
+import { markWorktreeActive } from '@/engines/issue/utils/worktree-state'
 import { parseAcpEngineType } from '@/engines/startup-probe'
 import type { EngineAttachment, EngineType, PermissionPolicy, SpawnedProcess } from '@/engines/types'
 import { logger } from '@/logger'
@@ -312,6 +313,7 @@ export async function spawnFollowUpProcess(
           logger.warn({ issueId, candidatePath, baseDir }, 'worktree_not_registered_recreating')
           worktreePath = await createWorktree(baseDir, issue.projectId, issueId)
           workingDir = worktreePath
+          await markWorktreeActive(issue) // PLAN-038
         }
       }
     } catch {
@@ -319,6 +321,7 @@ export async function spawnFollowUpProcess(
       try {
         worktreePath = await createWorktree(baseDir, issue.projectId, issueId)
         workingDir = worktreePath
+        await markWorktreeActive(issue) // PLAN-038
       } catch (wtErr) {
         logger.warn({ issueId, err: wtErr }, 'worktree_creation_failed_fallback_to_base')
         emitDiagnosticLog(

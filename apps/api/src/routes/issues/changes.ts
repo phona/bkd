@@ -8,7 +8,7 @@ import { checkOversized, countTextLines, isPathInsideRoot, resolveIssueDir } fro
 import { isGitRepo } from '@/utils/git'
 import { createOpenAPIRouter } from '@/openapi/hono'
 import * as R from '@/openapi/routes'
-import { getProjectOwnedIssue } from './_shared'
+import { getIssueForProjectOrLinked } from './_shared'
 
 // ---------- Types ----------
 
@@ -149,7 +149,7 @@ changes.openapi(R.getIssueChanges, async (c) => {
   if (!project) return c.json({ success: false, error: 'Project not found' }, 404 as const)
 
   const issueId = c.req.param('issueId')!
-  const issue = await getProjectOwnedIssue(project.id, issueId)
+  const issue = await getIssueForProjectOrLinked(project.id, issueId)
   if (!issue) return c.json({ success: false, error: 'Issue not found' }, 404 as const)
 
   const projectRoot = await resolveProjectDir(project.id)
@@ -196,7 +196,7 @@ changes.get('/:id/changes/file', async (c) => {
   if (!project) return c.json({ success: false, error: 'Project not found' }, 404)
 
   const issueId = c.req.param('id')!
-  const issue = await getProjectOwnedIssue(project.id, issueId)
+  const issue = await getIssueForProjectOrLinked(project.id, issueId)
   if (!issue) return c.json({ success: false, error: 'Issue not found' }, 404)
 
   const path = c.req.query('path')?.trim()
@@ -346,7 +346,7 @@ changes.get('/:id/ai-changes', async (c) => {
   if (!project) return c.json({ success: false, error: 'Project not found' }, 404)
 
   const issueId = c.req.param('id')!
-  const issue = await getProjectOwnedIssue(project.id, issueId)
+  const issue = await getIssueForProjectOrLinked(project.id, issueId)
   if (!issue) return c.json({ success: false, error: 'Issue not found' }, 404)
 
   const projectRoot = await resolveProjectDir(project.id)
@@ -399,7 +399,7 @@ changes.get('/:id/ai-changes/file', async (c) => {
   if (!project) return c.json({ success: false, error: 'Project not found' }, 404)
 
   const issueId = c.req.param('id')!
-  const issue = await getProjectOwnedIssue(project.id, issueId)
+  const issue = await getIssueForProjectOrLinked(project.id, issueId)
   if (!issue) return c.json({ success: false, error: 'Issue not found' }, 404)
 
   const path = c.req.query('path')?.trim()

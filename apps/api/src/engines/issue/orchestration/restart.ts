@@ -19,6 +19,7 @@ import {
 } from '@/engines/issue/utils/helpers'
 import { createLogNormalizer } from '@/engines/issue/utils/normalizer'
 import { createWorktree } from '@/engines/issue/utils/worktree'
+import { markWorktreeActive } from '@/engines/issue/utils/worktree-state'
 import { parseAcpEngineType } from '@/engines/startup-probe'
 import type { SpawnedProcess } from '@/engines/types'
 import { logger } from '@/logger'
@@ -60,6 +61,7 @@ export async function restartIssue(
       try {
         worktreePath = await createWorktree(baseDir, issue.projectId, issueId)
         workingDir = worktreePath
+        await markWorktreeActive(issue) // PLAN-038: track active + 留痕
       } catch (error) {
         logger.warn({ issueId, error }, 'worktree_creation_failed_fallback_to_base')
         emitDiagnosticLog(

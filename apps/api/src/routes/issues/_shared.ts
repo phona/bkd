@@ -13,6 +13,7 @@ import {
 } from '@/db/pending-messages'
 import { issues as issuesTable } from '@/db/schema'
 import { getEngine } from '@/engines/issue'
+import { getLinkedProjects } from '@/engines/issue/utils/worktree'
 import { isValidAcpEngineType } from '@/engines/startup-probe'
 import type { EngineType } from '@/engines/types'
 import { emitIssueLogRemoved, emitIssueUpdated } from '@/events/issue-events'
@@ -115,6 +116,7 @@ export function serializeIssue(row: IssueRow) {
     worktreeBaseBranch: row.worktreeBaseBranch ?? null,
     worktreeBranchName: row.worktreeBranchName ?? null,
     worktreeAttachExisting: row.worktreeAttachExisting,
+    worktreeState: row.worktreeState as 'none' | 'active' | 'cleaned',
     isPinned: row.isPinned,
     keepAlive: row.keepAlive,
     isHidden: row.isHidden,
@@ -170,6 +172,29 @@ export async function getProjectOwnedIssue(projectId: string, issueId: string) {
 
 export async function invalidateIssueCache(projectId: string, issueId: string): Promise<void> {
   await cacheDel(`issue:${projectId}:${issueId}`)
+}
+
+/**
+ * Resolve an issue for a project that is EITHER its primary owner OR one of its
+ * linked projects (PLAN-037 P3). Returns the canonical issue row (owned by its
+ * primary project) when `projectId` is related to the issue, else `null` so the
+ * caller still 404s for unrelated projects. Used by the changes/diff endpoints
+ * so a linked project can view that repo's diff.
+ */
+export async function getIssueForProjectOrLinked(projectId: string, issueId: string) {
+  // Fast path: the project directly owns the issue (primary project).
+  const owned = await getProjectOwnedIssue(projectId, issueId)
+  if (owned) return owned
+
+  // Otherwise the issue may belong to another project but link THIS one.
+  const [issue] = await db
+    .select()
+    .from(issuesTable)
+    .where(and(eq(issuesTable.id, issueId), eq(issuesTable.isDeleted, 0)))
+  if (!issue) return null
+
+  const linked = await getLinkedProjects(issueId)
+  return linked.some(l => l.id === projectId) ? issue : null
 }
 
 export { toISO } from '@/utils/date'

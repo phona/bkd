@@ -1,4 +1,4 @@
-import { mkdir, rm } from 'node:fs/promises'
+import { mkdir, rm, stat } from 'node:fs/promises'
 import { join, resolve, sep } from 'node:path'
 import { and, eq } from 'drizzle-orm'
 import { db } from '@/db'
@@ -301,6 +301,29 @@ export async function removeWorktree(
       /* best effort */
     }
   }
+}
+
+/**
+ * Non-destructive dirty check for a worktree directory. Returns `true` when the
+ * worktree has uncommitted/untracked changes (`git status --porcelain` non-empty).
+ * A missing directory, a non-directory, or a non-git path is treated as NOT
+ * dirty (nothing to lose). Used to pre-check ALL of an issue's repos before a
+ * multi-repo clean so we never partially remove.
+ */
+export async function isWorktreeDirty(worktreeDir: string): Promise<boolean> {
+  const resolved = resolve(worktreeDir)
+  try {
+    const s = await stat(resolved)
+    if (!s.isDirectory()) return false
+  } catch {
+    return false
+  }
+  const { code, stdout } = await runCommand(
+    ['git', 'status', '--porcelain'],
+    { cwd: resolved, stderr: 'pipe' },
+  )
+  if (code !== 0) return false
+  return stdout.trim().length > 0
 }
 
 /**

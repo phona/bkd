@@ -12,6 +12,7 @@ import message from './message'
 import query from './query'
 import summarize from './summarize'
 import update from './update'
+import worktree from './worktree'
 
 const issues = createOpenAPIRouter()
 issues.route('/', query)
@@ -27,5 +28,6 @@ issues.route('/', attachments)
 issues.route('/', logs)
 issues.route('/', changes)
 issues.route('/', summarize)
+issues.route('/', worktree)
 
 export default issues

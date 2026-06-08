@@ -80,6 +80,10 @@ export const issues = sqliteTable(
     worktreeAttachExisting: integer('worktree_attach_existing', { mode: 'boolean' })
       .notNull()
       .default(false),
+    // Explicit, tracked worktree lifecycle state (PLAN-038). No silent ops:
+    // 'none' (never materialized / fallback), 'active' (dir on disk),
+    // 'cleaned' (dir removed by user, branch kept). Surfaced as a badge.
+    worktreeState: text('worktree_state').notNull().default('none'),
     isPinned: integer('is_pinned', { mode: 'boolean' }).notNull().default(false),
     keepAlive: integer('keep_alive', { mode: 'boolean' }).notNull().default(false),
     // Hidden issues are excluded from default listings (e.g. whiteboard-bound
