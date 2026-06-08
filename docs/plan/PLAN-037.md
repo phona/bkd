@@ -101,3 +101,17 @@ flexible multi-repo workspaces (B, developed) — heavier, defer.
 
 - 2026-06-08: Investigated. `issues.workspaceId` + `workspaces.repos` already exist
   (unused) — the schema half-mirrors AoE. Proposal pending decisions 1–5 + `proceed`.
+- 2026-06-08: **P1 (backend) shipped** (69ba1cd) — issue_projects link table + migration
+  0031; create.ts linkedProjectIds (validated); materializeLinkedWorktrees (same branch
+  per linked repo, per-repo base+fetch, partial-failure tolerant) + linked-repo paths
+  injected into the agent prompt; GET …/linked route + shared type + client/hook. P1
+  verified: api tsc 0 new + 4/4 new test; FE tsc 0.
+- 2026-06-08: **P2 (frontend) shipped** (fc3367c) — CreateIssueDialog project linker
+  (select-all); DockRepoSwitcher + use-dock-repo wired into DockRail + MobileDockOverlay
+  (terminal/files/diff retarget the selected repo); LinkedReposBadge on card + detail;
+  i18n. Single-repo behavior unchanged. Verified: FE tsc 0 + 414 tests. Deployed 0.0.213.
+- 2026-06-08: **P3 remaining** — (a) Diff for a LINKED repo 404s: the changes endpoint's
+  getProjectOwnedIssue check rejects non-primary projects (issue owned by primary only);
+  needs the changes/diff path to accept any linked project + resolve that repo's worktree
+  root. (b) merge-back + delete must iterate all linked repos. Terminal + Files already
+  work for linked repos.
