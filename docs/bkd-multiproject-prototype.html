@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>BKD 多项目关联原型</title>
+<style>
+  :root{--bg:#f7f8fa;--card:#fff;--border:#e4e7ec;--muted:#8a93a2;--fg:#1c2433;--primary:#3b6cf6;--accent:#10a4ab;--accentSoft:rgba(16,164,171,.10);--primSoft:rgba(59,108,246,.10)}
+  *{box-sizing:border-box}html,body{margin:0;height:100%}
+  body{font:14px/1.5 -apple-system,system-ui,"PingFang SC",sans-serif;background:var(--bg);color:var(--fg)}
+  .app{height:100dvh;display:flex;flex-direction:column}
+  .top{height:46px;display:flex;align-items:center;gap:10px;padding:0 14px;background:var(--card);border-bottom:1px solid var(--border);flex:0 0 auto}
+  .brand{font-weight:700}.spacer{flex:1}
+  .seg{display:inline-flex;background:#eef0f4;border-radius:9px;padding:3px}
+  .seg button{border:0;background:transparent;padding:5px 12px;border-radius:7px;font-size:12.5px;color:var(--muted);cursor:pointer}
+  .seg button.on{background:var(--card);color:var(--fg);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+  .view{flex:1;min-height:0;display:none}.view.on{display:flex}
+
+  /* CREATE */
+  #create{align-items:flex-start;justify-content:center;padding:28px;overflow:auto}
+  .dlg{width:560px;max-width:100%;background:var(--card);border:1px solid var(--border);border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,.10);padding:18px 20px}
+  .dlg h3{margin:.1em 0 .8em;font-size:15px}
+  .field{margin-bottom:14px}.label{font-size:12px;color:var(--muted);margin-bottom:5px}
+  .input{width:100%;border:1px solid var(--border);border-radius:10px;padding:9px 11px;font-size:14px;outline:none}
+  .row{display:flex;align-items:center;gap:8px}
+  .tog{display:inline-flex;align-items:center;gap:8px;font-size:13px}
+  .switch{width:34px;height:20px;border-radius:999px;background:var(--accent);position:relative;cursor:pointer}
+  .switch::after{content:"";position:absolute;top:2px;left:16px;width:16px;height:16px;border-radius:50%;background:#fff;transition:.15s}
+  .projlist{display:flex;flex-direction:column;gap:6px;margin-top:4px}
+  .proj{display:flex;align-items:center;gap:9px;border:1px solid var(--border);border-radius:10px;padding:8px 10px;cursor:pointer;font-size:13px}
+  .proj.primary{border-color:var(--primary);background:var(--primSoft)}
+  .proj.linked{border-color:var(--accent);background:var(--accentSoft)}
+  .proj .tag{margin-left:auto;font-size:10px;color:var(--muted);border:1px solid var(--border);border-radius:999px;padding:1px 7px}
+  .proj.primary .tag{color:var(--primary);border-color:var(--primary)}
+  .proj.linked .tag{color:var(--accent);border-color:var(--accent)}
+  .cb{width:16px;height:16px;border:1.5px solid var(--border);border-radius:5px;display:inline-flex;align-items:center;justify-content:center;font-size:11px;color:#fff}
+  .proj.linked .cb,.proj.primary .cb{background:var(--accent);border-color:var(--accent)}
+  .proj.primary .cb{background:var(--primary);border-color:var(--primary)}
+  .summary{margin-top:10px;border:1px dashed var(--accent);background:var(--accentSoft);border-radius:10px;padding:9px 11px;font-size:12.5px}
+  .summary code{font-family:ui-monospace,monospace;color:var(--accent);font-weight:600}
+  .actions{display:flex;justify-content:flex-end;gap:8px;margin-top:6px}
+  .btn{border:1px solid var(--border);background:var(--card);border-radius:10px;padding:8px 14px;font-size:13px;cursor:pointer}
+  .btn.primary{background:var(--primary);color:#fff;border-color:var(--primary)}
+
+  /* RAIL */
+  #rail{}
+  .chat{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--bg)}
+  .chat .body{flex:1;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:10px}
+  .bub{max-width:80%;padding:9px 12px;border-radius:14px;font-size:13px}
+  .bub.u{align-self:flex-end;background:var(--primary);color:#fff;border-bottom-right-radius:5px}
+  .bub.a{align-self:flex-start;background:var(--card);border:1px solid var(--border);border-bottom-left-radius:5px}
+  .composer{flex:0 0 auto;border-top:1px solid var(--border);background:var(--card);padding:10px 12px;color:var(--muted)}
+  .rail{flex:0 0 auto;width:400px;display:flex;flex-direction:column;background:var(--card);border-left:1px solid var(--border)}
+  .repobar{flex:0 0 auto;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border);padding:7px 10px;background:var(--accentSoft)}
+  .repobar .lbl{font-size:11px;color:var(--muted)}
+  .reposel{position:relative}
+  .reposel>button{border:1px solid var(--accent);background:var(--card);border-radius:9px;padding:5px 10px;font-size:12.5px;color:var(--accent);font-weight:600;cursor:pointer;display:inline-flex;gap:6px;align-items:center}
+  .repomenu{display:none;position:absolute;top:34px;left:0;z-index:10;background:var(--card);border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);min-width:200px;padding:5px}
+  .repomenu.on{display:block}
+  .repomenu button{display:flex;width:100%;text-align:left;border:0;background:transparent;padding:8px 9px;border-radius:7px;font-size:13px;cursor:pointer;gap:8px;align-items:center}
+  .repomenu button:hover{background:#f1f3f7}.repomenu button.cur{color:var(--accent);font-weight:600}
+  .tabs{flex:0 0 auto;display:flex;gap:4px;border-bottom:1px solid var(--border);padding:6px 8px}
+  .tab{border:0;background:transparent;font-size:12.5px;color:var(--muted);padding:6px 10px;border-radius:8px;cursor:pointer}
+  .tab.on{background:var(--accentSoft);color:var(--accent);font-weight:600}
+  .panel{flex:1;min-height:0;overflow:auto;padding:12px;font:12px/1.5 ui-monospace,monospace}
+  .term{background:#0f1830;color:#cfe;border-radius:10px;padding:10px;height:100%}
+  .pathline{font-size:11px;color:var(--muted);margin-bottom:8px}
+  .pathline b{color:var(--accent)}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="top">
+    <span class="brand">BKD</span><span class="spacer"></span>
+    <span style="font-size:12px;color:var(--muted)">多项目关联原型</span>
+    <div class="seg" id="vseg">
+      <button class="on" data-v="create">创建会话</button>
+      <button data-v="rail">常驻栏(多仓)</button>
+    </div>
+  </div>
+
+  <!-- CREATE -->
+  <div class="view on" id="create">
+    <div class="dlg">
+      <h3>新建任务</h3>
+      <div class="field"><div class="label">标题</div><input class="input" id="title" value="Fix login sync" oninput="updateSummary()"></div>
+      <div class="field row"><span class="tog"><span class="switch"></span> 启用 worktree</span></div>
+      <div class="field">
+        <div class="label">关联项目（在每个仓库的同一分支建 worktree）</div>
+        <div class="projlist" id="projlist">
+          <div class="proj primary"><span class="cb">✓</span> bkd <span class="tag">主仓</span></div>
+          <div class="proj linked" data-p="ttpos-server" onclick="toggleProj(this)"><span class="cb">✓</span> ttpos-server <span class="tag">已关联</span></div>
+          <div class="proj" data-p="ttpos-flutter" onclick="toggleProj(this)"><span class="cb"></span> ttpos-flutter <span class="tag">点击关联</span></div>
+          <div class="proj" data-p="ttpos-api" onclick="toggleProj(this)"><span class="cb"></span> ttpos-api <span class="tag">点击关联</span></div>
+        </div>
+        <div class="summary" id="summary"></div>
+      </div>
+      <div class="actions"><button class="btn">取消</button><button class="btn primary">创建</button></div>
+    </div>
+  </div>
+
+  <!-- RAIL -->
+  <div class="view" id="rail">
+    <div class="chat">
+      <div class="body">
+        <div class="bub u">在 bkd 和 ttpos-server 同一分支上改登录态</div>
+        <div class="bub a">已在两个仓库建好 worktree（分支 bkd/fix-login-sync-iioianio）。主仓 cwd 在 bkd，ttpos-server 也备好了，可在右侧切换查看/操作。</div>
+      </div>
+      <div class="composer">继续处理此任务…</div>
+    </div>
+    <div class="rail">
+      <div class="repobar">
+        <span class="lbl">仓库</span>
+        <div class="reposel">
+          <button id="repobtn" onclick="document.getElementById('repomenu').classList.toggle('on')">📦 <span id="curRepo">bkd</span> ▾</button>
+          <div class="repomenu" id="repomenu">
+            <button class="cur" onclick="pickRepo('bkd','主仓')">📦 bkd <span style="margin-left:auto;color:var(--muted);font-size:11px">主仓</span></button>
+            <button onclick="pickRepo('ttpos-server','已关联')">📦 ttpos-server</button>
+          </div>
+        </div>
+        <span style="margin-left:auto;font-size:11px;color:var(--muted)" id="repoBadge">2 个仓库</span>
+      </div>
+      <div class="tabs">
+        <button class="tab on" data-t="term" onclick="pickTab('term')">终端</button>
+        <button class="tab" data-t="files" onclick="pickTab('files')">文件</button>
+        <button class="tab" data-t="diff" onclick="pickTab('diff')">Diff</button>
+      </div>
+      <div class="panel">
+        <div class="pathline">当前仓库 worktree：<b id="wtpath">~/wt/bkd/iioianio</b>（分支 bkd/fix-login-sync-iioianio）</div>
+        <div class="term" id="termbox"><div>~/wt/bkd/iioianio $ git status</div><div style="color:#9fb3c8"> On branch bkd/fix-login-sync-iioianio</div><div>$ ▍</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.getElementById('vseg').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
+    document.querySelectorAll('#vseg button').forEach(x=>x.classList.toggle('on',x===b));
+    document.querySelectorAll('.view').forEach(v=>v.classList.toggle('on',v.id===b.dataset.v));});
+  function slug(t){return t.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,40)||''}
+  function updateSummary(){
+    const t=document.getElementById('title').value;const s=slug(t);
+    const branch=s?`bkd/${s}-iioianio`:'bkd/iioianio';
+    const repos=['bkd',...[...document.querySelectorAll('.proj.linked')].map(p=>p.dataset.p)];
+    document.getElementById('summary').innerHTML=`将创建分支 <code>${branch}</code> 的 worktree 于：<b>${repos.join('、')}</b>（共 ${repos.length} 个仓库，各用其默认分支为 base、独立 fetch）`;
+  }
+  function toggleProj(el){el.classList.toggle('linked');el.querySelector('.cb').textContent=el.classList.contains('linked')?'✓':'';
+    el.querySelector('.tag').textContent=el.classList.contains('linked')?'已关联':'点击关联';updateSummary();}
+  function pickRepo(name,tag){document.getElementById('curRepo').textContent=name;
+    document.querySelectorAll('#repomenu button').forEach(b=>b.classList.toggle('cur',b.textContent.includes(name)));
+    document.getElementById('repomenu').classList.remove('on');
+    const path=name==='bkd'?'~/wt/bkd/iioianio':'~/wt/ttpos-server/iioianio';
+    document.getElementById('wtpath').textContent=path;
+    document.getElementById('termbox').innerHTML=`<div>${path} $ git status</div><div style="color:#9fb3c8"> On branch bkd/fix-login-sync-iioianio</div><div>$ ▍</div>`;}
+  function pickTab(t){document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('on',x.dataset.t===t));}
+  updateSummary();
+</script>
+</body>
+</html>
