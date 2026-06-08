@@ -147,7 +147,7 @@ create.openapi(R.createIssue, async (c) => {
     // unique, git-safe name from the title + the real issue id (the id only
     // exists after insert). Patched here, still before any execute below.
     if (newIssue && newIssue.useWorktree && !body.worktreeBranchName?.trim()) {
-      const branch = deriveWorktreeBranch(body.title, newIssue.id)
+      const branch = await deriveWorktreeBranch(body.title, newIssue.id, project.directory || undefined)
       await db.update(issuesTable).set({ worktreeBranchName: branch }).where(eq(issuesTable.id, newIssue.id))
       newIssue.worktreeBranchName = branch
     }

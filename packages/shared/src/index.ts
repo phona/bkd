@@ -59,6 +59,25 @@ export type SessionStatus = 'pending' | 'running' | 'completed' | 'failed' | 'ca
  */
 export type WorktreeState = 'none' | 'active' | 'cleaned'
 
+/** Global worktree fetch-before-branch strategy (PLAN-039). */
+export type WorktreeFetchStrategy = 'auto' | 'always' | 'never'
+
+/**
+ * Global worktree settings (PLAN-039) — the parsed shape returned by
+ * `GET /api/settings/worktree`. All persisted as string KV in `appSettings`
+ * (no schema). `worktreeRoot` is read-only (env-controlled `WORKTREE_BASE`).
+ */
+export interface WorktreeSettings {
+  fetchStrategy: WorktreeFetchStrategy
+  defaultBaseBranch: string
+  branchTemplate: string
+  initSubmodules: boolean
+  deleteBranchDefault: boolean
+  setupScript: string
+  autoCleanup: boolean
+  worktreeRoot: string
+}
+
 export interface Issue {
   id: string
   projectId: string

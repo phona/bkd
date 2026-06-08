@@ -6,11 +6,61 @@ import {
   cleanupWorktree,
   createWorktree,
   deleteBranch,
+  deriveWorktreeBranch,
   removeWorktree,
   resolveWorktreePath,
 } from '@/engines/issue/utils/worktree'
+import { setAppSetting } from '@/db/helpers'
 import { spawnNodeSync } from '@/engines/spawn'
 import { ROOT_DIR } from '@/root'
+import {
+  validateBranchTemplate,
+  WORKTREE_BRANCH_TEMPLATE_KEY,
+} from '@/routes/settings/worktree-keys'
+
+describe('validateBranchTemplate', () => {
+  test('accepts the default template', () => {
+    expect(validateBranchTemplate('bkd/{slug}-{id}')).toBeNull()
+  })
+  test('rejects a template without {id}', () => {
+    expect(validateBranchTemplate('bkd/{slug}')).toBeTruthy()
+  })
+  test('rejects an empty template', () => {
+    expect(validateBranchTemplate('  ')).toBeTruthy()
+  })
+  test('rejects unsafe characters', () => {
+    expect(validateBranchTemplate('bkd/{slug} {id}')).toBeTruthy()
+    expect(validateBranchTemplate('bkd/{id}:x')).toBeTruthy()
+    expect(validateBranchTemplate('bkd/{id}~x')).toBeTruthy()
+  })
+})
+
+describe('deriveWorktreeBranch (template — PLAN-039)', () => {
+  test('default template reproduces historical output', async () => {
+    expect(await deriveWorktreeBranch('Fix login bug', 'iioianio')).toBe('bkd/fix-login-bug-iioianio')
+  })
+  test('CJK/emoji-only title collapses to bkd/{id}', async () => {
+    expect(await deriveWorktreeBranch('修复登录态', 'iioianio')).toBe('bkd/iioianio')
+  })
+  test('honors a custom template with {repo}', async () => {
+    await setAppSetting(WORKTREE_BRANCH_TEMPLATE_KEY, 'wip/{repo}/{slug}-{id}')
+    try {
+      expect(await deriveWorktreeBranch('Add Feature', 'abc123', '/tmp/my-repo')).toBe(
+        'wip/my-repo/add-feature-abc123',
+      )
+    } finally {
+      await setAppSetting(WORKTREE_BRANCH_TEMPLATE_KEY, 'bkd/{slug}-{id}')
+    }
+  })
+  test('falls back to bkd/{id} when stored template lacks {id}', async () => {
+    await setAppSetting(WORKTREE_BRANCH_TEMPLATE_KEY, 'bkd/{slug}')
+    try {
+      expect(await deriveWorktreeBranch('Whatever', 'zzz999')).toBe('bkd/whatever-zzz999')
+    } finally {
+      await setAppSetting(WORKTREE_BRANCH_TEMPLATE_KEY, 'bkd/{slug}-{id}')
+    }
+  })
+})
 
 /**
  * Worktree utility tests — verifies:

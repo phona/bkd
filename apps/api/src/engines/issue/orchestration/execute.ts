@@ -12,8 +12,8 @@ import { persistUserMessage } from '@/engines/issue/user-message'
 import { formatSpawnError, getPermissionOptions } from '@/engines/issue/utils/helpers'
 import { createLogNormalizer } from '@/engines/issue/utils/normalizer'
 import { getPidFromSubprocess } from '@/engines/issue/utils/pid'
-import { buildLinkedReposPromptSuffix, createWorktree, materializeLinkedWorktrees } from '@/engines/issue/utils/worktree'
-import { markWorktreeActive } from '@/engines/issue/utils/worktree-state'
+import { buildLinkedReposPromptSuffix, createWorktreeEx, materializeLinkedWorktrees } from '@/engines/issue/utils/worktree'
+import { markWorktreeActive, runWorktreeSetupScript } from '@/engines/issue/utils/worktree-state'
 import { parseAcpEngineType } from '@/engines/startup-probe'
 import type { EngineType, PermissionPolicy, SpawnedProcess } from '@/engines/types'
 import { logger } from '@/logger'
@@ -76,20 +76,34 @@ export async function executeIssue(
 
     if (issue.useWorktree) {
       try {
-        worktreePath = await createWorktree(
+        const wt = await createWorktreeEx(
           baseDir,
           issue.projectId,
           issueId,
           {
-            startPointRef: issue.worktreeBaseBranch ?? undefined,
+            // Per-issue base branch wins; resolveBaseBranch then falls back to
+            // the global default / auto-detect (PLAN-039).
+            issueBaseBranch: issue.worktreeBaseBranch ?? undefined,
             branchNameOverride: issue.worktreeBranchName ?? undefined,
             attachExisting: issue.worktreeAttachExisting ?? false,
           },
         )
+        worktreePath = wt.path
         workingDir = worktreePath
         // PLAN-038: track the worktree as active (no-op + no chat note if it
         // was already active) — surfaces a留痕 note on a real transition.
-        await markWorktreeActive(issue)
+        const transitioned = await markWorktreeActive(issue)
+
+        // PLAN-039: run the on_create setup script ONCE, only when a fresh
+        // worktree was actually created AND this is a real none/cleaned→active
+        // transition — never on follow-ups/restarts reusing the worktree.
+        if (wt.created && transitioned) {
+          await runWorktreeSetupScript(
+            issueId,
+            worktreePath,
+            issue.worktreeBranchName?.trim() || `bkd/${issueId}`,
+          )
+        }
 
         // Multi-project association (PLAN-037): materialize a worktree on the
         // SAME branch in every linked repo (each repo's own base + fetch).

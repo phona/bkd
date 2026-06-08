@@ -1,12 +1,16 @@
+import { basename } from 'node:path'
 import type { WorktreeState } from '@bkd/shared'
 import { eq, max } from 'drizzle-orm'
 import { ulid } from 'ulid'
 import { cacheDel } from '@/cache'
 import { db } from '@/db'
+import { getAppSetting } from '@/db/helpers'
 import { indexLog } from '@/db/fts'
 import { issues as issuesTable, issueLogs as logsTable } from '@/db/schema'
+import { runCommand } from '@/engines/spawn'
 import { emitIssueUpdated } from '@/events/issue-events'
 import { logger } from '@/logger'
+import { WORKTREE_SETUP_SCRIPT_KEY } from '@/routes/settings/worktree-keys'
 
 /**
  * Resolve the actual git branch name a worktree uses. Matches the convention
@@ -78,13 +82,71 @@ export async function appendWorktreeNote(issueId: string, content: string): Prom
  */
 export async function markWorktreeActive(
   issue: { id: string, worktreeState?: string | null, worktreeBranchName?: string | null },
-): Promise<void> {
+): Promise<boolean> {
   try {
-    if (issue.worktreeState === 'active') return
+    if (issue.worktreeState === 'active') return false
     const branch = resolveWorktreeBranch(issue)
     await setWorktreeState(issue.id, 'active')
     await appendWorktreeNote(issue.id, `已创建 worktree（分支 ${branch}）`)
+    return true
   } catch (err) {
     logger.warn({ issueId: issue.id, err }, 'mark_worktree_active_failed')
+    return false
+  }
+}
+
+/**
+ * Run the global `worktree:setupScript` (PLAN-039) in a freshly created worktree
+ * before the agent spawns (AoE `on_create` parity). Best-effort: a failure or
+ * timeout is surfaced as a visible warning 留痕 note but never hard-fails the
+ * issue. Caller MUST gate this to run once per worktree creation (e.g. on the
+ * `none/cleaned → active` transition / `created` flag) so follow-ups/restarts
+ * don't re-run it.
+ *
+ * @param issueId   The issue (for the timeline note).
+ * @param worktreeDir The primary worktree directory (cwd + PROJECT_PATH).
+ * @param branch    The resolved branch name (BRANCH env).
+ */
+export async function runWorktreeSetupScript(
+  issueId: string,
+  worktreeDir: string,
+  branch: string,
+): Promise<void> {
+  const script = (await getAppSetting(WORKTREE_SETUP_SCRIPT_KEY))?.trim()
+  if (!script) return
+
+  await appendWorktreeNote(issueId, '运行 setup 脚本…')
+  const startedAt = Date.now()
+  try {
+    const res = await runCommand(['bash', '-lc', script], {
+      cwd: worktreeDir,
+      stderr: 'pipe',
+      timeout: 300000,
+      env: {
+        ...process.env,
+        REPO_NAME: basename(worktreeDir),
+        BRANCH: branch,
+        ISSUE_ID: issueId,
+        PROJECT_PATH: worktreeDir,
+      },
+    })
+    const ms = Date.now() - startedAt
+    if (res.timedOut) {
+      const tail = res.stderr.trim().slice(-400)
+      await appendWorktreeNote(issueId, `⚠️ setup 脚本超时（300s）${tail ? `：\n${tail}` : ''}`)
+      logger.warn({ issueId, worktreeDir }, 'worktree_setup_script_timeout')
+      return
+    }
+    if (res.code !== 0) {
+      const tail = res.stderr.trim().slice(-400)
+      await appendWorktreeNote(issueId, `⚠️ setup 脚本失败（exit ${res.code}）${tail ? `：\n${tail}` : ''}`)
+      logger.warn({ issueId, worktreeDir, code: res.code }, 'worktree_setup_script_failed')
+      return
+    }
+    await appendWorktreeNote(issueId, `setup 脚本完成（${Math.round(ms / 1000)}s）`)
+    logger.debug({ issueId, worktreeDir, ms }, 'worktree_setup_script_done')
+  } catch (err) {
+    await appendWorktreeNote(issueId, `⚠️ setup 脚本执行异常：${err instanceof Error ? err.message : String(err)}`)
+    logger.warn({ issueId, worktreeDir, err }, 'worktree_setup_script_error')
   }
 }

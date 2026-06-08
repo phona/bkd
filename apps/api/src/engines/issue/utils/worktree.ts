@@ -1,13 +1,21 @@
-import { mkdir, rm, stat } from 'node:fs/promises'
-import { join, resolve, sep } from 'node:path'
+import { access, mkdir, rm, stat } from 'node:fs/promises'
+import { basename, join, resolve, sep } from 'node:path'
 import { and, eq } from 'drizzle-orm'
 import { db } from '@/db'
+import { getAppSetting } from '@/db/helpers'
 import { issueProjects as issueProjectsTable, projects as projectsTable } from '@/db/schema'
 import { WORKTREE_DIR } from '@/engines/issue/constants'
 import { runCommand } from '@/engines/spawn'
 import { logger } from '@/logger'
 import { ROOT_DIR } from '@/root'
 import { isGitRepoFresh } from '@/utils/git'
+import {
+  DEFAULT_BRANCH_TEMPLATE,
+  resolveFetchStrategy,
+  WORKTREE_BRANCH_TEMPLATE_KEY,
+  WORKTREE_DEFAULT_BASE_BRANCH_KEY,
+  WORKTREE_INIT_SUBMODULES_KEY,
+} from '@/routes/settings/worktree-keys'
 
 /** Resolve WORKTREE_DIR — absolute paths used as-is, relative resolved from ROOT_DIR */
 export const WORKTREE_BASE = WORKTREE_DIR.startsWith('/') ?
@@ -103,36 +111,113 @@ export interface CreateWorktreeOptions {
    * branch, which is the intended guard.
    */
   attachExisting?: boolean
+  /**
+   * The issue's per-issue base branch (`worktreeBaseBranch`). PLAN-039: when no
+   * explicit `startPointRef` resolves, the start point is resolved via
+   * {@link resolveBaseBranch} with this as the highest-precedence input
+   * (per-issue base → global default → auto-detect).
+   */
+  issueBaseBranch?: string
 }
 
-/**
- * Build a readable, unique, git-safe branch name from an issue title + id:
- *   "Fix login bug" + iioianio → bkd/fix-login-bug-iioianio
- *   "修复登录态"     + iioianio → bkd/iioianio   (no ascii slug → id only)
- * The id suffix guarantees uniqueness (no collisions between similar titles);
- * the ascii-only slug + id fallback keep it checkout-safe for CJK/emoji titles.
- * Called from issue creation where BOTH the title and the real id are known.
- */
-export function deriveWorktreeBranch(title: string, id: string): string {
-  const slug = title
+/** Result of {@link createWorktreeEx}: path + whether it was freshly created. */
+export interface CreateWorktreeResult {
+  path: string
+  /** true only when a brand-new worktree dir was just created (not reused). */
+  created: boolean
+}
+
+/** NFKD ascii slug (≤40 chars) of a title, used in branch templates. */
+function slugify(title: string): string {
+  return title
     .normalize('NFKD')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 40)
     .replace(/-+$/g, '')
-  return slug ? `bkd/${slug}-${id}` : `bkd/${id}`
+}
+
+/** Sanitize a derived branch name so it is git-ref-safe (no spaces/special). */
+function sanitizeBranch(name: string): string {
+  return name
+    .replace(/[\s~^:?*[\\]/g, '-')
+    .replace(/\.{2,}/g, '-')
+    .replace(/\/{2,}/g, '/')
+    .replace(/^[/.]+|[/.]+$/g, '')
+    .replace(/\.lock$/i, '')
+}
+
+/**
+ * Build a readable, unique, git-safe branch name from an issue title + id,
+ * applying the global `worktree:branchTemplate` setting (PLAN-039). The default
+ * template `bkd/{slug}-{id}` reproduces the historical behaviour exactly:
+ *   "Fix login bug" + iioianio → bkd/fix-login-bug-iioianio
+ *   "修复登录态"     + iioianio → bkd/iioianio   (no ascii slug → collapses)
+ * Vars: `{slug}` (NFKD ascii slug ≤40), `{id}`, `{repo}` (repo dir basename when
+ * `baseDir` is provided, else empty). An invalid/empty result falls back to
+ * `bkd/{id}`. Async because it reads a cached setting.
+ */
+export async function deriveWorktreeBranch(title: string, id: string, baseDir?: string): Promise<string> {
+  const slug = slugify(title)
+  const repo = baseDir ? basename(baseDir) : ''
+  let template = (await getAppSetting(WORKTREE_BRANCH_TEMPLATE_KEY))?.trim() || DEFAULT_BRANCH_TEMPLATE
+  if (!template.includes('{id}')) template = DEFAULT_BRANCH_TEMPLATE
+
+  let branch = template
+    .replace(/\{slug\}/g, slug)
+    .replace(/\{repo\}/g, repo)
+    .replace(/\{id\}/g, id)
+  // Collapse the empty-slug case so `bkd/{slug}-{id}` → `bkd/{id}` (historical).
+  branch = branch.replace(/-{2,}/g, '-').replace(/\/-/g, '/').replace(/-\//g, '/').replace(/-+$/g, '')
+  branch = sanitizeBranch(branch)
+  return branch || `bkd/${id}`
+}
+
+/**
+ * Resolve the base branch / start-point for a worktree (PLAN-039), in order of
+ * precedence:
+ *   1. `perIssueBase` (the issue's `worktreeBaseBranch`) when set + resolvable.
+ *   2. The global `worktree:defaultBaseBranch` setting when set + resolvable.
+ *   3. Auto-detection via {@link resolveStartPoint} (origin/HEAD → main/master
+ *      → HEAD).
+ * Returns null only when nothing resolves (caller falls back further).
+ */
+export async function resolveBaseBranch(baseDir: string, perIssueBase?: string): Promise<string> {
+  const perIssue = perIssueBase?.trim()
+  if (perIssue && (await verifyRef(baseDir, perIssue))) return perIssue
+
+  const globalBase = (await getAppSetting(WORKTREE_DEFAULT_BASE_BRANCH_KEY))?.trim()
+  if (globalBase) {
+    // Prefer the remote-tracking ref when a bare branch name was configured.
+    const resolved =
+      (await verifyRef(baseDir, globalBase)) ??
+      (await verifyRef(baseDir, `origin/${globalBase}`))
+    if (resolved) return resolved
+  }
+
+  return resolveStartPoint(baseDir)
 }
 
 /**
  * Best-effort `git fetch` so a new worktree branches off the LATEST origin
- * rather than a stale local remote-tracking snapshot. Non-fatal: skips when
- * there is no remote, and fails fast (never prompts) when offline / auth is
- * required — in those cases we just fall back to the local refs.
+ * rather than a stale local remote-tracking snapshot. Honors the global
+ * `worktree:fetchStrategy` setting (PLAN-039):
+ *   - `never`  → skip entirely.
+ *   - `auto`   → fetch only when a remote exists (historical behaviour).
+ *   - `always` → attempt a fetch even on the no-remote fast-path (log if it
+ *     fails) so the user's "always" intent is honoured.
+ * Non-fatal everywhere: fails fast (never prompts) when offline / auth required.
  */
 async function tryFetch(baseDir: string): Promise<void> {
+  const strategy = await resolveFetchStrategy()
+  if (strategy === 'never') return
+
   const remotes = await runCommand(['git', 'remote'], { cwd: baseDir, stderr: 'pipe' })
-  if (remotes.code !== 0 || !remotes.stdout.trim()) return
+  const hasRemote = remotes.code === 0 && !!remotes.stdout.trim()
+  // `auto` skips silently when there is no remote; `always` still tries.
+  if (!hasRemote && strategy !== 'always') return
+
   const res = await runCommand(['git', 'fetch', '--quiet', '--prune'], {
     cwd: baseDir,
     stderr: 'pipe',
@@ -140,10 +225,45 @@ async function tryFetch(baseDir: string): Promise<void> {
     env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
   })
   if (res.code !== 0) {
-    logger.warn({ baseDir, err: res.stderr.trim().slice(0, 200) }, 'worktree_fetch_skipped')
+    logger.warn({ baseDir, strategy, err: res.stderr.trim().slice(0, 200) }, 'worktree_fetch_skipped')
   }
 }
 
+/**
+ * Best-effort submodule init (PLAN-039): after a worktree is created, if the
+ * global `worktree:initSubmodules` setting is not 'false' AND the worktree has a
+ * `.gitmodules` file, run `git submodule update --init --recursive`. Never fails
+ * worktree creation.
+ */
+async function maybeInitSubmodules(worktreeDir: string): Promise<void> {
+  const setting = (await getAppSetting(WORKTREE_INIT_SUBMODULES_KEY))?.trim()
+  if (setting === 'false') return
+  try {
+    await access(join(worktreeDir, '.gitmodules'))
+  } catch {
+    return // no submodules
+  }
+  const res = await runCommand(
+    ['git', '-C', worktreeDir, 'submodule', 'update', '--init', '--recursive'],
+    {
+      cwd: worktreeDir,
+      stderr: 'pipe',
+      timeout: 120000,
+      env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+    },
+  )
+  if (res.code !== 0) {
+    logger.warn({ worktreeDir, err: res.stderr.trim().slice(0, 200) }, 'worktree_submodule_init_failed')
+  } else {
+    logger.debug({ worktreeDir }, 'worktree_submodule_init_done')
+  }
+}
+
+/**
+ * Backwards-compatible wrapper returning just the worktree path. Prefer
+ * {@link createWorktreeEx} when the caller needs to know whether the worktree
+ * was freshly created (e.g. to run the one-shot setup script — PLAN-039).
+ */
 export async function createWorktree(
   baseDir: string,
   projectId: string,
@@ -156,6 +276,17 @@ export async function createWorktree(
   /** Legacy positional branch-name override (kept for existing call sites). */
   branchNameOverrideArg?: string,
 ): Promise<string> {
+  const res = await createWorktreeEx(baseDir, projectId, issueId, startPointRefOrOptions, branchNameOverrideArg)
+  return res.path
+}
+
+export async function createWorktreeEx(
+  baseDir: string,
+  projectId: string,
+  issueId: string,
+  startPointRefOrOptions?: string | CreateWorktreeOptions,
+  branchNameOverrideArg?: string,
+): Promise<CreateWorktreeResult> {
   const opts: CreateWorktreeOptions = typeof startPointRefOrOptions === 'string' || startPointRefOrOptions == null ?
       { startPointRef: startPointRefOrOptions as string | undefined, branchNameOverride: branchNameOverrideArg } :
     startPointRefOrOptions
@@ -173,11 +304,12 @@ export async function createWorktree(
   // makes createWorktree idempotent (a forked issue may pre-create it).
   if (await isWorktreeRegistered(baseDir, worktreeDir)) {
     logger.debug({ issueId, worktreeDir }, 'worktree_reuse_existing')
-    return worktreeDir
+    return { path: worktreeDir, created: false }
   }
 
   // Refresh remote-tracking refs so we branch off the latest origin (the
   // base-branch resolution + attach-existing both rely on up-to-date refs).
+  // Honors `worktree:fetchStrategy` (PLAN-039).
   await tryFetch(baseDir)
 
   // Attach-to-existing-branch path: check out the named branch without
@@ -191,10 +323,14 @@ export async function createWorktree(
       throw new Error(`Failed to attach worktree to branch "${branchName}": ${result.stderr.trim()}`)
     }
     logger.debug({ issueId, worktreeDir, branchName }, 'worktree_attached_existing')
-    return worktreeDir
+    await maybeInitSubmodules(worktreeDir)
+    return { path: worktreeDir, created: true }
   }
 
-  let startPoint = opts.startPointRef
+  // Resolve the start point. An explicit `startPointRef` (fork/dependent issue
+  // branching off the parent) wins when it resolves; otherwise PLAN-039
+  // base-branch precedence applies: per-issue base → global default → detect.
+  let startPoint: string | undefined = opts.startPointRef?.trim() || undefined
   if (startPoint) {
     const { code } = await runCommand(
       ['git', 'rev-parse', '--verify', '--quiet', startPoint],
@@ -202,7 +338,7 @@ export async function createWorktree(
     )
     if (code !== 0) startPoint = undefined
   }
-  if (!startPoint) startPoint = await resolveStartPoint(baseDir)
+  if (!startPoint) startPoint = await resolveBaseBranch(baseDir, opts.issueBaseBranch)
 
   // Create worktree with a new branch off the resolved start point
   const result = await runCommand(
@@ -220,7 +356,8 @@ export async function createWorktree(
     }
   }
   logger.debug({ issueId, worktreeDir, branchName, startPoint }, 'worktree_created')
-  return worktreeDir
+  await maybeInitSubmodules(worktreeDir)
+  return { path: worktreeDir, created: true }
 }
 
 /**

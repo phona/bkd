@@ -6,6 +6,7 @@ import recycleBin from './recycle-bin'
 import systemLogs from './system-logs'
 import upgrade from './upgrade'
 import webhooksRoute from './webhooks'
+import worktreeSettings from './worktree'
 
 const settings = createOpenAPIRouter()
 
@@ -13,6 +14,7 @@ settings.route('/', general)
 settings.route('/', systemLogs)
 settings.route('/', recycleBin)
 settings.route('/', cleanup)
+settings.route('/', worktreeSettings)
 settings.route('/', about)
 settings.route('/upgrade', upgrade)
 settings.route('/', webhooksRoute)
