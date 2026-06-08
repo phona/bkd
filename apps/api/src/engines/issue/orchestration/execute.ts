@@ -84,7 +84,9 @@ export async function executeIssue(
         )
         workingDir = worktreePath
       } catch (error) {
-        logger.warn({ issueId, error }, 'worktree_creation_failed_fallback_to_base')
+        // `err` (not `error`) so pino's error serializer records the real
+        // message/stack instead of an empty {} — the fallback reason matters.
+        logger.warn({ issueId, err: error }, 'worktree_creation_failed_fallback_to_base')
         emitDiagnosticLog(
           issueId,
           '',
