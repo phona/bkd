@@ -430,18 +430,25 @@ export function CreateIssueDialog() {
       }}
       disablePointerDismissal
     >
+      {/* flex-col + inner block scroll region (NOT overflow on the base grid
+          container): iOS Safari does not reliably touch-scroll a `display:grid`
+          overflow container, so the tall create form couldn't be scrolled on
+          mobile even though wheel/programmatic scroll worked. The inner
+          min-h-0 flex-1 block scrolls reliably on touch. */}
       <DialogContent
-        className="max-w-[calc(100%-2rem)] md:max-w-[580px] max-h-[85dvh] overflow-y-auto"
+        className="max-w-[calc(100%-2rem)] md:max-w-[580px] flex flex-col max-h-[85dvh] overflow-hidden"
         aria-describedby={undefined}
       >
-        <DialogTitle>{t('issue.createTask')}</DialogTitle>
-        <CreateIssueForm
-          projectId={resolvedProjectId}
-          initialStatusId={createDialogStatusId}
-          autoFocus={createDialogOpen}
-          onCreated={closeCreateDialog}
-          onCancel={closeCreateDialog}
-        />
+        <DialogTitle className="shrink-0">{t('issue.createTask')}</DialogTitle>
+        <div className="min-h-0 flex-1 overflow-y-auto -mx-4 px-4">
+          <CreateIssueForm
+            projectId={resolvedProjectId}
+            initialStatusId={createDialogStatusId}
+            autoFocus={createDialogOpen}
+            onCreated={closeCreateDialog}
+            onCancel={closeCreateDialog}
+          />
+        </div>
       </DialogContent>
     </Dialog>
   )
