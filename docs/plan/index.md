@@ -67,3 +67,4 @@ Each plan is a single line linking to its detail file. All detailed information 
 - [-] [**PLAN-036 Desktop dock rail + mobile summon panels (terminal/files/diff)**](PLAN-036.md) `2026-06-07`
 - [-] [**PLAN-037 Multi-project association — same-branch worktrees across linked projects**](PLAN-037.md) `2026-06-08`
 - [x] [**PLAN-038 Worktree lifecycle — explicit completion, tracked state, no silent ops**](PLAN-038.md) `2026-06-08`
+- [-] [**PLAN-039 Worktree experience parity with AoE — global settings panel + strategy knobs**](PLAN-039.md) `2026-06-08`
