@@ -102,6 +102,26 @@ export interface CreateWorktreeOptions {
   attachExisting?: boolean
 }
 
+/**
+ * Best-effort `git fetch` so a new worktree branches off the LATEST origin
+ * rather than a stale local remote-tracking snapshot. Non-fatal: skips when
+ * there is no remote, and fails fast (never prompts) when offline / auth is
+ * required — in those cases we just fall back to the local refs.
+ */
+async function tryFetch(baseDir: string): Promise<void> {
+  const remotes = await runCommand(['git', 'remote'], { cwd: baseDir, stderr: 'pipe' })
+  if (remotes.code !== 0 || !remotes.stdout.trim()) return
+  const res = await runCommand(['git', 'fetch', '--quiet', '--prune'], {
+    cwd: baseDir,
+    stderr: 'pipe',
+    timeout: 15000,
+    env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+  })
+  if (res.code !== 0) {
+    logger.warn({ baseDir, err: res.stderr.trim().slice(0, 200) }, 'worktree_fetch_skipped')
+  }
+}
+
 export async function createWorktree(
   baseDir: string,
   projectId: string,
@@ -133,6 +153,10 @@ export async function createWorktree(
     logger.debug({ issueId, worktreeDir }, 'worktree_reuse_existing')
     return worktreeDir
   }
+
+  // Refresh remote-tracking refs so we branch off the latest origin (the
+  // base-branch resolution + attach-existing both rely on up-to-date refs).
+  await tryFetch(baseDir)
 
   // Attach-to-existing-branch path: check out the named branch without
   // creating a new one. The branch must already exist (local or remote).
