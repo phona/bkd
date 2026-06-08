@@ -4,6 +4,7 @@ import { cacheDel } from '@/cache'
 import { db } from '@/db'
 import { findProject, getDefaultEngine, getEngineDefaultModel, getServerUrl } from '@/db/helpers'
 import { issues as issuesTable } from '@/db/schema'
+import { deriveWorktreeBranch } from '@/engines/issue/utils/worktree'
 import type { EngineType } from '@/engines/types'
 import { logger } from '@/logger'
 import { createOpenAPIRouter } from '@/openapi/hono'
@@ -96,6 +97,15 @@ create.openapi(R.createIssue, async (c) => {
         })
         .returning()
     })
+
+    // Worktree branch name: when the user left it blank, derive a readable,
+    // unique, git-safe name from the title + the real issue id (the id only
+    // exists after insert). Patched here, still before any execute below.
+    if (newIssue && newIssue.useWorktree && !body.worktreeBranchName?.trim()) {
+      const branch = deriveWorktreeBranch(body.title, newIssue.id)
+      await db.update(issuesTable).set({ worktreeBranchName: branch }).where(eq(issuesTable.id, newIssue.id))
+      newIssue.worktreeBranchName = branch
+    }
 
     // After successful creation, invalidate relevant caches
     await cacheDel(`projectIssueIds:${project.id}`)

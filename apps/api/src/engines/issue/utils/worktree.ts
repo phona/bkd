@@ -103,6 +103,25 @@ export interface CreateWorktreeOptions {
 }
 
 /**
+ * Build a readable, unique, git-safe branch name from an issue title + id:
+ *   "Fix login bug" + iioianio → bkd/fix-login-bug-iioianio
+ *   "修复登录态"     + iioianio → bkd/iioianio   (no ascii slug → id only)
+ * The id suffix guarantees uniqueness (no collisions between similar titles);
+ * the ascii-only slug + id fallback keep it checkout-safe for CJK/emoji titles.
+ * Called from issue creation where BOTH the title and the real id are known.
+ */
+export function deriveWorktreeBranch(title: string, id: string): string {
+  const slug = title
+    .normalize('NFKD')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40)
+    .replace(/-+$/g, '')
+  return slug ? `bkd/${slug}-${id}` : `bkd/${id}`
+}
+
+/**
  * Best-effort `git fetch` so a new worktree branches off the LATEST origin
  * rather than a stale local remote-tracking snapshot. Non-fatal: skips when
  * there is no remote, and fails fast (never prompts) when offline / auth is
