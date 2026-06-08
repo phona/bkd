@@ -35,7 +35,7 @@ export function DockRail({
 }: {
   projectId: string
   issueId: string
-  terminalCwd: string | null
+  terminalCwd: string | null | undefined
   useWorktree?: boolean
   changesRoot?: string
 }) {
@@ -61,12 +61,16 @@ export function DockRail({
     }
   }, [open, collapsed, tab])
 
-  // Point the file browser at this issue's context the first time Files opens.
+  // Point the file browser at this issue's WORKTREE root (terminalCwd) — the
+  // same dir the terminal opens in. Falls back to changesRoot. Skip while the
+  // worktree path is still loading (terminalCwd === undefined) so we don't latch
+  // onto the project dir first.
   useEffect(() => {
+    if (terminalCwd === undefined) return
     if (visitedRef.current.has('files')) {
-      setIssueContext(projectId, issueId, changesRoot)
+      setIssueContext(projectId, issueId, terminalCwd ?? changesRoot)
     }
-  }, [projectId, issueId, changesRoot, setIssueContext, tab, open])
+  }, [projectId, issueId, terminalCwd, changesRoot, setIssueContext, tab, open])
 
   const dragRef = useRef<{ active: boolean }>({ active: false })
   const onGripDown = useCallback((e: React.PointerEvent) => {

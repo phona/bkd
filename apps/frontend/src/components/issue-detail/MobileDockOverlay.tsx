@@ -31,7 +31,7 @@ export function MobileDockOverlay({
 }: {
   projectId: string
   issueId: string
-  terminalCwd: string | null
+  terminalCwd: string | null | undefined
   useWorktree?: boolean
   changesRoot?: string
 }) {
@@ -49,11 +49,14 @@ export function MobileDockOverlay({
     }
   }, [mobilePanel])
 
+  // Point the file browser at the worktree root (terminalCwd), same as desktop;
+  // skip while it's still loading.
   useEffect(() => {
+    if (terminalCwd === undefined) return
     if (visitedRef.current.has('files')) {
-      setIssueContext(projectId, issueId, changesRoot)
+      setIssueContext(projectId, issueId, terminalCwd ?? changesRoot)
     }
-  }, [projectId, issueId, changesRoot, setIssueContext, mobilePanel])
+  }, [projectId, issueId, terminalCwd, changesRoot, setIssueContext, mobilePanel])
 
   const visited = visitedRef.current
 

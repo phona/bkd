@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { disposeTerminal, TerminalView } from '@/components/terminal/TerminalView'
 import { useTerminalStore } from '@/stores/terminal-store'
 
@@ -21,17 +21,21 @@ import { useTerminalStore } from '@/stores/terminal-store'
  */
 export function DockTerminal({ cwd, className }: { cwd?: string | null, className?: string }) {
   const [ready, setReady] = useState(false)
+  const armedRef = useRef(false)
 
+  // Arm the cwd ONCE, but only after it has resolved (`undefined` = the worktree
+  // list is still loading). This guarantees the first PTY connection starts in
+  // the issue's worktree dir instead of the default/project cwd.
   useEffect(() => {
+    if (armedRef.current || cwd === undefined) return
+    armedRef.current = true
     if (cwd) useTerminalStore.getState().openInDir(cwd)
     setReady(true)
-    return () => {
-      disposeTerminal()
-    }
-    // Run exactly once: cwd is captured at first open; later "open terminal
-    // here" clicks drive openInDir directly (restartToken bump).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [cwd])
+
+  // Dispose the PTY when the host genuinely unmounts (issue change / navigate
+  // away). This is the BUG-004 guarantee: hidden ≠ leaked.
+  useEffect(() => () => disposeTerminal(), [])
 
   return ready ? <TerminalView className={className} /> : null
 }

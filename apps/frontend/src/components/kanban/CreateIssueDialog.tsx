@@ -25,7 +25,6 @@ import {
   useProject,
   useProjects,
 } from '@/hooks/use-kanban'
-import { slugifyBranch } from '@/lib/branch-slug'
 import { formatModelName } from '@/lib/format'
 import { tStatus } from '@/lib/i18n-utils'
 import type { StatusDefinition } from '@/lib/statuses'
@@ -97,12 +96,12 @@ export function CreateIssueForm({
     effectiveProjectId,
     Boolean(effectiveProjectId) && projectIsGitRepo && useWorktree,
   )
-  // Auto-generated branch name from the issue title (AoE session-title → branch).
-  // Shown as the placeholder / fallback when the user hasn't typed a name.
-  const autoBranchName = useMemo(
-    () => slugifyBranch(input, 'issue'),
-    [input],
-  )
+  // Placeholder hint only. The real branch name, when the user leaves the field
+  // blank, is resolved on the BACKEND as `bkd/{issueId}` (unique + git-safe).
+  // We must NOT derive it from the title here: the issue id doesn't exist yet,
+  // and a title slug collides (e.g. all-CJK titles → empty slug) and can be
+  // un-checkout-able. See the backend createWorktree default.
+  const autoBranchName = t('createIssue.branchNamePlaceholder')
   const [templateId, setTemplateId] = useState('')
   const [templatePrefix, setTemplatePrefix] = useState('')
 
@@ -189,8 +188,10 @@ export function CreateIssueForm({
         worktreeBaseBranch:
           useWorktree && !worktreeAttachExisting && worktreeBaseBranch ? worktreeBaseBranch : undefined,
         // resolved branch name: user-typed, else auto-slug from the title
+        // Blank → undefined so the backend assigns the safe unique default
+        // `bkd/{issueId}` (real id). Never derive from the title here.
         worktreeBranchName:
-          useWorktree ? (worktreeBranchName.trim() || slugifyBranch(trimmed, 'issue')) : undefined,
+          useWorktree ? (worktreeBranchName.trim() || undefined) : undefined,
         worktreeAttachExisting: useWorktree && worktreeAttachExisting ? true : undefined,
         engineType: resolvedEngineType || undefined,
         model: modelId || undefined,

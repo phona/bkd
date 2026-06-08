@@ -47,8 +47,13 @@ export function ChatArea({
   const { data: worktrees } = useProjectWorktrees(projectId)
   // Working dir for "open terminal here": the issue's worktree if it has one,
   // otherwise the project directory. Null → terminal opens in the default cwd.
-  const terminalCwd
-    = worktrees?.find(w => w.issueId === issueId)?.path ?? project?.directory ?? null
+  // `undefined` while the worktree list is still loading — so the dock terminal
+  // / file browser don't latch onto the project dir before the worktree path is
+  // known. Resolves to the issue's worktree path, else the project dir, else null.
+  const terminalCwd: string | null | undefined
+    = worktrees === undefined
+      ? undefined
+      : (worktrees.find(w => w.issueId === issueId)?.path ?? project?.directory ?? null)
   const changesSummary = useChangesSummary(projectId, issueId)
   const changesRoot = (changesSummary as { root?: string } | null)?.root
   const scrollRef = useRef<HTMLDivElement>(null)
