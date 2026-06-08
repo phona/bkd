@@ -3,10 +3,15 @@ import { ImageAddon } from '@xterm/addon-image'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { WebglAddon } from '@xterm/addon-webgl'
 import { Terminal } from '@xterm/xterm'
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { getToken } from '@/lib/auth'
-import { useTerminalSessionStore } from '@/stores/terminal-session-store'
-import { useTerminalStore } from '@/stores/terminal-store'
+import type { TerminalTab } from '@/stores/terminal-session-store'
+import {
+  clampFontSize,
+  MAX_TERMINAL_TABS,
+  persistFontSizes,
+  useTerminalSessionStore,
+} from '@/stores/terminal-session-store'
 import '@xterm/xterm/css/xterm.css'
 
 // --- Terminal themes ---
@@ -69,6 +74,31 @@ function getTerminalTheme() {
   return isDarkMode() ? DARK_THEME : LIGHT_THEME
 }
 
+// --- Layout / reconnect constants ---
+
+const MOBILE_BREAKPOINT_PX = 768
+const MIN_FONT_SIZE = 6
+const MAX_FONT_SIZE = 28
+// Fast-start reconnect ladder (AoE #1455): 200ms…10s instead of a fixed 2s×3.
+const RETRY_DELAYS_MS = [200, 400, 800, 1500, 3000, 6000, 10000] as const
+const MAX_RETRIES = RETRY_DELAYS_MS.length
+// Native xterm scrollback so "Back to live" works without tmux (item D).
+const SCROLLBACK_LINES = 5000
+
+export function retryDelayMs(attempt: number): number {
+  const idx = Math.max(1, Math.min(RETRY_DELAYS_MS.length, attempt)) - 1
+  return RETRY_DELAYS_MS[idx]!
+}
+
+function isMobileViewport(): boolean {
+  return typeof window !== 'undefined' && window.innerWidth < MOBILE_BREAKPOINT_PX
+}
+
+function activeFontSize(): number {
+  const s = useTerminalSessionStore.getState()
+  return isMobileViewport() ? s.mobileFontSize : s.desktopFontSize
+}
+
 // --- Binary protocol helpers ---
 
 function encodeInput(data: string): ArrayBuffer {
@@ -91,17 +121,6 @@ function applyCtrl(data: string): string {
   return data
 }
 
-/**
- * Send a raw input sequence to the live terminal PTY (mobile helper keys:
- * Esc / Tab / arrows / symbols). No-op when the socket is not open.
- */
-export function sendTerminalInput(data: string): void {
-  const { ws } = useTerminalSessionStore.getState()
-  if (ws?.readyState === WebSocket.OPEN) {
-    ws.send(encodeInput(data))
-  }
-}
-
 function encodeResize(cols: number, rows: number): ArrayBuffer {
   const buf = new ArrayBuffer(5)
   const view = new DataView(buf)
@@ -111,32 +130,27 @@ function encodeResize(cols: number, rows: number): ArrayBuffer {
   return buf
 }
 
-// --- Session persistence ---
+// --- Active-tab helpers (consumed by TerminalKeyBar / session strip) ---
 
-const SESSION_STORAGE_KEY = 'bkd-terminal-session-id'
+function activeTab(): TerminalTab | null {
+  const s = useTerminalSessionStore.getState()
+  return s.activeId ? (s.tabs[s.activeId] ?? null) : null
+}
 
-function saveSessionId(id: string): void {
-  try {
-    sessionStorage.setItem(SESSION_STORAGE_KEY, id)
-  } catch {
-    /* quota */
+/**
+ * Send a raw input sequence to the ACTIVE terminal's PTY (mobile helper keys:
+ * Esc / Tab / arrows / symbols / paste). No-op when the socket is not open.
+ */
+export function sendTerminalInput(data: string): void {
+  const tab = activeTab()
+  if (tab?.ws?.readyState === WebSocket.OPEN) {
+    tab.ws.send(encodeInput(data))
   }
 }
 
-function loadSessionId(): string | null {
-  try {
-    return sessionStorage.getItem(SESSION_STORAGE_KEY)
-  } catch {
-    return null
-  }
-}
-
-function clearSessionId(): void {
-  try {
-    sessionStorage.removeItem(SESSION_STORAGE_KEY)
-  } catch {
-    /* */
-  }
+/** Focus the active terminal's xterm instance (used after helper-key taps). */
+export function focusActiveTerminal(): void {
+  activeTab()?.terminal?.focus()
 }
 
 // --- API helpers ---
@@ -161,18 +175,7 @@ async function createSession(cwd?: string | null): Promise<string> {
   return json.data.id as string
 }
 
-async function checkSession(id: string): Promise<boolean> {
-  try {
-    const res = await fetch(`/api/terminal/${id}`, { headers: terminalHeaders() })
-    const json = await res.json()
-    return json.success === true
-  } catch {
-    return false
-  }
-}
-
 function deleteSession(sessionId: string): void {
-  clearSessionId()
   void fetch(`/api/terminal/${sessionId}`, { method: 'DELETE', headers: terminalHeaders() })
 }
 
@@ -189,34 +192,24 @@ function wsUrl(sessionId: string): string {
   return token ? `${base}?token=${encodeURIComponent(token)}` : base
 }
 
-// --- Store-backed singleton helpers ---
+// --- xterm instance lifecycle ---
 
 const store = useTerminalSessionStore
 
-function getOrCreateTerminal(): { terminal: Terminal, fitAddon: FitAddon } {
-  const state = store.getState()
-  if (state.terminal && state.fitAddon) {
-    return { terminal: state.terminal, fitAddon: state.fitAddon }
-  }
-
-  store.getState().set({ disposed: false })
-
+function createTerminal(): { terminal: Terminal, fitAddon: FitAddon } {
   const fitAddon = new FitAddon()
   const terminal = new Terminal({
     cursorBlink: true,
-    fontSize: 14,
+    fontSize: activeFontSize(),
     fontFamily:
       'ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace',
     theme: getTerminalTheme(),
     allowProposedApi: true,
+    scrollback: SCROLLBACK_LINES,
   })
-
   terminal.loadAddon(fitAddon)
   terminal.loadAddon(new WebLinksAddon())
   terminal.loadAddon(new ImageAddon())
-
-  store.getState().set({ terminal, fitAddon })
-
   return { terminal, fitAddon }
 }
 
@@ -233,293 +226,503 @@ function tryLoadWebgl(terminal: Terminal): void {
   }
 }
 
-let wsRetryCount = 0
+// --- Per-tab connection ---
 
-function connectWs(sessionId: string, terminal: Terminal, fitAddon: FitAddon): void {
-  const state = store.getState()
-  if (state.disposed) return
-  if (
-    state.ws &&
-    (state.ws.readyState === WebSocket.OPEN || state.ws.readyState === WebSocket.CONNECTING)
-  ) {
+function connectWs(tabId: string): void {
+  const tab = store.getState().tabs[tabId]
+  if (!tab || store.getState().disposed) return
+  if (!tab.sessionId || !tab.terminal || !tab.fitAddon) return
+  if (tab.ws && (tab.ws.readyState === WebSocket.OPEN || tab.ws.readyState === WebSocket.CONNECTING)) {
     return
   }
 
+  const terminal = tab.terminal
+  const fitAddon = tab.fitAddon
+  const sessionId = tab.sessionId
   const ws = new WebSocket(wsUrl(sessionId))
   ws.binaryType = 'arraybuffer'
-  store.getState().set({ ws })
+  store.getState().patchTab(tabId, { ws })
+
+  let receivedData = false
 
   ws.addEventListener('open', () => {
-    wsRetryCount = 0
-    fitAddon.fit()
+    try {
+      fitAddon.fit()
+    } catch {
+      /* not visible yet */
+    }
     const { cols, rows } = terminal
-    ws.send(encodeResize(cols, rows))
+    if (ws.readyState === WebSocket.OPEN) ws.send(encodeResize(cols, rows))
   })
 
   ws.addEventListener('message', (evt) => {
+    if (!receivedData) {
+      receivedData = true
+      store.getState().patchTab(tabId, { retryCount: 0 })
+    }
     if (evt.data instanceof ArrayBuffer) {
       terminal.write(new Uint8Array(evt.data))
     }
   })
 
   ws.addEventListener('close', (evt) => {
-    store.getState().set({ ws: null })
+    store.getState().patchTab(tabId, { ws: null })
+    const cur = store.getState().tabs[tabId]
+    if (!cur || store.getState().disposed) return
 
     // Replaced by another tab/connection — stop reconnecting
     if (evt.code === 4000) {
-      clearSessionId()
-      store.getState().set({ sessionId: null })
+      store.getState().patchTab(tabId, { sessionId: null, dead: true })
       terminal.writeln('\r\n\x1B[90m[session taken over by another tab]\x1B[0m')
       return
     }
 
-    // Session is gone (PTY exited or server rejected) — start fresh
+    // Server-signalled dead PTY (PTY exited / rejected) — recreate a fresh
+    // session in the same cwd. code 1008 = rejected upgrade, 1000 + "PTY exited".
     if (evt.reason === 'PTY exited' || evt.code === 1008) {
-      clearSessionId()
-      store.getState().set({ sessionId: null })
-      if (!store.getState().disposed) {
-        terminal.writeln('\r\n\x1B[90m[session ended, reconnecting...]\x1B[0m')
-        const timer = setTimeout(() => {
-          store.getState().set({ reconnectTimer: null })
-          void initConnection(terminal, fitAddon)
-        }, 1500)
-        store.getState().set({ reconnectTimer: timer })
-      }
+      store.getState().patchTab(tabId, { sessionId: null })
+      terminal.writeln('\r\n\x1B[90m[session ended, reconnecting...]\x1B[0m')
+      scheduleReconnect(tabId, retryDelayMs(1), true)
       return
     }
 
-    // WS disconnected but session may still be alive — reconnect to same session
-    const currentState = store.getState()
-    if (!currentState.disposed && currentState.sessionId) {
-      wsRetryCount++
-      // Too many retries — session is likely dead, start fresh
-      if (wsRetryCount >= 3) {
-        wsRetryCount = 0
-        clearSessionId()
-        store.getState().set({ sessionId: null })
-        const timer = setTimeout(() => {
-          store.getState().set({ reconnectTimer: null })
-          void initConnection(terminal, fitAddon)
-        }, 1500)
-        store.getState().set({ reconnectTimer: timer })
-        return
-      }
-      const timer = setTimeout(() => {
-        store.getState().set({ reconnectTimer: null })
-        const s = store.getState()
-        if (s.sessionId) {
-          connectWs(s.sessionId, terminal, fitAddon)
-        }
-      }, 2000)
-      store.getState().set({ reconnectTimer: timer })
+    // WS dropped but PTY may still be alive — reconnect with fast backoff.
+    const retryCount = cur.retryCount + 1
+    if (retryCount > MAX_RETRIES) {
+      // Exhausted same-session retries — start a fresh session.
+      store.getState().patchTab(tabId, { sessionId: null, retryCount: 0 })
+      scheduleReconnect(tabId, retryDelayMs(1), true)
+      return
     }
+    store.getState().patchTab(tabId, { retryCount })
+    scheduleReconnect(tabId, retryDelayMs(retryCount), false)
   })
 
   ws.addEventListener('error', () => {
-    ws.close()
+    try {
+      ws.close()
+    } catch {
+      /* already closed */
+    }
   })
 }
 
-async function initConnection(terminal: Terminal, fitAddon: FitAddon): Promise<void> {
-  const state = store.getState()
-  if (state.disposed) return
+/**
+ * Schedule a reconnect for a tab. `fresh` recreates the PTY session;
+ * otherwise it redials the existing one.
+ */
+function scheduleReconnect(tabId: string, delayMs: number, fresh: boolean): void {
+  if (store.getState().disposed) return
+  const timer = setTimeout(() => {
+    store.getState().patchTab(tabId, { reconnectTimer: null })
+    if (store.getState().disposed) return
+    if (fresh) {
+      void initConnection(tabId)
+    } else {
+      const t = store.getState().tabs[tabId]
+      if (t?.sessionId) connectWs(tabId)
+      else void initConnection(tabId)
+    }
+  }, delayMs)
+  store.getState().patchTab(tabId, { reconnectTimer: timer })
+}
 
-  // Already have a live session + WS — skip
+/** Create a PTY session for a tab (if needed) and connect its WS. */
+async function initConnection(tabId: string): Promise<void> {
+  const tab = store.getState().tabs[tabId]
+  if (!tab || store.getState().disposed) return
+
   if (
-    state.sessionId &&
-    state.ws &&
-    (state.ws.readyState === WebSocket.OPEN || state.ws.readyState === WebSocket.CONNECTING)
+    tab.sessionId &&
+    tab.ws &&
+    (tab.ws.readyState === WebSocket.OPEN || tab.ws.readyState === WebSocket.CONNECTING)
   ) {
     return
   }
 
-  // Deduplicate concurrent calls — wait for in-flight connection
-  if (state.connecting) {
-    await state.connecting
+  if (tab.connecting) {
+    await tab.connecting
     return
   }
 
   const connectingPromise = (async () => {
     try {
-      // A pending cwd (e.g. "open terminal in this worktree") forces a fresh
-      // session in that directory instead of reconnecting to the global one.
-      const pendingCwd = useTerminalStore.getState().pendingCwd
-      const savedId = loadSessionId()
-      let sessionId: string
-      if (pendingCwd) {
-        clearSessionId()
-        sessionId = await createSession(pendingCwd)
-        useTerminalStore.getState().clearPendingCwd()
-      } else if (savedId && await checkSession(savedId)) {
-        sessionId = savedId
-        terminal.writeln('\r\n\x1B[90m[reconnected to existing session]\x1B[0m')
-      } else {
-        sessionId = await createSession()
+      const sessionId = await createSession(tab.cwd)
+      // The tab may have been torn down (issue change / tab close) or the whole
+      // dock disposed while the create request was in flight — don't leak an
+      // orphan PTY in that case; kill it immediately rather than waiting for the
+      // backend's unattached reaper.
+      if (store.getState().disposed || !store.getState().tabs[tabId]) {
+        deleteSession(sessionId)
+        return
       }
-      saveSessionId(sessionId)
-      store.getState().set({ sessionId })
-
-      // Connect WS for bidirectional I/O
-      connectWs(sessionId, terminal, fitAddon)
+      store.getState().patchTab(tabId, { sessionId })
+      connectWs(tabId)
     } catch {
-      const timer = setTimeout(() => {
-        store.getState().set({ reconnectTimer: null })
-        void initConnection(terminal, fitAddon)
-      }, 2000)
-      store.getState().set({ reconnectTimer: timer })
+      scheduleReconnect(tabId, retryDelayMs(1), true)
     } finally {
-      store.getState().set({ connecting: null })
+      store.getState().patchTab(tabId, { connecting: null })
     }
   })()
 
-  store.getState().set({ connecting: connectingPromise })
-
+  store.getState().patchTab(tabId, { connecting: connectingPromise })
   await connectingPromise
 }
 
+let tabCounter = 0
+function nextTabId(): string {
+  tabCounter += 1
+  return `term-${Date.now()}-${tabCounter}`
+}
+
 /**
- * Tear down the current session and reconnect. Used when the terminal is asked
- * to switch directories (openInDir) while already open — the pending cwd in the
- * store makes initConnection start a fresh session there.
+ * Create a new terminal tab in the given cwd, mount its xterm into the offscreen
+ * pool (open happens on first render), and start connecting. Returns the tab id,
+ * or null when the per-issue tab budget is exhausted.
  */
-async function restartConnection(): Promise<void> {
-  const state = store.getState()
-  if (state.ws) {
+export function createTerminalTab(cwd: string | null): string | null {
+  const s = store.getState()
+  if (s.order.length >= MAX_TERMINAL_TABS) return null
+  const id = nextTabId()
+  const { terminal, fitAddon } = createTerminal()
+  const tab: TerminalTab = {
+    id,
+    terminal,
+    fitAddon,
+    sessionId: null,
+    ws: null,
+    reconnectTimer: null,
+    connecting: null,
+    initialized: false,
+    cwd,
+    retryCount: 0,
+    dead: false,
+  }
+  store.getState().set({
+    tabs: { ...s.tabs, [id]: tab },
+    order: [...s.order, id],
+    activeId: id,
+    disposed: false,
+  })
+  void initConnection(id)
+  return id
+}
+
+/** Switch the rendered tab (instant — no reconnect). */
+export function switchTerminalTab(id: string): void {
+  if (store.getState().tabs[id]) store.getState().set({ activeId: id })
+}
+
+function teardownTab(tab: TerminalTab): void {
+  if (tab.reconnectTimer) clearTimeout(tab.reconnectTimer)
+  if (tab.ws) {
     try {
-      state.ws.close()
+      tab.ws.close()
     } catch {
       /* already closed */
     }
   }
-  if (state.reconnectTimer) clearTimeout(state.reconnectTimer)
-  if (state.sessionId) deleteSession(state.sessionId)
-  clearSessionId()
-  store.getState().set({ sessionId: null, ws: null, connecting: null, reconnectTimer: null })
-
-  const { terminal, fitAddon } = getOrCreateTerminal()
-  terminal.reset()
-  await initConnection(terminal, fitAddon)
+  if (tab.sessionId) deleteSession(tab.sessionId)
+  if (tab.terminal) {
+    try {
+      tab.terminal.dispose()
+    } catch {
+      /* already disposed */
+    }
+  }
 }
 
-export function TerminalView({ className }: { className?: string }) {
-  const containerRef = useRef<HTMLDivElement>(null)
-  const mountedRef = useRef(false)
-  const restartToken = useTerminalStore(s => s.restartToken)
-  const seenRestartToken = useRef(restartToken)
+/** Close a single tab (kills its PTY). Keeps the rest alive. */
+export function closeTerminalTab(id: string): void {
+  const s = store.getState()
+  const tab = s.tabs[id]
+  if (!tab) return
+  teardownTab(tab)
+  const order = s.order.filter(x => x !== id)
+  const { [id]: _removed, ...rest } = s.tabs
+  let activeId = s.activeId
+  if (activeId === id) activeId = order.at(-1) ?? null
+  store.getState().set({ tabs: rest, order, activeId })
+}
 
-  // openInDir bumps restartToken — when the terminal is already mounted, switch
-  // to the requested directory by recreating the session. On a fresh mount the
-  // pending cwd is consumed by initConnection, so skip the restart there.
-  useEffect(() => {
-    if (seenRestartToken.current === restartToken) return
-    seenRestartToken.current = restartToken
-    if (!mountedRef.current) return
-    void restartConnection()
-  }, [restartToken])
+/**
+ * Explicitly kill ALL terminal sessions for this issue and clean up resources.
+ * Called by DockTerminal on unmount — the BUG-004 guarantee that hidden ≠ leaked
+ * but every PTY is torn down when the dock host genuinely goes away.
+ */
+export function disposeTerminal(): void {
+  const s = store.getState()
+  store.getState().set({ disposed: true })
+  for (const id of s.order) {
+    const tab = s.tabs[id]
+    if (tab) teardownTab(tab)
+  }
+  store.getState().reset()
+}
 
-  const handleResize = useCallback(() => {
-    const state = store.getState()
-    if (!state.fitAddon || !state.terminal) return
-    try {
-      state.fitAddon.fit()
-      if (state.ws?.readyState === WebSocket.OPEN) {
-        const { cols, rows } = state.terminal
-        state.ws.send(encodeResize(cols, rows))
+// --- Font sizing (pinch-zoom + persistence, item B) ---
+
+function applyFontSizeToAll(size: number): void {
+  const clamped = clampFontSize(size)
+  const s = store.getState()
+  if (isMobileViewport()) store.getState().set({ mobileFontSize: clamped })
+  else store.getState().set({ desktopFontSize: clamped })
+  persistFontSizes(store.getState().desktopFontSize, store.getState().mobileFontSize)
+  for (const id of s.order) {
+    const tab = s.tabs[id]
+    if (tab?.terminal) {
+      tab.terminal.options.fontSize = clamped
+      try {
+        tab.fitAddon?.fit()
+      } catch {
+        /* not visible */
       }
-    } catch {
-      // fit() can throw if not visible
+    }
+  }
+}
+
+/** +/- font controls for desktop. */
+export function nudgeTerminalFont(delta: number): void {
+  applyFontSizeToAll(activeFontSize() + delta)
+}
+
+// --- View component ---
+
+/**
+ * Renders the active terminal tab and keeps the others mounted (offscreen) so
+ * switching is instant. The first tab is created lazily on mount. Pinch-zoom,
+ * scrollback "Back to live", and reconnect are all wired here.
+ */
+export function TerminalView({ className }: { className?: string }) {
+  const poolRef = useRef<HTMLDivElement>(null)
+  const order = useTerminalSessionStore(s => s.order)
+  const activeId = useTerminalSessionStore(s => s.activeId)
+  const [atBottom, setAtBottom] = useState(true)
+  const bootstrappedRef = useRef(false)
+
+  // Bootstrap the first tab once (the dock host arms cwd before mounting us).
+  useEffect(() => {
+    if (bootstrappedRef.current) return
+    bootstrappedRef.current = true
+    if (store.getState().order.length === 0) {
+      const cwd = pendingInitialCwdRef.current
+      createTerminalTab(cwd)
     }
   }, [])
 
+  // Mount each tab's DOM element into the offscreen pool exactly once, then
+  // move only the ACTIVE element into the visible container.
+  useEffect(() => {
+    const pool = poolRef.current
+    if (!pool) return
+    const s = store.getState()
+    for (const id of s.order) {
+      const tab = s.tabs[id]
+      if (!tab?.terminal || !tab.fitAddon) continue
+      if (!tab.initialized) {
+        // Each xterm needs its own host element.
+        const host = document.createElement('div')
+        host.style.width = '100%'
+        host.style.height = '100%'
+        host.dataset.termTab = id
+        pool.appendChild(host)
+        tab.terminal.open(host)
+        store.getState().patchTab(id, { initialized: true })
+        tryLoadWebgl(tab.terminal)
+        wireTerminal(id, tab.terminal)
+        requestAnimationFrame(() => {
+          try {
+            tab.fitAddon?.fit()
+          } catch {
+            /* not visible */
+          }
+        })
+      }
+    }
+  }, [order])
+
+  // Theme + visibility: render only the active tab's host into the container,
+  // park the others in the offscreen pool.
+  const containerRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const container = containerRef.current
+    const pool = poolRef.current
+    if (!container || !pool) return
+    const s = store.getState()
+    for (const id of s.order) {
+      const tab = s.tabs[id]
+      const el = tab?.terminal?.element?.parentElement as HTMLElement | undefined
+      if (!el) continue
+      tab!.terminal!.options.theme = getTerminalTheme()
+      if (id === s.activeId) {
+        if (el.parentElement !== container) container.appendChild(el)
+      } else if (el.parentElement !== pool) {
+        pool.appendChild(el)
+      }
+    }
+    // Fit + focus the newly-active tab.
+    const active = s.activeId ? s.tabs[s.activeId] : null
+    if (active?.fitAddon) {
+      requestAnimationFrame(() => {
+        try {
+          active.fitAddon!.fit()
+          if (active.ws?.readyState === WebSocket.OPEN) {
+            const { cols, rows } = active.terminal!
+            active.ws.send(encodeResize(cols, rows))
+          }
+          active.terminal?.focus()
+        } catch {
+          /* not visible */
+        }
+      })
+    }
+  }, [activeId, order])
+
+  const handleResize = useCallback(() => {
+    const tab = activeTab()
+    if (!tab?.fitAddon || !tab.terminal) return
+    try {
+      tab.fitAddon.fit()
+      // Re-apply the form-factor font on resize crossing the breakpoint.
+      const want = activeFontSize()
+      if (tab.terminal.options.fontSize !== want) {
+        tab.terminal.options.fontSize = want
+        tab.fitAddon.fit()
+      }
+      if (tab.ws?.readyState === WebSocket.OPEN) {
+        const { cols, rows } = tab.terminal
+        tab.ws.send(encodeResize(cols, rows))
+      }
+    } catch {
+      /* not visible */
+    }
+  }, [])
+
+  // Container resize + theme observers.
   useEffect(() => {
     const container = containerRef.current
     if (!container) return
-
-    const { terminal, fitAddon } = getOrCreateTerminal()
-
-    if (mountedRef.current) return
-    mountedRef.current = true
-
-    // Re-mount: reattach existing DOM element instead of calling open() again
-    const state = store.getState()
-    if (state.initialized && terminal.element) {
-      if (terminal.element.parentElement !== container) {
-        container.appendChild(terminal.element)
-      }
-      // Theme may have changed while terminal was hidden — sync now
-      terminal.options.theme = getTerminalTheme()
-    } else {
-      terminal.open(container)
-      store.getState().set({ initialized: true })
-
-      // Load WebGL addon after terminal is opened (needs a canvas context)
-      tryLoadWebgl(terminal)
-    }
-
-    // Delay fit to ensure container is laid out
-    requestAnimationFrame(() => {
-      fitAddon.fit()
-      void initConnection(terminal, fitAddon)
-    })
-
-    // Terminal input -> WS binary. The mobile helper bar's sticky Ctrl
-    // modifier (ctrlMode) rewrites the next printable keystroke into its
-    // control code; a one-shot arm auto-clears after a single key.
-    const inputDisposable = terminal.onData((data) => {
-      const s = store.getState()
-      if (s.ws?.readyState !== WebSocket.OPEN) return
-      let out = data
-      if (s.ctrlMode !== 'off') {
-        out = applyCtrl(data)
-        if (s.ctrlMode === 'once') s.set({ ctrlMode: 'off' })
-      }
-      s.ws.send(encodeInput(out))
-    })
-
-    // Observe container resize
-    const resizeObserver = new ResizeObserver(() => handleResize())
-    resizeObserver.observe(container)
-
-    // Observe theme changes via MutationObserver on <html> class list
+    const ro = new ResizeObserver(() => handleResize())
+    ro.observe(container)
     const themeObserver = new MutationObserver(() => {
-      const t = store.getState().terminal
-      if (t) {
-        t.options.theme = getTerminalTheme()
+      const s = store.getState()
+      for (const id of s.order) {
+        const t = s.tabs[id]?.terminal
+        if (t) t.options.theme = getTerminalTheme()
       }
     })
-    themeObserver.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class'],
-    })
-
+    themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
+    const onWinResize = () => handleResize()
+    window.addEventListener('resize', onWinResize)
     return () => {
-      mountedRef.current = false
-      inputDisposable.dispose()
-      resizeObserver.disconnect()
+      ro.disconnect()
       themeObserver.disconnect()
-      // Do NOT dispose terminal or close WS — they persist across mounts
+      window.removeEventListener('resize', onWinResize)
     }
   }, [handleResize])
 
-  return <div ref={containerRef} className={className} style={{ width: '100%', height: '100%' }} />
+  // Track scroll position of the active tab for the "Back to live" pill.
+  useEffect(() => {
+    const tab = activeTab()
+    const term = tab?.terminal
+    if (!term) return
+    const update = () => {
+      const buf = term.buffer.active
+      const atEnd = buf.viewportY >= buf.baseY
+      setAtBottom(atEnd)
+    }
+    update()
+    const disp = term.onScroll(() => update())
+    return () => disp.dispose()
+  }, [activeId, order])
+
+  const backToLive = useCallback(() => {
+    const term = activeTab()?.terminal
+    term?.scrollToBottom()
+    setAtBottom(true)
+    term?.focus()
+  }, [])
+
+  return (
+    <div className={className} style={{ position: 'relative', width: '100%', height: '100%' }}>
+      <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+      {/* Offscreen pool keeps non-active tabs mounted (and warm). */}
+      <div ref={poolRef} aria-hidden style={{ position: 'absolute', width: 0, height: 0, overflow: 'hidden', pointerEvents: 'none' }} />
+      {!atBottom ? (
+        <button
+          type="button"
+          onClick={backToLive}
+          className="absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-full bg-accent-brand px-3 py-1 text-[12px] font-medium text-white shadow-lg active:scale-95"
+          data-testid="terminal-back-to-live"
+        >
+          ↓
+          {' '}
+          {backToLiveLabel()}
+        </button>
+      ) : null}
+    </div>
+  )
 }
 
-/** Explicitly kill the terminal session and clean up all resources */
-export function disposeTerminal(): void {
-  wsRetryCount = 0
-  const state = store.getState()
-  store.getState().set({ disposed: true, connecting: null })
-  if (state.reconnectTimer) {
-    clearTimeout(state.reconnectTimer)
+// Label is resolved lazily so this module stays free of the i18n import cycle.
+let _backToLiveLabel = 'Back to live'
+export function setBackToLiveLabel(label: string): void {
+  _backToLiveLabel = label
+}
+function backToLiveLabel(): string {
+  return _backToLiveLabel
+}
+
+// The dock arms the worktree cwd before TerminalView mounts; stash it here so
+// the bootstrap effect can read it for the first tab.
+const pendingInitialCwdRef = { current: null as string | null }
+export function setPendingInitialCwd(cwd: string | null): void {
+  pendingInitialCwdRef.current = cwd
+}
+
+// --- Per-terminal input + gesture wiring ---
+
+function wireTerminal(tabId: string, terminal: Terminal): void {
+  // Terminal input -> WS binary, honoring the sticky Ctrl modifier.
+  terminal.onData((data) => {
+    const tab = store.getState().tabs[tabId]
+    if (tab?.ws?.readyState !== WebSocket.OPEN) return
+    const s = store.getState()
+    let out = data
+    if (s.ctrlMode !== 'off') {
+      out = applyCtrl(data)
+      if (s.ctrlMode === 'once') store.getState().set({ ctrlMode: 'off' })
+    }
+    tab.ws.send(encodeInput(out))
+  })
+
+  const el = terminal.element
+  if (!el) return
+
+  // Pinch-zoom (mobile, item B): two-finger pinch adjusts font size live.
+  let pinchStartDist = 0
+  let pinchStartSize = 0
+  const dist = (e: TouchEvent): number => {
+    const a = e.touches[0]
+    const b = e.touches[1]
+    if (!a || !b) return 0
+    return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY)
   }
-  if (state.ws) {
-    state.ws.close()
-  }
-  if (state.sessionId) {
-    deleteSession(state.sessionId)
-  }
-  if (state.terminal) {
-    state.terminal.dispose()
-  }
-  store.getState().reset()
+  el.addEventListener('touchstart', (e: TouchEvent) => {
+    if (e.touches.length === 2) {
+      pinchStartDist = dist(e)
+      pinchStartSize = typeof terminal.options.fontSize === 'number' ? terminal.options.fontSize : activeFontSize()
+    }
+  }, { passive: true })
+  el.addEventListener('touchmove', (e: TouchEvent) => {
+    if (e.touches.length === 2 && pinchStartDist > 0) {
+      e.preventDefault()
+      const ratio = dist(e) / pinchStartDist
+      const next = clampFontSize(pinchStartSize * ratio)
+      const cur = typeof terminal.options.fontSize === 'number' ? terminal.options.fontSize : 0
+      if (next !== cur && next >= MIN_FONT_SIZE && next <= MAX_FONT_SIZE) {
+        applyFontSizeToAll(next)
+      }
+    }
+  }, { passive: false })
 }

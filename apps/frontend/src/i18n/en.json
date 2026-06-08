@@ -823,7 +823,14 @@
     "collapse": "Collapse",
     "expand": "Expand",
     "close": "Close",
-    "ctrlHint": "Tap = one-shot, long-press = lock"
+    "ctrlHint": "Tap = one-shot, long-press = lock",
+    "paste": "Paste",
+    "backToLive": "Back to live",
+    "terminalTab": "Term {{n}}",
+    "newTerminalTab": "New terminal",
+    "closeTerminalTab": "Close terminal",
+    "fontDecrease": "Smaller font",
+    "fontIncrease": "Larger font"
   },
   "terminal": {
     "title": "Terminal",

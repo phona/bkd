@@ -819,7 +819,14 @@
     "collapse": "折叠",
     "expand": "展开",
     "close": "关闭",
-    "ctrlHint": "点击 = 单次，长按 = 锁定"
+    "ctrlHint": "点击 = 单次，长按 = 锁定",
+    "paste": "粘贴",
+    "backToLive": "回到底部",
+    "terminalTab": "终端 {{n}}",
+    "newTerminalTab": "新建终端",
+    "closeTerminalTab": "关闭终端",
+    "fontDecrease": "缩小字体",
+    "fontIncrease": "放大字体"
   },
   "terminal": {
     "title": "终端",
