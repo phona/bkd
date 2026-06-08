@@ -431,7 +431,7 @@ export function CreateIssueDialog() {
       disablePointerDismissal
     >
       <DialogContent
-        className="max-w-[calc(100%-2rem)] md:max-w-[580px]"
+        className="max-w-[calc(100%-2rem)] md:max-w-[580px] max-h-[85dvh] overflow-y-auto"
         aria-describedby={undefined}
       >
         <DialogTitle>{t('issue.createTask')}</DialogTitle>
@@ -769,44 +769,46 @@ function ProjectLinker({
           </span>
         </div>
 
-        {projects.length === 0
-          ? (
-              <div className="px-1 py-1 text-[11px] text-muted-foreground/60">
-                {t('createIssue.linkProjectsEmpty')}
-              </div>
-            )
-          : projects.map((p) => {
-              const on = selected.has(p.id)
-              return (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => toggle(p.id)}
-                  className={`flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-[13px] text-left transition-colors ${
-                    on
-                      ? 'border-accent-brand bg-accent-brand/10'
-                      : 'border-border bg-card hover:border-border/80'
-                  }`}
-                >
-                  <span
-                    className={`inline-flex size-4 items-center justify-center rounded-[5px] border shrink-0 ${
-                      on ? 'border-accent-brand bg-accent-brand text-white' : 'border-border'
-                    }`}
-                  >
-                    {on ? <Check className="size-3" /> : null}
-                  </span>
-                  <span className="truncate">{p.name}</span>
-                  <span
-                    className={`ml-auto shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] ${
-                      on ? 'border-accent-brand text-accent-brand' : 'border-border text-muted-foreground'
-                    }`}
-                    style={on ? { color: 'var(--accent-brand)' } : undefined}
-                  >
-                    {on ? t('createIssue.linkProjectsLinked') : t('createIssue.linkProjectsLink')}
-                  </span>
-                </button>
+        <div className="flex flex-col gap-1.5 max-h-[196px] overflow-y-auto -mr-1 pr-1">
+          {projects.length === 0
+            ? (
+                <div className="px-1 py-1 text-[11px] text-muted-foreground/60">
+                  {t('createIssue.linkProjectsEmpty')}
+                </div>
               )
-            })}
+            : projects.map((p) => {
+                const on = selected.has(p.id)
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => toggle(p.id)}
+                    className={`flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-[13px] text-left transition-colors ${
+                      on
+                        ? 'border-accent-brand bg-accent-brand/10'
+                        : 'border-border bg-card hover:border-border/80'
+                    }`}
+                  >
+                    <span
+                      className={`inline-flex size-4 items-center justify-center rounded-[5px] border shrink-0 ${
+                        on ? 'border-accent-brand bg-accent-brand text-white' : 'border-border'
+                      }`}
+                    >
+                      {on ? <Check className="size-3" /> : null}
+                    </span>
+                    <span className="truncate">{p.name}</span>
+                    <span
+                      className={`ml-auto shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] ${
+                        on ? 'border-accent-brand text-accent-brand' : 'border-border text-muted-foreground'
+                      }`}
+                      style={on ? { color: 'var(--accent-brand)' } : undefined}
+                    >
+                      {on ? t('createIssue.linkProjectsLinked') : t('createIssue.linkProjectsLink')}
+                    </span>
+                  </button>
+                )
+              })}
+        </div>
       </div>
 
       {/* Summary mirroring the prototype */}
