@@ -48,4 +48,6 @@ export type {
   WhiteboardNode,
   Workspace,
   WorkspaceRepo,
+  WorktreeFetchStrategy,
+  WorktreeSettings,
 } from '@bkd/shared'

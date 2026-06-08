@@ -197,6 +197,34 @@
     "modelDefault": "Default",
     "modelDefaultHint": "Use system default"
   },
+  "worktreeSettings": {
+    "fetchStrategy": "Fetch strategy",
+    "fetchStrategyOption": {
+      "auto": "Auto (fetch when a remote exists)",
+      "always": "Always fetch",
+      "never": "Never fetch"
+    },
+    "fetchStrategyHint": {
+      "auto": "Fetch the base branch from its remote before branching only when the repo has a remote (default).",
+      "always": "Always fetch the base before branching, even for local-only repos.",
+      "never": "Never fetch; branch off whatever the local repo currently has."
+    },
+    "defaultBaseBranch": "Default base branch",
+    "defaultBaseBranchPlaceholder": "Leave empty = auto-detect (origin/HEAD)",
+    "defaultBaseBranchHint": "Fallback base branch for new worktrees. A per-issue base branch still overrides this.",
+    "branchTemplate": "Branch name template",
+    "branchTemplateHint": "Variables: {slug} {id} {repo}. Must contain {id} for uniqueness and be git-safe. Default: bkd/{slug}-{id}",
+    "initSubmodules": "Initialize submodules",
+    "initSubmodulesHint": "Run git submodule update --init --recursive after creating a worktree (when .gitmodules exists).",
+    "deleteBranchDefault": "Default 'delete branch'",
+    "deleteBranchDefaultHint": "Whether the delete-issue dialog pre-checks 'delete branch' by default.",
+    "autoCleanup": "Auto-cleanup orphaned worktrees",
+    "autoCleanupHint": "Prune worktrees left behind by hard-deleted issues.",
+    "worktreeRoot": "Worktree root",
+    "worktreeRootHint": "Controlled by the WORKTREE_DIR environment variable; changing it orphans existing worktrees.",
+    "setupScript": "Setup script",
+    "setupScriptHint": "Runs once after a new worktree is created, before the agent starts; cwd = worktree; env: REPO_NAME/BRANCH/ISSUE_ID/PROJECT_PATH; 300s timeout, output recorded in the session timeline."
+  },
   "deleteIssue": {
     "title": "Delete issue",
     "confirm": "Delete \"{title}\"?",
@@ -549,6 +577,7 @@
     "logsSearchPlaceholder": "Filter by keyword...",
     "logsFiltered": "{{shown}} / {{total}} shown",
     "tabCleanup": "Cleanup",
+    "tabWorktree": "Worktree",
     "tabRecycleBin": "Recycle Bin",
     "recycleBinHint": "Deleted issues can be restored here. Use cleanup to permanently delete them.",
     "recycleBinEmpty": "No deleted issues",

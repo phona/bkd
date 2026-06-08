@@ -8,6 +8,7 @@ import {
   Download,
   FileText,
   Filter,
+  FolderGit2,
   FolderOpen,
   Info,
   Loader2,
@@ -78,11 +79,12 @@ import {
   useUpdateEngineModelSetting,
   useUpdateServerInfo,
   useUpdateWorkspacePath,
+  useUpdateWorktreeSettings,
   useUpgradeCheck,
   useUpgradeEnabled,
   useVersionInfo,
   useWorkspacePath,
-  useWorktreeAutoCleanup,
+  useWorktreeSettings,
 } from '@/hooks/use-kanban'
 import { useTheme } from '@/hooks/use-theme'
 import { LANGUAGES } from '@/lib/constants'
@@ -108,6 +110,7 @@ export function AppSettingsDialog({
   const navItems: SettingsNavItem[] = useMemo(
     () => [
       { id: 'general', label: t('settings.tabGeneral'), icon: Settings },
+      { id: 'worktree', label: t('settings.tabWorktree'), icon: FolderGit2 },
       { id: 'models', label: t('settings.tabModels'), icon: Box },
       { id: 'logs', label: t('settings.tabLogs'), icon: FileText },
       { id: 'cleanup', label: t('settings.tabCleanup'), icon: Trash2 },
@@ -130,6 +133,7 @@ export function AppSettingsDialog({
       {active => (
         <>
           {active === 'general' && <GeneralSection open={open} />}
+          {active === 'worktree' && <WorktreeSection open={open} />}
           {active === 'models' && <ModelsSection open={open} />}
           {active === 'logs' && <LogsSection open={open} />}
           {active === 'cleanup' && <CleanupSection open={open} />}
@@ -807,25 +811,9 @@ function CleanupSection({ open }: { open: boolean }) {
   const { t } = useTranslation()
   const { data: cleanupStats, refetch: refetchStats } = useCleanupStats(open)
   const runCleanup = useRunCleanup()
-  const { data: worktreeCleanupData } = useWorktreeAutoCleanup(open)
-  const setWorktreeAutoCleanup = useSetWorktreeAutoCleanup()
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <div>
-          <span className="text-sm font-medium">{t('settings.worktreeAutoCleanup')}</span>
-          <p className="text-[11px] text-muted-foreground">
-            {t('settings.worktreeAutoCleanupHint')}
-          </p>
-        </div>
-        <Switch
-          size="sm"
-          checked={worktreeCleanupData?.enabled ?? false}
-          onCheckedChange={checked => setWorktreeAutoCleanup.mutate(checked)}
-        />
-      </div>
-
       <div className="flex items-center justify-between">
         <p className="text-xs text-muted-foreground">{t('settings.cleanup')}</p>
         <Button variant="ghost" size="sm" onClick={() => refetchStats()}>
@@ -878,6 +866,184 @@ function CleanupSection({ open }: { open: boolean }) {
           onClean={() => runCleanup.mutate(['oldVersions'])}
         />
       </div>
+    </div>
+  )
+}
+
+const WORKTREE_FETCH_STRATEGIES = ['auto', 'always', 'never'] as const
+
+function WorktreeSettingTextField({
+  label,
+  hint,
+  value,
+  placeholder,
+  multiline,
+  saving,
+  onSave,
+}: {
+  label: string
+  hint: React.ReactNode
+  value: string
+  placeholder?: string
+  multiline?: boolean
+  saving: boolean
+  onSave: (next: string) => void
+}) {
+  const { t } = useTranslation()
+  const [draft, setDraft] = useState(value)
+  // Keep the draft in sync when the server value changes (load / external update).
+  const lastValue = useRef(value)
+  if (lastValue.current !== value) {
+    lastValue.current = value
+    setDraft(value)
+  }
+  const isDirty = draft !== value
+
+  return (
+    <Field>
+      <Label>{label}</Label>
+      {multiline
+        ? (
+            <Textarea
+              className="font-mono text-xs"
+              rows={4}
+              value={draft}
+              onChange={e => setDraft(e.target.value)}
+              placeholder={placeholder}
+            />
+          )
+        : (
+            <Input
+              className="font-mono text-xs"
+              value={draft}
+              onChange={e => setDraft(e.target.value)}
+              placeholder={placeholder}
+            />
+          )}
+      <p className="text-[11px] text-muted-foreground">{hint}</p>
+      {isDirty && (
+        <div className="flex justify-end mt-1">
+          <Button size="sm" onClick={() => onSave(draft)} disabled={saving}>
+            {saving
+              ? <Loader2 className="size-3 animate-spin mr-1" />
+              : <Check className="size-3 mr-1" />}
+            {t('common.save')}
+          </Button>
+        </div>
+      )}
+    </Field>
+  )
+}
+
+function WorktreeSection({ open }: { open: boolean }) {
+  const { t } = useTranslation()
+  const { data: settings } = useWorktreeSettings(open)
+  const update = useUpdateWorktreeSettings()
+  const setAutoCleanup = useSetWorktreeAutoCleanup()
+
+  return (
+    <div className="space-y-4">
+      <Field>
+        <Label>{t('worktreeSettings.fetchStrategy')}</Label>
+        <Select
+          value={settings?.fetchStrategy ?? 'auto'}
+          onValueChange={value =>
+            update.mutate({ fetchStrategy: value as (typeof WORKTREE_FETCH_STRATEGIES)[number] })}
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {WORKTREE_FETCH_STRATEGIES.map(s => (
+              <SelectItem key={s} value={s}>
+                {t(`worktreeSettings.fetchStrategyOption.${s}`)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <p className="text-[11px] text-muted-foreground">
+          {t(`worktreeSettings.fetchStrategyHint.${settings?.fetchStrategy ?? 'auto'}`)}
+        </p>
+      </Field>
+
+      <WorktreeSettingTextField
+        label={t('worktreeSettings.defaultBaseBranch')}
+        hint={t('worktreeSettings.defaultBaseBranchHint')}
+        value={settings?.defaultBaseBranch ?? ''}
+        placeholder={t('worktreeSettings.defaultBaseBranchPlaceholder')}
+        saving={update.isPending}
+        onSave={next => update.mutate({ defaultBaseBranch: next })}
+      />
+
+      <WorktreeSettingTextField
+        label={t('worktreeSettings.branchTemplate')}
+        hint={t('worktreeSettings.branchTemplateHint')}
+        value={settings?.branchTemplate ?? ''}
+        placeholder="bkd/{slug}-{id}"
+        saving={update.isPending}
+        onSave={next => update.mutate({ branchTemplate: next })}
+      />
+
+      <div className="flex items-center justify-between">
+        <div>
+          <span className="text-sm font-medium">{t('worktreeSettings.initSubmodules')}</span>
+          <p className="text-[11px] text-muted-foreground">
+            {t('worktreeSettings.initSubmodulesHint')}
+          </p>
+        </div>
+        <Switch
+          size="sm"
+          checked={settings?.initSubmodules ?? false}
+          onCheckedChange={checked => update.mutate({ initSubmodules: checked })}
+        />
+      </div>
+
+      <div className="flex items-center justify-between">
+        <div>
+          <span className="text-sm font-medium">{t('worktreeSettings.deleteBranchDefault')}</span>
+          <p className="text-[11px] text-muted-foreground">
+            {t('worktreeSettings.deleteBranchDefaultHint')}
+          </p>
+        </div>
+        <Switch
+          size="sm"
+          checked={settings?.deleteBranchDefault ?? false}
+          onCheckedChange={checked => update.mutate({ deleteBranchDefault: checked })}
+        />
+      </div>
+
+      <div className="flex items-center justify-between">
+        <div>
+          <span className="text-sm font-medium">{t('worktreeSettings.autoCleanup')}</span>
+          <p className="text-[11px] text-muted-foreground">
+            {t('worktreeSettings.autoCleanupHint')}
+          </p>
+        </div>
+        <Switch
+          size="sm"
+          checked={settings?.autoCleanup ?? false}
+          // autoCleanup lives behind a dedicated endpoint, not the worktree PATCH body.
+          onCheckedChange={checked => setAutoCleanup.mutate(checked)}
+        />
+      </div>
+
+      <Field>
+        <Label>{t('worktreeSettings.worktreeRoot')}</Label>
+        <div className="mt-1.5 rounded-md border bg-muted/50 px-2 py-1.5 text-sm font-mono text-muted-foreground truncate">
+          {settings?.worktreeRoot ?? '...'}
+        </div>
+        <p className="text-[11px] text-muted-foreground">{t('worktreeSettings.worktreeRootHint')}</p>
+      </Field>
+
+      <WorktreeSettingTextField
+        label={t('worktreeSettings.setupScript')}
+        hint={t('worktreeSettings.setupScriptHint')}
+        value={settings?.setupScript ?? ''}
+        placeholder="bun install"
+        multiline
+        saving={update.isPending}
+        onSave={next => update.mutate({ setupScript: next })}
+      />
     </div>
   )
 }

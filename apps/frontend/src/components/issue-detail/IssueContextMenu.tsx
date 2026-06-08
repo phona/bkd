@@ -17,7 +17,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { useDeleteIssue, useDuplicateIssue, useUpdateIssue } from '@/hooks/use-kanban'
+import { useDeleteIssue, useDuplicateIssue, useUpdateIssue, useWorktreeSettings } from '@/hooks/use-kanban'
 import { kanbanApi } from '@/lib/kanban-api'
 import { cn } from '@/lib/utils'
 import type { Issue } from '@/types/kanban'
@@ -112,6 +112,7 @@ export function IssueContextMenu({
   const updateIssue = useUpdateIssue(projectId)
   const deleteIssue = useDeleteIssue(projectId)
   const duplicateIssue = useDuplicateIssue(projectId)
+  const { data: worktreeSettings } = useWorktreeSettings(deleteOpen)
 
   const handlePin = useCallback(() => {
     updateIssue.mutate({ id: issue.id, isPinned: !issue.isPinned })
@@ -208,6 +209,7 @@ export function IssueContextMenu({
         hasWorktree={issue.useWorktree}
         branchName={issue.worktreeBranchName ?? (issue.useWorktree ? `bkd/${issue.id}` : null)}
         isPending={deleteIssue.isPending}
+        deleteBranchDefault={worktreeSettings?.deleteBranchDefault ?? false}
         onConfirm={handleDelete}
       />
     </>

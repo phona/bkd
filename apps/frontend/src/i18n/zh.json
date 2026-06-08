@@ -197,6 +197,34 @@
     "modelDefault": "默认",
     "modelDefaultHint": "使用系统默认模型"
   },
+  "worktreeSettings": {
+    "fetchStrategy": "Fetch 策略",
+    "fetchStrategyOption": {
+      "auto": "自动（有远端就拉）",
+      "always": "总是拉",
+      "never": "从不拉"
+    },
+    "fetchStrategyHint": {
+      "auto": "仅当仓库有远端时，建分支前从远端拉取 base 分支（默认）。",
+      "always": "建分支前总是拉取 base，即使是纯本地仓库。",
+      "never": "从不拉取；直接基于本地仓库当前状态建分支。"
+    },
+    "defaultBaseBranch": "默认 base 分支",
+    "defaultBaseBranchPlaceholder": "留空 = 自动探测 (origin/HEAD)",
+    "defaultBaseBranchHint": "新 worktree 的兜底 base 分支。单个 issue 指定的 base 分支仍会覆盖此项。",
+    "branchTemplate": "分支命名模板",
+    "branchTemplateHint": "变量：{slug} {id} {repo}。必须包含 {id} 以保证唯一，且需 git 合法。默认：bkd/{slug}-{id}",
+    "initSubmodules": "子模块初始化",
+    "initSubmodulesHint": "创建 worktree 后执行 git submodule update --init --recursive（存在 .gitmodules 时）。",
+    "deleteBranchDefault": "删分支默认勾选",
+    "deleteBranchDefaultHint": "删除 issue 对话框里默认是否勾选'删分支'。",
+    "autoCleanup": "自动清理孤儿 worktree",
+    "autoCleanupHint": "清理已硬删除 issue 残留的 worktree。",
+    "worktreeRoot": "worktree 根目录",
+    "worktreeRootHint": "由环境变量 WORKTREE_DIR 控制；修改会孤立现有 worktree。",
+    "setupScript": "Setup 脚本",
+    "setupScriptHint": "新 worktree 创建后、agent 启动前运行一次；cwd=worktree；env: REPO_NAME/BRANCH/ISSUE_ID/PROJECT_PATH；超时 300s，结果写入会话留痕。"
+  },
   "deleteIssue": {
     "title": "删除任务",
     "confirm": "确定删除「{title}」吗？",
@@ -545,6 +573,7 @@
     "logsSearchPlaceholder": "关键字过滤...",
     "logsFiltered": "显示 {{shown}} / {{total}} 条",
     "tabCleanup": "数据清理",
+    "tabWorktree": "工作区",
     "tabRecycleBin": "回收站",
     "recycleBinHint": "已删除的任务可以在这里恢复。使用清理功能可永久删除。",
     "recycleBinEmpty": "没有已删除的任务",

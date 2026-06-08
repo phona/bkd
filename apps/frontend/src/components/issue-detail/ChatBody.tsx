@@ -9,6 +9,7 @@ import {
   useGlobalSlashCommands,
   useSlashCommands,
   useUpdateIssue,
+  useWorktreeSettings,
 } from '@/hooks/use-kanban'
 import { useInvalidatePendingMessages, usePendingMessages } from '@/hooks/use-pending-messages'
 import { formatFileSize } from '@/lib/format'
@@ -172,6 +173,7 @@ export function ChatBody({
   const cancelIssue = useCancelIssue(projectId)
   const deleteIssueMutation = useDeleteIssue(projectId)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const { data: worktreeSettings } = useWorktreeSettings(deleteDialogOpen)
   const [isCancelling, setIsCancelling] = useState(false)
   const [pendingEditContent, setPendingEditContent] = useState<string | null>(null)
 
@@ -747,6 +749,7 @@ export function ChatBody({
         hasWorktree={issue.useWorktree}
         branchName={issue.worktreeBranchName ?? (issue.useWorktree ? `bkd/${issue.id}` : null)}
         isPending={deleteIssueMutation.isPending}
+        deleteBranchDefault={worktreeSettings?.deleteBranchDefault ?? false}
         onConfirm={handleConfirmDelete}
       />
     </>

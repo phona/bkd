@@ -25,6 +25,7 @@ import type {
   WebhookEventType,
   WhiteboardNode,
   Workspace,
+  WorktreeSettings,
 } from '@/types/kanban'
 import { clearToken, getToken } from './auth'
 
@@ -743,6 +744,9 @@ export const kanbanApi = {
     patch<{ enabled: boolean }>('/api/settings/worktree-auto-cleanup', {
       enabled,
     }),
+  getWorktreeSettings: () => get<WorktreeSettings>('/api/settings/worktree'),
+  updateWorktreeSettings: (body: Partial<WorktreeSettings>) =>
+    patch<WorktreeSettings>('/api/settings/worktree', body),
   getSkipPermissions: () => get<{ enabled: boolean }>('/api/settings/skip-permissions'),
   setSkipPermissions: (enabled: boolean) =>
     patch<{ enabled: boolean }>('/api/settings/skip-permissions', { enabled }),

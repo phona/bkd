@@ -1,9 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import { ApiError, kanbanApi } from '@/lib/kanban-api'
 import { STALE_TIME } from '@/lib/query-config'
 import { useBoardStore } from '@/stores/board-store'
 import { useFileBrowserStore } from '@/stores/file-browser-store'
-import type { ExecuteIssueRequest, ForkIssuePayload, Issue, WebhookEventType } from '@/types/kanban'
+import type { ExecuteIssueRequest, ForkIssuePayload, Issue, WebhookEventType, WorktreeSettings } from '@/types/kanban'
 
 export const queryKeys = {
   workspacePath: () => ['settings', 'workspacePath'] as const,
@@ -35,6 +36,7 @@ export const queryKeys = {
   gitBranches: (projectId: string) => ['projects', projectId, 'git-branches'] as const,
   logPageSize: () => ['settings', 'logPageSize'] as const,
   worktreeAutoCleanup: () => ['settings', 'worktreeAutoCleanup'] as const,
+  worktreeSettings: () => ['settings', 'worktreeSettings'] as const,
   disableAskUser: () => ['settings', 'disableAskUser'] as const,
   skipPermissions: () => ['settings', 'skipPermissions'] as const,
   omitModel: () => ['settings', 'omitModel'] as const,
@@ -716,6 +718,37 @@ export function useSetWorktreeAutoCleanup() {
       queryClient.invalidateQueries({
         queryKey: queryKeys.worktreeAutoCleanup(),
       })
+      // The worktree settings panel mirrors autoCleanup — keep it fresh.
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.worktreeSettings(),
+      })
+    },
+  })
+}
+
+// --- Worktree Settings hooks (PLAN-039) ---
+
+export function useWorktreeSettings(enabled = false) {
+  return useQuery({
+    queryKey: queryKeys.worktreeSettings(),
+    queryFn: () => kanbanApi.getWorktreeSettings(),
+    enabled,
+    staleTime: STALE_TIME.CONFIG,
+  })
+}
+
+export function useUpdateWorktreeSettings() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (patch: Partial<WorktreeSettings>) => kanbanApi.updateWorktreeSettings(patch),
+    onSuccess: (data) => {
+      queryClient.setQueryData(queryKeys.worktreeSettings(), data)
+      queryClient.invalidateQueries({ queryKey: queryKeys.worktreeSettings() })
+      // autoCleanup is shared with the legacy single-toggle query — keep it in sync.
+      queryClient.invalidateQueries({ queryKey: queryKeys.worktreeAutoCleanup() })
+    },
+    onError: (err) => {
+      toast.error(err instanceof ApiError ? err.message : String(err))
     },
   })
 }

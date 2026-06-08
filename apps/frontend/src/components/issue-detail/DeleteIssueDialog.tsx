@@ -31,6 +31,7 @@ export function DeleteIssueDialog({
   hasWorktree,
   branchName,
   isPending,
+  deleteBranchDefault = false,
   onConfirm,
 }: {
   open: boolean
@@ -39,12 +40,14 @@ export function DeleteIssueDialog({
   hasWorktree: boolean
   branchName: string | null
   isPending: boolean
+  /** Seeds the "delete branch" checkbox (PLAN-039: worktree:deleteBranchDefault). */
+  deleteBranchDefault?: boolean
   onConfirm: (cleanup: DeleteIssueCleanupOptions | undefined) => void
 }) {
   const { t } = useTranslation()
   const [deleteWorktree, setDeleteWorktree] = useState(true)
   const [forceDelete, setForceDelete] = useState(false)
-  const [deleteBranch, setDeleteBranch] = useState(false)
+  const [deleteBranch, setDeleteBranch] = useState(deleteBranchDefault)
 
   // Reset to defaults whenever the dialog re-opens so a previous run's
   // choices don't leak into the next delete.
@@ -52,9 +55,9 @@ export function DeleteIssueDialog({
     if (open) {
       setDeleteWorktree(true)
       setForceDelete(false)
-      setDeleteBranch(false)
+      setDeleteBranch(deleteBranchDefault)
     }
-  }, [open])
+  }, [open, deleteBranchDefault])
 
   const handleConfirm = () => {
     onConfirm(
