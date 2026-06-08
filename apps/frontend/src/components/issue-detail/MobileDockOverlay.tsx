@@ -6,8 +6,10 @@ import { useFileBrowserStore } from '@/stores/file-browser-store'
 import type { DockTab } from '@/stores/dock-store'
 import { useDockStore } from '@/stores/dock-store'
 import { DiffPanel } from './DiffPanel'
+import { DockRepoSwitcher } from './DockRepoSwitcher'
 import { DockTerminal } from './DockTerminal'
 import { TerminalKeyBar } from './TerminalKeyBar'
+import { useDockRepo } from './use-dock-repo'
 
 const TAB_TITLES: Record<DockTab, string> = {
   terminal: 'dock.terminal',
@@ -40,6 +42,15 @@ export function MobileDockOverlay({
   const closeMobile = useDockStore(s => s.closeMobile)
   const setIssueContext = useFileBrowserStore(s => s.setIssueContext)
 
+  // Multi-project association (PLAN-037): selected linked repo for the panels.
+  const {
+    repos,
+    hasMultiple,
+    selectedProjectId,
+    setSelectedProjectId,
+    resolvedCwd,
+  } = useDockRepo(projectId, issueId, terminalCwd)
+
   const visitedRef = useRef<Set<DockTab>>(new Set())
   const [, forceRender] = useState(0)
   useEffect(() => {
@@ -52,11 +63,11 @@ export function MobileDockOverlay({
   // Point the file browser at the worktree root (terminalCwd), same as desktop;
   // skip while it's still loading.
   useEffect(() => {
-    if (terminalCwd === undefined) return
+    if (resolvedCwd === undefined) return
     if (visitedRef.current.has('files')) {
-      setIssueContext(projectId, issueId, terminalCwd ?? changesRoot)
+      setIssueContext(selectedProjectId, issueId, resolvedCwd ?? changesRoot)
     }
-  }, [projectId, issueId, terminalCwd, changesRoot, setIssueContext, mobilePanel])
+  }, [selectedProjectId, issueId, resolvedCwd, changesRoot, setIssueContext, mobilePanel])
 
   const visited = visitedRef.current
 
@@ -65,8 +76,12 @@ export function MobileDockOverlay({
       {visited.has('terminal') ? (
         <div className="absolute inset-0 flex flex-col bg-background" hidden={mobilePanel !== 'terminal'}>
           <OverlayHeader title={t(TAB_TITLES.terminal)} onClose={closeMobile} />
+          {hasMultiple ? (
+            <DockRepoSwitcher repos={repos} selectedProjectId={selectedProjectId} onSelect={setSelectedProjectId} />
+          ) : null}
           <div className="flex-1 min-h-0">
-            <DockTerminal cwd={terminalCwd} className="h-full p-1" />
+            {/* Keyed on the selected repo so switching disposes the old PTY. */}
+            <DockTerminal key={selectedProjectId} cwd={resolvedCwd} className="h-full p-1" />
           </div>
           <TerminalKeyBar />
         </div>
@@ -74,6 +89,9 @@ export function MobileDockOverlay({
       {visited.has('files') ? (
         <div className="absolute inset-0 flex flex-col bg-background" hidden={mobilePanel !== 'files'}>
           <OverlayHeader title={t(TAB_TITLES.files)} onClose={closeMobile} />
+          {hasMultiple ? (
+            <DockRepoSwitcher repos={repos} selectedProjectId={selectedProjectId} onSelect={setSelectedProjectId} />
+          ) : null}
           <div className="flex-1 min-h-0 flex flex-col">
             <FileBrowserPanel width={0} onWidthChange={() => {}} onClose={closeMobile} fullScreen />
           </div>
@@ -82,9 +100,12 @@ export function MobileDockOverlay({
       {visited.has('diff') ? (
         <div className="absolute inset-0 flex flex-col bg-background" hidden={mobilePanel !== 'diff'}>
           <OverlayHeader title={t(TAB_TITLES.diff)} onClose={closeMobile} />
+          {hasMultiple ? (
+            <DockRepoSwitcher repos={repos} selectedProjectId={selectedProjectId} onSelect={setSelectedProjectId} />
+          ) : null}
           <div className="flex-1 min-h-0 flex flex-col">
             <DiffPanel
-              projectId={projectId}
+              projectId={selectedProjectId}
               issueId={issueId}
               width={0}
               onWidthChange={() => {}}

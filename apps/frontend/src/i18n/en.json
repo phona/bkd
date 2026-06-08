@@ -137,7 +137,8 @@
     "keepAlive": "Keep Alive — prevent idle timeout from terminating the process",
     "devMode": "Dev",
     "summarize": "Summarize",
-    "summarizing": "Summarizing..."
+    "summarizing": "Summarizing...",
+    "linkedRepos": "{{count}} repos"
   },
   "createIssue": {
     "model": "Model",
@@ -183,6 +184,16 @@
     "attachExisting": "Attach to existing branch",
     "attachExistingHint": "Re-use a branch that already exists instead of creating a new one. Off = create a new branch.",
     "attachExistingBranch": "Existing branch",
+    "linkProjects": "Link projects",
+    "linkProjectsHint": "Create the same branch's worktree in each linked repo (each uses its own default branch as base).",
+    "linkProjectsAll": "Select all",
+    "linkProjectsClear": "Clear all",
+    "linkProjectsPrimary": "Primary",
+    "linkProjectsLinked": "Linked",
+    "linkProjectsLink": "Link",
+    "linkProjectsEmpty": "No other git repositories to link.",
+    "linkProjectsSep": ", ",
+    "linkProjectsSummary": "Will create the worktree for branch {{branch}} in: {{repos}} ({{count}} repos)",
     "modelDefault": "Default",
     "modelDefaultHint": "Use system default"
   },
@@ -830,7 +841,10 @@
     "newTerminalTab": "New terminal",
     "closeTerminalTab": "Close terminal",
     "fontDecrease": "Smaller font",
-    "fontIncrease": "Larger font"
+    "fontIncrease": "Larger font",
+    "repo": "Repo",
+    "repoPrimary": "Primary",
+    "repoCount": "{{count}} repos"
   },
   "terminal": {
     "title": "Terminal",

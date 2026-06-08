@@ -27,8 +27,10 @@ vi.mock('@/hooks/use-kanban', () => ({
   useProject: () => ({ data: { id: 'p1', name: 'Alpha', isGitRepo: true } }),
   useProjects: () => ({
     data: [
-      { id: 'p1', name: 'Alpha Project' },
-      { id: 'p2', name: 'Beta Project' },
+      { id: 'p1', name: 'Alpha Project', isGitRepo: true, isArchived: false },
+      { id: 'p2', name: 'Beta Project', isGitRepo: true, isArchived: false },
+      { id: 'p3', name: 'Archived Project', isGitRepo: true, isArchived: true },
+      { id: 'p4', name: 'Plain Project', isGitRepo: false, isArchived: false },
     ],
   }),
   useEngineAvailability: () => ({ data: { engines: [], models: {} } }),
@@ -123,5 +125,32 @@ describe('createIssueDialog — project selection (BUG-003 regression)', () => {
 
     const btn = screen.getByText('createIssue.create') as HTMLButtonElement
     expect(btn.disabled).toBe(false)
+  })
+
+  // ── PLAN-037 project linker ──────────────────────────
+  it('lists linkable git projects (excludes primary, archived, non-git) and passes linkedProjectIds on create', () => {
+    mockStoreState.createDialogOpen = true
+    mockStoreState.createDialogProjectId = 'p1'
+    render(
+      <Wrapper>
+        <CreateIssueDialog />
+      </Wrapper>,
+    )
+    // Beta is linkable; Archived + Plain are excluded; Alpha is the primary (pinned)
+    expect(screen.getByText('Beta Project')).toBeDefined()
+    expect(screen.queryByText('Archived Project')).toBeNull()
+    expect(screen.queryByText('Plain Project')).toBeNull()
+
+    // Toggle Beta on
+    fireEvent.click(screen.getByText('Beta Project'))
+
+    const textarea = screen.getByPlaceholderText('issue.describeWork') as HTMLTextAreaElement
+    fireEvent.change(textarea, { target: { value: 'Cross-repo task' } })
+    fireEvent.click(screen.getByText('createIssue.create'))
+
+    expect(createIssueMutate).toHaveBeenCalledTimes(1)
+    const payload = createIssueMutate.mock.calls[0][0]
+    expect(payload.useWorktree).toBe(true)
+    expect(payload.linkedProjectIds).toEqual(['p2'])
   })
 })

@@ -137,7 +137,8 @@
     "keepAlive": "保持活跃 — 防止空闲超时自动终止进程",
     "devMode": "Dev",
     "summarize": "生成总结",
-    "summarizing": "总结中..."
+    "summarizing": "总结中...",
+    "linkedRepos": "{{count}} 仓"
   },
   "createIssue": {
     "model": "模型",
@@ -183,6 +184,16 @@
     "attachExisting": "附加到已有分支",
     "attachExistingHint": "复用已存在的分支，而不是新建。关闭则创建新分支。",
     "attachExistingBranch": "已有分支",
+    "linkProjects": "关联项目",
+    "linkProjectsHint": "在每个关联仓库的同一分支创建 worktree（各仓库以其默认分支为 base）。",
+    "linkProjectsAll": "全选",
+    "linkProjectsClear": "取消全选",
+    "linkProjectsPrimary": "主仓",
+    "linkProjectsLinked": "已关联",
+    "linkProjectsLink": "点击关联",
+    "linkProjectsEmpty": "没有其它可关联的 Git 仓库。",
+    "linkProjectsSep": "、",
+    "linkProjectsSummary": "将创建分支 {{branch}} 的 worktree 于：{{repos}}（共 {{count}} 个仓库）",
     "modelDefault": "默认",
     "modelDefaultHint": "使用系统默认模型"
   },
@@ -826,7 +837,10 @@
     "newTerminalTab": "新建终端",
     "closeTerminalTab": "关闭终端",
     "fontDecrease": "缩小字体",
-    "fontIncrease": "放大字体"
+    "fontIncrease": "放大字体",
+    "repo": "仓库",
+    "repoPrimary": "主仓",
+    "repoCount": "{{count}} 个仓库"
   },
   "terminal": {
     "title": "终端",

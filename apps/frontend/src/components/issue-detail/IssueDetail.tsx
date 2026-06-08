@@ -2,6 +2,7 @@ import { Brain, ChevronDown, GitBranch, Tag, Trash2, Wrench, Zap } from 'lucide-
 import { useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
+import { LinkedReposBadge } from '@/components/issue-detail/LinkedReposBadge'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { useClickOutside } from '@/hooks/use-click-outside'
@@ -215,6 +216,16 @@ export function IssueDetail({
       {/* Worktree (right side) — shown on mobile too (AoE parity): the branch
           chip stays glanceable and the popup carries branch/path + merge. */}
       <div className="ml-auto flex items-center gap-1.5">
+        {projectId
+          ? (
+              <LinkedReposBadge
+                projectId={projectId}
+                issueId={issue.id}
+                enabled={issue.useWorktree}
+                className={`${badgeBase} border-accent-brand/40 bg-accent-brand/10`}
+              />
+            )
+          : null}
         {issue.useWorktree ?
             (
               <div ref={worktreeRef} className="relative flex">

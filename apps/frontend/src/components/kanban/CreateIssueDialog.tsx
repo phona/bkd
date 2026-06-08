@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight } from 'lucide-react'
+import { Check, ChevronDown, ChevronRight, FolderGit2 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useParams } from 'react-router-dom'
@@ -30,7 +30,7 @@ import { tStatus } from '@/lib/i18n-utils'
 import type { StatusDefinition } from '@/lib/statuses'
 import { STATUSES } from '@/lib/statuses'
 import { usePanelStore } from '@/stores/panel-store'
-import type { EngineAvailability, EngineModel, EngineProfile } from '@/types/kanban'
+import type { EngineAvailability, EngineModel, EngineProfile, Project } from '@/types/kanban'
 
 // ── Data ──────────────────────────────────────────────
 
@@ -92,6 +92,9 @@ export function CreateIssueForm({
   const [worktreeAttachExisting, setWorktreeAttachExisting] = useState(false)
   const [worktreeBaseBranch, setWorktreeBaseBranch] = useState('')
   const [worktreeBranchName, setWorktreeBranchName] = useState('')
+  // Multi-project association (PLAN-037): extra projects to materialize the same
+  // branch's worktree in. Only meaningful while worktree is enabled.
+  const [linkedProjectIds, setLinkedProjectIds] = useState<string[]>([])
   const { data: gitBranches } = useGitBranches(
     effectiveProjectId,
     Boolean(effectiveProjectId) && projectIsGitRepo && useWorktree,
@@ -143,6 +146,28 @@ export function CreateIssueForm({
     return hidden.size > 0 ? all.filter(m => !hidden.has(m.id)) : all
   }, [resolvedEngineType, discovery?.models, engineSettings])
 
+  // Multi-project linker (PLAN-037): other git-repo projects (excluding the
+  // primary + archived) the user may link so the same branch's worktree is
+  // created in each. Only relevant while worktree is on.
+  const linkableProjects = useMemo(
+    () =>
+      (projects ?? []).filter(
+        p => p.id !== effectiveProjectId && !p.isArchived && p.isGitRepo,
+      ),
+    [projects, effectiveProjectId],
+  )
+  const primaryProjectName = project?.name ?? ''
+
+  // Drop any linked id that's no longer valid (e.g. primary project changed in
+  // the cockpit selector).
+  useEffect(() => {
+    setLinkedProjectIds((prev) => {
+      const valid = new Set(linkableProjects.map(p => p.id))
+      const next = prev.filter(id => valid.has(id))
+      return next.length === prev.length ? prev : next
+    })
+  }, [linkableProjects])
+
   // Disable model selection when omit-model flag is on (gateway picks the model)
   const { data: omitModelData } = useOmitModel(true)
   const isClaudeEngine = resolvedEngineType === 'claude-code' || resolvedEngineType === 'claude-code-sdk'
@@ -193,6 +218,9 @@ export function CreateIssueForm({
         worktreeBranchName:
           useWorktree ? (worktreeBranchName.trim() || undefined) : undefined,
         worktreeAttachExisting: useWorktree && worktreeAttachExisting ? true : undefined,
+        // Linked projects only apply when a worktree is created.
+        linkedProjectIds:
+          useWorktree && linkedProjectIds.length > 0 ? linkedProjectIds : undefined,
         engineType: resolvedEngineType || undefined,
         model: modelId || undefined,
         permissionMode: permissionMap[permission],
@@ -209,6 +237,7 @@ export function CreateIssueForm({
           setWorktreeAttachExisting(false)
           setWorktreeBaseBranch('')
           setWorktreeBranchName('')
+          setLinkedProjectIds([])
           setTemplateId('')
           setTemplatePrefix('')
           setSelectedProjectId('')
@@ -225,6 +254,7 @@ export function CreateIssueForm({
     worktreeAttachExisting,
     worktreeBaseBranch,
     worktreeBranchName,
+    linkedProjectIds,
     resolvedEngineType,
     modelId,
     createIssue,
@@ -314,7 +344,7 @@ export function CreateIssueForm({
           </PropertyRow>
           {useWorktree && projectIsGitRepo
             ? (
-                <div className="md:col-span-3">
+                <div className="md:col-span-3 space-y-2">
                   <WorktreeAdvanced
                     open={worktreeAdvancedOpen}
                     onToggle={() => setWorktreeAdvancedOpen(v => !v)}
@@ -327,6 +357,17 @@ export function CreateIssueForm({
                     autoBranchName={autoBranchName}
                     branches={gitBranches?.branches ?? []}
                   />
+                  {effectiveProjectId
+                    ? (
+                        <ProjectLinker
+                          primaryName={primaryProjectName}
+                          projects={linkableProjects}
+                          selectedIds={linkedProjectIds}
+                          onChange={setLinkedProjectIds}
+                          branchHint={worktreeAttachExisting ? worktreeBranchName : (worktreeBranchName.trim() || autoBranchName)}
+                        />
+                      )
+                    : null}
                 </div>
               )
             : null}
@@ -651,6 +692,131 @@ function WorktreeAdvanced({
             </div>
           )
         : null}
+    </div>
+  )
+}
+
+// ── ProjectLinker ─────────────────────────────────────
+// Multi-project association (PLAN-037). Lists OTHER git-repo projects the user
+// can link so the SAME branch's worktree is created in each. The primary project
+// is pinned + always checked (label 主仓/Primary). Includes a select-all control
+// (repo convention) and a summary mirroring the approved prototype. Mobile parity:
+// the same stacked layout on every breakpoint.
+
+function ProjectLinker({
+  primaryName,
+  projects,
+  selectedIds,
+  onChange,
+  branchHint,
+}: {
+  primaryName: string
+  projects: Project[]
+  selectedIds: string[]
+  onChange: (ids: string[]) => void
+  branchHint: string
+}) {
+  const { t } = useTranslation()
+  const selected = new Set(selectedIds)
+
+  const toggle = useCallback((id: string) => {
+    onChange(
+      selected.has(id) ? selectedIds.filter(x => x !== id) : [...selectedIds, id],
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedIds, onChange])
+
+  const allSelected = projects.length > 0 && projects.every(p => selected.has(p.id))
+  const toggleAll = useCallback(() => {
+    onChange(allSelected ? [] : projects.map(p => p.id))
+  }, [allSelected, projects, onChange])
+
+  const linkedNames = projects.filter(p => selected.has(p.id)).map(p => p.name)
+  const summaryRepos = [primaryName, ...linkedNames].filter(Boolean)
+
+  return (
+    <div className="rounded-lg border bg-muted/20 px-3 py-2.5">
+      <div className="flex items-center gap-2 mb-2">
+        <FolderGit2 className="size-3.5 text-muted-foreground shrink-0" />
+        <span className="text-xs font-medium text-foreground">{t('createIssue.linkProjects')}</span>
+        {projects.length > 0
+          ? (
+              <button
+                type="button"
+                onClick={toggleAll}
+                className="ml-auto text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {allSelected ? t('createIssue.linkProjectsClear') : t('createIssue.linkProjectsAll')}
+              </button>
+            )
+          : null}
+      </div>
+      <div className="text-[11px] text-muted-foreground/70 mb-2 leading-snug">
+        {t('createIssue.linkProjectsHint')}
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        {/* Primary — pinned, always on */}
+        <div
+          className="flex items-center gap-2 rounded-md border border-primary/50 bg-primary/5 px-2.5 py-1.5 text-[13px]"
+        >
+          <span className="inline-flex size-4 items-center justify-center rounded-[5px] border border-primary bg-primary text-primary-foreground shrink-0">
+            <Check className="size-3" />
+          </span>
+          <span className="truncate font-medium">{primaryName}</span>
+          <span className="ml-auto shrink-0 rounded-full border border-primary/50 px-1.5 py-0.5 text-[10px] text-primary">
+            {t('createIssue.linkProjectsPrimary')}
+          </span>
+        </div>
+
+        {projects.length === 0
+          ? (
+              <div className="px-1 py-1 text-[11px] text-muted-foreground/60">
+                {t('createIssue.linkProjectsEmpty')}
+              </div>
+            )
+          : projects.map((p) => {
+              const on = selected.has(p.id)
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => toggle(p.id)}
+                  className={`flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-[13px] text-left transition-colors ${
+                    on
+                      ? 'border-accent-brand bg-accent-brand/10'
+                      : 'border-border bg-card hover:border-border/80'
+                  }`}
+                >
+                  <span
+                    className={`inline-flex size-4 items-center justify-center rounded-[5px] border shrink-0 ${
+                      on ? 'border-accent-brand bg-accent-brand text-white' : 'border-border'
+                    }`}
+                  >
+                    {on ? <Check className="size-3" /> : null}
+                  </span>
+                  <span className="truncate">{p.name}</span>
+                  <span
+                    className={`ml-auto shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] ${
+                      on ? 'border-accent-brand text-accent-brand' : 'border-border text-muted-foreground'
+                    }`}
+                    style={on ? { color: 'var(--accent-brand)' } : undefined}
+                  >
+                    {on ? t('createIssue.linkProjectsLinked') : t('createIssue.linkProjectsLink')}
+                  </span>
+                </button>
+              )
+            })}
+      </div>
+
+      {/* Summary mirroring the prototype */}
+      <div className="mt-2.5 rounded-md border border-dashed border-accent-brand/50 bg-accent-brand/5 px-2.5 py-2 text-[11.5px] text-muted-foreground">
+        {t('createIssue.linkProjectsSummary', {
+          branch: branchHint,
+          repos: summaryRepos.join(t('createIssue.linkProjectsSep')),
+          count: summaryRepos.length,
+        })}
+      </div>
     </div>
   )
 }

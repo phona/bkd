@@ -11,6 +11,7 @@ import {
 import { GitBranch, Pin } from 'lucide-react'
 import { memo, useEffect, useRef, useState } from 'react'
 import { IssueContextMenu, IssueContextMenuButton } from '@/components/issue-detail/IssueContextMenu'
+import { LinkedReposBadge } from '@/components/issue-detail/LinkedReposBadge'
 import { StatusGlyph } from '@/components/ui/status-glyph'
 import type { Issue } from '@/types/kanban'
 import { DoneDiffHover } from './DoneDiffHover'
@@ -135,6 +136,7 @@ export const KanbanCard = memo(({
                     </span>
                   )
                 : null}
+              <LinkedReposBadge projectId={projectId} issueId={issue.id} enabled={issue.useWorktree} />
             </div>
           )
         : null}

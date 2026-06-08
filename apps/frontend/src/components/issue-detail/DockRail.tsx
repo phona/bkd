@@ -7,6 +7,8 @@ import type { DockTab } from '@/stores/dock-store'
 import { useDockStore } from '@/stores/dock-store'
 import { DiffPanel } from './DiffPanel'
 import { DockTerminal } from './DockTerminal'
+import { useDockRepo } from './use-dock-repo'
+import { DockRepoSwitcher } from './DockRepoSwitcher'
 
 const TABS: Array<{ id: DockTab, icon: typeof SquareTerminal, labelKey: string }> = [
   { id: 'terminal', icon: SquareTerminal, labelKey: 'dock.terminal' },
@@ -50,6 +52,16 @@ export function DockRail({
   const setOpen = useDockStore(s => s.setOpen)
   const setIssueContext = useFileBrowserStore(s => s.setIssueContext)
 
+  // Multi-project association (PLAN-037): which linked repo the panels target.
+  // Single-repo issues resolve to the primary cwd → behaviour unchanged.
+  const {
+    repos,
+    hasMultiple,
+    selectedProjectId,
+    setSelectedProjectId,
+    resolvedCwd,
+  } = useDockRepo(projectId, issueId, terminalCwd)
+
   // Track which tabs have been visited so each panel mounts lazily on first
   // open and is then kept alive (mounted, hidden) for the rest of the session.
   const visitedRef = useRef<Set<DockTab>>(new Set())
@@ -66,11 +78,13 @@ export function DockRail({
   // worktree path is still loading (terminalCwd === undefined) so we don't latch
   // onto the project dir first.
   useEffect(() => {
-    if (terminalCwd === undefined) return
+    if (resolvedCwd === undefined) return
     if (visitedRef.current.has('files')) {
-      setIssueContext(projectId, issueId, terminalCwd ?? changesRoot)
+      // Files target the SELECTED repo (its worktree path); falls back to
+      // changesRoot for the primary when no worktree path is known.
+      setIssueContext(selectedProjectId, issueId, resolvedCwd ?? changesRoot)
     }
-  }, [projectId, issueId, terminalCwd, changesRoot, setIssueContext, tab, open])
+  }, [selectedProjectId, issueId, resolvedCwd, changesRoot, setIssueContext, tab, open])
 
   const dragRef = useRef<{ active: boolean }>({ active: false })
   const onGripDown = useCallback((e: React.PointerEvent) => {
@@ -105,8 +119,15 @@ export function DockRail({
         </div>
       ) : null}
 
-      {/* Expanded rail: header tabs + keep-alive bodies */}
+      {/* Expanded rail: optional repo switcher + header tabs + keep-alive bodies */}
       <div className={collapsed ? 'hidden' : 'flex flex-1 flex-col min-w-0'}>
+        {hasMultiple ? (
+          <DockRepoSwitcher
+            repos={repos}
+            selectedProjectId={selectedProjectId}
+            onSelect={setSelectedProjectId}
+          />
+        ) : null}
         <div className="flex h-[42px] shrink-0 items-center gap-1 border-b border-border px-2">
           {TABS.map(({ id, icon: Icon, labelKey }) => (
             <button
@@ -136,7 +157,9 @@ export function DockRail({
         <div className="relative flex-1 min-h-0 overflow-hidden">
           {visited.has('terminal') ? (
             <div className="absolute inset-0 flex flex-col" hidden={tab !== 'terminal'}>
-              <DockTerminal cwd={terminalCwd} className="flex-1 min-h-0 p-1" />
+              {/* Keyed on the selected repo: switching repos remounts the host so
+                  the previous PTYs are disposed (no leak) and the new cwd is armed. */}
+              <DockTerminal key={selectedProjectId} cwd={resolvedCwd} className="flex-1 min-h-0 p-1" />
             </div>
           ) : null}
           {visited.has('files') ? (
@@ -146,8 +169,12 @@ export function DockRail({
           ) : null}
           {visited.has('diff') ? (
             <div className="absolute inset-0 flex flex-col" hidden={tab !== 'diff'}>
+              {/* Diff keys off projectId+issueId. For LINKED repos the issue is not
+                  owned by that project so the changes endpoint can't serve it yet —
+                  see the P3 backend follow-up. We pass the selected projectId; the
+                  primary works as before. */}
               <DiffPanel
-                projectId={projectId}
+                projectId={selectedProjectId}
                 issueId={issueId}
                 width={0}
                 onWidthChange={noop}

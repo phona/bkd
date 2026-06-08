@@ -325,6 +325,9 @@ export function useCreateIssue(projectId: string) {
       worktreeBaseBranch?: string
       worktreeBranchName?: string
       worktreeAttachExisting?: boolean
+      // Multi-project association (PLAN-037): extra projects to materialize the
+      // same branch's worktree in.
+      linkedProjectIds?: string[]
       engineType?: string
       model?: string
       permissionMode?: string
