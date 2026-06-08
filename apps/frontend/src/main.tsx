@@ -78,7 +78,6 @@ const HomePage = lazy(() => import('./pages/HomePage'))
 const KanbanPage = lazy(() => import('./pages/KanbanPage'))
 const IssueDetailPage = lazy(() => import('./pages/IssueDetailPage'))
 const ReviewPage = lazy(() => import('./pages/ReviewPage'))
-const TerminalPage = lazy(() => import('./pages/TerminalPage'))
 const CronPage = lazy(() => import('./pages/CronPage'))
 const WhiteboardPage = lazy(() => import('./pages/WhiteboardPage'))
 const WorkspaceCreatePage = lazy(() => import('./pages/WorkspaceCreatePage'))
@@ -332,16 +331,6 @@ if (!rootElement.innerHTML) {
                     <AuthGate>
                       <ErrorBoundary>
                         <ReviewPage />
-                      </ErrorBoundary>
-                    </AuthGate>
-                  )}
-                />
-                <Route
-                  path="/terminal"
-                  element={(
-                    <AuthGate>
-                      <ErrorBoundary>
-                        <TerminalPage />
                       </ErrorBoundary>
                     </AuthGate>
                   )}

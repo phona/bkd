@@ -24,7 +24,6 @@ import {
   Search,
   Settings,
   StickyNote,
-  TerminalSquare,
 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -369,19 +368,6 @@ function MobileHomeMenu({
 
               <Separator />
 
-              {/* Terminal */}
-              <button
-                type="button"
-                onClick={() => {
-                  setOpen(false)
-                  navigate('/terminal')
-                }}
-                className="flex items-center gap-3 w-full px-4 min-h-[48px] text-sm text-foreground/80 hover:bg-accent/50 active:bg-accent transition-colors"
-              >
-                <TerminalSquare className="h-4.5 w-4.5 text-muted-foreground" />
-                {t('terminal.title')}
-              </button>
-
               {/* Notes */}
               <button
                 type="button"
@@ -461,15 +447,6 @@ function DesktopHeaderControls({
         title={t('viewMode.review')}
       >
         <LayoutDashboard className="h-4 w-4" />
-      </Button>
-      <Button
-        variant="ghost"
-        size="icon"
-        className="h-8 w-8 text-muted-foreground"
-        onClick={() => navigate('/terminal')}
-        aria-label={t('terminal.title')}
-      >
-        <TerminalSquare className="h-4 w-4" />
       </Button>
       <Button
         variant="ghost"

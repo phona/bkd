@@ -1,4 +1,4 @@
-import { ChevronRight, LayoutDashboard, Menu, Plus, Search, Settings, StickyNote, TerminalSquare } from 'lucide-react'
+import { ChevronRight, LayoutDashboard, Menu, Plus, Search, Settings, StickyNote } from 'lucide-react'
 import { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
@@ -157,17 +157,6 @@ export function MobileSidebar({
               <Separator />
 
               {/* Functional buttons grouped together */}
-              <button
-                type="button"
-                onClick={() => {
-                  setOpen(false)
-                  void navigate('/terminal')
-                }}
-                className="flex items-center gap-3 w-full px-4 min-h-[44px] text-sm text-foreground/80 hover:bg-accent/50 active:bg-accent transition-colors"
-              >
-                <TerminalSquare className="h-4 w-4 text-muted-foreground" />
-                {t('terminal.title')}
-              </button>
               <button
                 type="button"
                 onClick={() => {

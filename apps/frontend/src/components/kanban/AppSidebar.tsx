@@ -1,4 +1,4 @@
-import { ChevronsLeft, ChevronsRight, LayoutDashboard, Plus, Settings, StickyNote, TerminalSquare, Wifi, WifiOff } from 'lucide-react'
+import { ChevronsLeft, ChevronsRight, LayoutDashboard, Plus, Settings, StickyNote, Wifi, WifiOff } from 'lucide-react'
 import { useCallback, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
@@ -178,16 +178,6 @@ export function AppSidebar({ activeProjectId }: { activeProjectId: string }) {
         >
           {connected ? <Wifi className="h-4 w-4" /> : <WifiOff className="h-4 w-4" />}
         </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => navigate('/terminal')}
-          className="relative h-9 w-9 text-muted-foreground"
-          aria-label={t('terminal.title')}
-          title={t('terminal.title')}
-        >
-          <TerminalSquare className="h-4 w-4" />
-        </Button>
         <Button
           variant="ghost"
           size="icon"

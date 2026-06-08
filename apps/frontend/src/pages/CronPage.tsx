@@ -7,14 +7,13 @@ import {
   Clock,
   Loader2,
   StickyNote,
-  TerminalSquare,
   Timer,
   Trash2,
   XCircle,
 } from 'lucide-react'
 import { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { AppLogo } from '@/components/AppLogo'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -379,7 +378,6 @@ function LogEntry({ log }: { log: CronJobLog }) {
 
 export default function CronPage() {
   const { t } = useTranslation()
-  const navigate = useNavigate()
   const { data: jobs, isLoading } = useCronJobs()
   const [selectedJob, setSelectedJob] = useState<CronJob | null>(null)
   const [showDeleted, setShowDeleted] = useState(false)
@@ -410,15 +408,6 @@ export default function CronPage() {
             </Badge>
           )}
           <div className="ml-auto flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 text-muted-foreground"
-              onClick={() => navigate('/terminal')}
-              aria-label={t('terminal.title')}
-            >
-              <TerminalSquare className="h-4 w-4" />
-            </Button>
             <Button
               variant="ghost"
               size="icon"

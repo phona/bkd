@@ -5,7 +5,6 @@ import {
   FileSearch,
   Home,
   LayoutGrid,
-  TerminalSquare,
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { kanbanApi } from '@/lib/kanban-api'
@@ -63,12 +62,6 @@ export function SearchContent({
         icon: Eye,
         label: t('search.gotoReview', 'Review 页面'),
         action: () => navigate('/review'),
-      },
-      {
-        id: 'terminal',
-        icon: TerminalSquare,
-        label: t('search.openTerminal', '终端'),
-        action: () => navigate('/terminal'),
       },
       {
         id: 'cron',
