@@ -415,7 +415,16 @@ export function ChatArea({
             clipped off-screen by the wrapper's overflow-hidden. */}
         <div className="flex flex-1 overflow-hidden">
           <div className="flex-1 flex flex-col overflow-hidden">
+            {/* key={issueId}: ChatBody (+ its useIssueStream) MUST remount on
+                issue switch. Without it, switching relied on useIssueStream's
+                in-place scope-swap, which didn't reliably fetch/render the new
+                issue's messages — they only appeared after a hard refresh
+                (PLAN-040 regression). Remounting gives a clean fetch; the LRU
+                cache-seed (PLAN-040) keeps it instant for visited issues.
+                ChatArea itself stays mounted (header/dock/worktree context
+                don't reload — the main PLAN-040 win is retained). */}
             <ChatBody
+              key={issueId}
               projectId={projectId}
               issueId={issueId}
               issue={issue}
