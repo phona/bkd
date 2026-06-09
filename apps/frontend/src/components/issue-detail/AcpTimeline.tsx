@@ -223,10 +223,19 @@ export function AcpTimeline({
   // same element. Prepend (load older) anchoring + bottom-follow are owned by
   // Virtuoso, replacing the hand-rolled scrollHeight-delta compensation that
   // could not match mainstream chat quality.
+  // Resolve the shared scroll container for Virtuoso's customScrollParent.
+  // No dep array on purpose: `scrollRef.current` is populated by a commit on an
+  // ANCESTOR (ChatBody's scroll div), which is not reliably available the single
+  // time a `[scrollRef]` effect would run on mount — on an in-app issue switch
+  // it was still null, leaving customScrollParent null so Virtuoso rendered
+  // NOTHING (the "messages don't load until a hard refresh" bug). Running every
+  // commit and updating only on change catches the element as soon as it mounts,
+  // with no render loop.
   const [scrollEl, setScrollEl] = useState<HTMLElement | null>(null)
   useLayoutEffect(() => {
-    setScrollEl(scrollRef?.current ?? null)
-  }, [scrollRef])
+    const el = scrollRef?.current ?? null
+    setScrollEl(prev => (prev === el ? prev : el))
+  })
 
   // In-chat search jump (ported from Legacy). Bring the target item into the
   // DOM via Virtuoso's scrollToIndex (rows are virtualized, so an off-screen
