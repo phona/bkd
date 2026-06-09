@@ -232,6 +232,22 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+// Deploy resilience (PLAN-044): when a lazy chunk fails to load it is almost
+// always because a deploy changed the asset hashes out from under this already-
+// open tab (the autoUpdate service worker claims the tab + evicts the old
+// precache, but the loaded app still requests old chunk hashes → 404). Vite
+// dispatches `vite:preloadError` for exactly this. Reload ONCE to fetch the
+// fresh index + chunks; a 10s sessionStorage throttle prevents a reload loop so
+// a genuinely-missing chunk still surfaces to the ErrorBoundary.
+window.addEventListener('vite:preloadError', (event) => {
+  const KEY = 'bkd:preloadReloadAt'
+  const last = Number(sessionStorage.getItem(KEY) ?? 0)
+  if (Date.now() - last < 10_000) return
+  sessionStorage.setItem(KEY, String(Date.now()))
+  event.preventDefault()
+  window.location.reload()
+})
+
 const rootElement = document.getElementById('app')!
 
 if (!rootElement.innerHTML) {
