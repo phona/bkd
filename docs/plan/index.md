@@ -60,7 +60,7 @@ Each plan is a single line linking to its detail file. All detailed information 
 - [ ] [**PLAN-029 Secretary — cockpit reborn as a push inbox (supersedes PLAN-022)**](PLAN-029.md) `2026-06-06`
 - [x] [**PLAN-030 Branch/workspace interaction redesign — visibility + merge-back**](PLAN-030.md) `2026-06-06`
 - [ ] [**PLAN-031 Decompose giant components per DESIGN.md C**](PLAN-031.md) `2026-06-06`
-- [ ] [**PLAN-032 Chat reliability — single seq-indexed array**](PLAN-032.md) `2026-06-06`
+- [-] [**PLAN-032 Chat reliability — single seq-indexed array**](PLAN-032.md) `2026-06-06`
 - [-] [**PLAN-033 Chat input focus management**](PLAN-033.md) `2026-06-06`
 - [x] [**PLAN-034 Chat message rendering robustness**](PLAN-034.md) `2026-06-06`
 - [x] [**PLAN-035 Diff inline comments → send to agent**](PLAN-035.md) `2026-06-06`
@@ -70,3 +70,5 @@ Each plan is a single line linking to its detail file. All detailed information 
 - [x] [**PLAN-039 Worktree experience parity with AoE — global settings panel + strategy knobs**](PLAN-039.md) `2026-06-08`
 - [-] [**PLAN-040 Smooth issue switching — replace remount-on-switch with explicit per-issue resets**](PLAN-040.md) `2026-06-08`
 - [x] [**PLAN-041 Streaming assistant output + interleaved tool/text timeline (claude-code parity)**](PLAN-041.md) `2026-06-08`
+- [ ] [**PLAN-042 Built-in coding agent (Vercel AI SDK) as a bkd ACP agent — acp:bkd-agent**](PLAN-042.md) `2026-06-08`
+- [x] [**PLAN-043 Unify chat on one renderer (AcpTimeline) — delete legacy claude-code renderer**](PLAN-043.md) `2026-06-08`
