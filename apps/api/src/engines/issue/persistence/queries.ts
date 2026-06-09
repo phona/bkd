@@ -52,6 +52,11 @@ function rowToEntry(
     turnIndex: row.turnIndex,
     timestamp: row.timestamp ?? undefined,
     metadata: parsedMeta,
+    // PLAN-032: carry the persisted seq so `toTimeline` reuses it instead of
+    // re-assigning a fresh (and per-page-colliding) value. Null for rows
+    // written before PLAN-032 — the converter then falls back to its
+    // deterministic formula.
+    sequence: row.sequence ?? undefined,
   }
 
   const tool = toolByLogId.get(row.id)
@@ -273,6 +278,20 @@ export function getLogsAround(
 /** Soft-remove a log entry by marking it invisible (idempotent). */
 export function removeLogEntry(messageId: string): void {
   db.update(logsTable).set({ visible: 0, isDeleted: 1 }).where(eq(logsTable.id, messageId)).run()
+}
+
+/**
+ * Get the highest persisted timeline sequence for an issue (PLAN-032).
+ * Used to rehydrate the live converter's seq floor after a process restart.
+ * Returns null when the issue has no sequenced rows yet.
+ */
+export function getMaxSequence(issueId: string): number | null {
+  const [row] = db
+    .select({ maxSeq: max(logsTable.sequence) })
+    .from(logsTable)
+    .where(eq(logsTable.issueId, issueId))
+    .all()
+  return row?.maxSeq ?? null
 }
 
 /** Get next turn index from DB for an issue. */

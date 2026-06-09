@@ -208,6 +208,14 @@ export interface NormalizedLogEntry {
   metadata?: Record<string, unknown>
   toolAction?: ToolAction
   toolDetail?: ToolDetail
+  /**
+   * Persisted per-issue timeline sequence (PLAN-032). Populated when read back
+   * from `issue_logs.sequence`. When present, the TimelineConverter REUSES it
+   * instead of computing a fresh value, so history pagination and live SSE
+   * share one stable seq namespace. Undefined for live wire entries (the
+   * converter assigns one) and for old rows persisted before PLAN-032.
+   */
+  sequence?: number
 }
 
 // Timeline entry — backend-normalized format for frontend rendering.

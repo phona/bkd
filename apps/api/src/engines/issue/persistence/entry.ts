@@ -10,6 +10,7 @@ export function persistEntry(
   issueId: string,
   executionId: string,
   entry: NormalizedLogEntry,
+  sequence?: number | null,
 ): NormalizedLogEntry | null {
   const idx = ctx.entryCounters.get(executionId) ?? 0
   const turnIdx = ctx.turnIndexes.get(executionId) ?? 0
@@ -17,7 +18,7 @@ export function persistEntry(
     entry.entryType !== 'user-message' ?
         (ctx.userMessageIds.get(`${issueId}:${turnIdx}`) ?? null) :
       null
-  const persisted = persistLogEntry(issueId, executionId, entry, idx, turnIdx, replyTo)
+  const persisted = persistLogEntry(issueId, executionId, entry, idx, turnIdx, replyTo, sequence)
   if (persisted) {
     ctx.entryCounters.set(executionId, idx + 1)
     // Ensure downstream stages (SSE) see the DB-resolved turn index,

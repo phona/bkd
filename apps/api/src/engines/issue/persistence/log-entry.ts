@@ -13,6 +13,7 @@ export function persistLogEntry(
   entryIndex: number,
   turnIndex: number,
   replyToMessageId: string | null,
+  sequence?: number | null,
 ): NormalizedLogEntry | null {
   try {
     const messageId = entry.messageId ?? ulid()
@@ -28,6 +29,11 @@ export function persistLogEntry(
         metadata: entry.metadata ? JSON.stringify(entry.metadata) : null,
         replyToMessageId,
         timestamp: entry.timestamp ?? null,
+        // PLAN-032: stamp the authoritative seq when the caller already knows
+        // it (currently only `dbOnly` final rows, seeded from the live
+        // streaming buffer). Other rows are back-filled by the timeline-emit
+        // stage once the converter assigns their seq.
+        sequence: sequence ?? null,
         visible: 1,
       })
       .run()
@@ -40,6 +46,7 @@ export function persistLogEntry(
       ...entry,
       messageId,
       replyToMessageId: replyToMessageId ?? undefined,
+      sequence: sequence ?? entry.sequence,
     }
   } catch (error) {
     logger.warn({ err: error, issueId }, 'persistLogEntry failed')

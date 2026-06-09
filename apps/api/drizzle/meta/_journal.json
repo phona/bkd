@@ -232,6 +232,13 @@
       "when": 1780915926062,
       "tag": "0032_violet_gargoyle",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "6",
+      "when": 1780970242282,
+      "tag": "0033_fuzzy_beyonder",
+      "breakpoints": true
     }
   ]
 }

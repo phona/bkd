@@ -159,6 +159,25 @@ function nextSequence(state: IssueState, entry: NormalizedLogEntry): number {
 }
 
 /**
+ * Resolve the sequence for an entry under the single-authority model (PLAN-032).
+ *
+ * If the entry already carries a persisted `sequence` (history read path), REUSE
+ * it verbatim so the rendered seq matches exactly what the live SSE path emitted
+ * and what other pages emit — one namespace, no collisions. `lastSeq` is still
+ * advanced so any sequence-less entries that follow stay strictly monotonic.
+ *
+ * Otherwise (live wire entry / old data) fall back to the deterministic
+ * timestamp-anchored formula.
+ */
+function assignSequence(state: IssueState, entry: NormalizedLogEntry): number {
+  if (entry.sequence != null) {
+    if (entry.sequence > state.lastSeq) state.lastSeq = entry.sequence
+    return entry.sequence
+  }
+  return nextSequence(state, entry)
+}
+
+/**
  * Zero-padded segment suffix for thinking/assistant buffer ids.
  *
  * Why: segment ids feed into `compareTimeline`'s id-based tiebreaker. With
@@ -220,6 +239,34 @@ export class TimelineConverter {
   }
 
   /**
+   * Seed the per-issue `lastSeq` floor (PLAN-032 rehydration).
+   *
+   * Called on first touch of an issue after a process restart so freshly
+   * assigned sequences never regress below what was already persisted to
+   * `issue_logs.sequence`. No-op when `seq` is below the current floor.
+   */
+  seedLastSeq(issueId: string, seq: number): void {
+    if (!Number.isFinite(seq)) return
+    const s = this.getState(issueId)
+    if (seq > s.lastSeq) s.lastSeq = seq
+  }
+
+  /**
+   * Peek the sequence pinned on the currently-open streaming buffer of the
+   * given kind (PLAN-032). Used by the persist stage to stamp the authoritative
+   * live seq onto a `dbOnly` final-content row — the merged snapshot that the
+   * timeline-emit stage deliberately skips (it would duplicate the bubble the
+   * streaming buffer already shows). Returns undefined when no buffer is open.
+   */
+  currentSegmentSequence(issueId: string, entryType: string): number | undefined {
+    const s = this.issues.get(issueId)
+    if (!s) return undefined
+    if (entryType === 'thinking') return s.thinkingBuffer?.sequence
+    if (entryType === 'assistant-message') return s.assistantBuffer?.sequence
+    return undefined
+  }
+
+  /**
    * Ingest one NormalizedLogEntry. Returns 0..N TimelineEntry to upsert
    * by id on the client. Each returned entry is either:
    *   - a streaming buffer snapshot (thinking/assistant) with the SAME id
@@ -270,7 +317,7 @@ export class TimelineConverter {
           metadata: buildMetadata(entry),
           entryType: entry.entryType,
           id: `turn-${turn}-thinking-${segmentSuffix(state.thinkingFlushCount)}`,
-          sequence: nextSequence(state, entry),
+          sequence: assignSequence(state, entry),
           messageId: entry.messageId,
         }
       } else {
@@ -299,7 +346,7 @@ export class TimelineConverter {
           metadata: buildMetadata(entry),
           entryType: entry.entryType,
           id: `turn-${turn}-assistant-${segmentSuffix(state.assistantFlushCount)}`,
-          sequence: nextSequence(state, entry),
+          sequence: assignSequence(state, entry),
           messageId: entry.messageId,
         }
       } else {
@@ -328,7 +375,7 @@ export class TimelineConverter {
       state.assistantFlushCount++
     }
 
-    const seq = nextSequence(state, entry)
+    const seq = assignSequence(state, entry)
     const idSuffix = entry.messageId ?? entry.timestamp ?? `seq-${seq}`
     out.push({
       id: `turn-${turn}-${type}-${idSuffix}`,

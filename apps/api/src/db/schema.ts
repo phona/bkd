@@ -183,6 +183,11 @@ export const issueLogs = sqliteTable(
     timestamp: text('timestamp'),
     toolCallRefId: text('tool_call_ref_id'), // FK to issue_logs_tools_call.id (app-level, no DB FK to avoid circular ref)
     visible: integer('visible').notNull().default(1),
+    // Stable per-issue timeline sequence (PLAN-032). Assigned by the single
+    // seq authority (liveConverter) so history pagination and live SSE share
+    // ONE seq namespace. Nullable for backfill: old rows fall back to the
+    // live-computed value on read.
+    sequence: integer('sequence'),
     ...commonFields,
   },
   table => [
@@ -196,6 +201,10 @@ export const issueLogs = sqliteTable(
       table.issueId,
       table.visible,
       table.entryType,
+    ),
+    index('issues_logs_issue_id_sequence_idx').on(
+      table.issueId,
+      table.sequence,
     ),
   ],
 )

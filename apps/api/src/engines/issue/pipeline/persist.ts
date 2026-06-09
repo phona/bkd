@@ -2,6 +2,7 @@ import type { AppEventMap } from '@bkd/shared'
 import { eq } from 'drizzle-orm'
 import { db } from '@/db'
 import { issueLogs as logsTable } from '@/db/schema'
+import { liveConverter } from '@/engines/timeline-converter'
 import type { EngineContext } from '../context'
 import { persistEntry } from '../persistence/entry'
 import { buildToolDetail, persistToolDetail } from '../persistence/tool-detail'
@@ -30,7 +31,17 @@ export function registerPersistStage(
       // content is stored in both tables so it survives page reload without truncation.
       const dbEntry = isToolUse ? { ...data.entry, metadata: undefined } : data.entry
 
-      const persisted = persistEntry(ctx, data.issueId, data.executionId, dbEntry)
+      // PLAN-032 — single seq authority. A `dbOnly` row is the merged final
+      // snapshot of an assistant/thinking message whose streaming chunks the
+      // timeline-emit stage already rendered into a live buffer. That buffer
+      // (built from earlier streaming events) holds the authoritative seq; the
+      // emit stage skips dbOnly so it would otherwise never reach the row. Pin
+      // the buffer's seq here so history (which reads this row) matches live.
+      const seq = data.entry.metadata?.dbOnly === true
+        ? liveConverter.currentSegmentSequence(data.issueId, data.entry.entryType)
+        : undefined
+
+      const persisted = persistEntry(ctx, data.issueId, data.executionId, dbEntry, seq)
 
       if (persisted) {
         if (isToolUse && persisted.messageId) {

@@ -1,8 +1,20 @@
 import type { AppEventMap } from '@bkd/shared'
+import { eq } from 'drizzle-orm'
+import { db } from '@/db'
+import { issueLogs as logsTable } from '@/db/schema'
 import { isVisible } from '@/engines/issue/utils/visibility'
 import { liveConverter } from '@/engines/timeline-converter'
 import { getBus } from '@/events'
 import type { EngineContext } from '../context'
+import { getMaxSequence } from '../persistence/queries'
+
+/**
+ * Issues whose `liveConverter.lastSeq` has been rehydrated from persisted rows
+ * this lifecycle (PLAN-032). Cleared on flush/reset so a restarted process
+ * re-seeds from `max(sequence)` on the next turn and never regresses below
+ * already-stored seqs.
+ */
+const seededIssues = new Set<string>()
 
 /**
  * Order 90 — Timeline conversion stage.
@@ -48,9 +60,34 @@ export function registerTimelineEmitStage(
       }
       if (!isVisible(data.entry)) return
 
+      // PLAN-032 — rehydrate the seq floor once per issue lifecycle so seqs
+      // assigned after a process restart never regress below persisted rows.
+      if (!seededIssues.has(data.issueId)) {
+        seededIssues.add(data.issueId)
+        const maxSeq = getMaxSequence(data.issueId)
+        if (maxSeq != null) liveConverter.seedLastSeq(data.issueId, maxSeq)
+      }
+
       const produced = liveConverter.ingest(data.issueId, data.entry)
       for (const e of produced) {
         getBus().emit('timeline-entry', { issueId: data.issueId, entry: e })
+      }
+
+      // PLAN-032 — back-fill the authoritative seq onto the persisted row.
+      // Only for non-streaming events: those carry a `data.entry.messageId`
+      // that the persist stage (order 10) set to the DB row id. The PRIMARY
+      // produced entry (last element — preceding elements are closing snapshots
+      // of PRIOR segments, already persisted) maps to this row. Streaming
+      // chunks are not persisted, and `dbOnly` rows already got their seq from
+      // the persist stage, so neither needs back-fill here.
+      if (!data.streaming && data.entry.messageId && produced.length > 0) {
+        const primary = produced.at(-1)!
+        if (primary.sequence != null) {
+          db.update(logsTable)
+            .set({ sequence: primary.sequence })
+            .where(eq(logsTable.id, data.entry.messageId))
+            .run()
+        }
       }
     },
     { order: 90 },
@@ -68,4 +105,6 @@ export function flushTimelineConverter(issueId: string): void {
     getBus().emit('timeline-entry', { issueId, entry: e })
   }
   liveConverter.reset(issueId)
+  // Drop the rehydration marker so the next turn re-seeds from persisted rows.
+  seededIssues.delete(issueId)
 }
