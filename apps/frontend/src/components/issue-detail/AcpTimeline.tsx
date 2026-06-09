@@ -1,15 +1,76 @@
+import type { AcpTimelineItem } from '@/hooks/use-acp-timeline'
 import type { NormalizedLogEntry, TimelineEntry } from '@bkd/shared'
 import { CheckCircle2, Circle, Lightbulb, ListTodo, Loader2 } from 'lucide-react'
 import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Virtuoso } from 'react-virtuoso'
 import { useAcpTimeline } from '@/hooks/use-acp-timeline'
+import { useChatSearchStore } from '@/stores/chat-search-store'
 import { useViewModeStore } from '@/stores/view-mode-store'
 import { LogEntry } from './LogEntry'
 import { ToolGroupMessage } from './ToolItems'
+import type { VirtuosoHandle } from 'react-virtuoso'
 
 // Base index for Virtuoso's jump-free prepend (inverse infinite scroll).
 const ACP_FIRST_INDEX_BASE = 1_000_000
+
+/** Stable DB message id for an item, used for search-jump + the highlight anchor. */
+function itemMessageId(item: AcpTimelineItem): string | undefined {
+  if (item.type === 'tool-group') return item.message.items[0]?.action.messageId
+  return item.entry.messageId
+}
+
+/** Briefly flash a yellow ring on a jumped-to message bubble. */
+function flashHighlight(el: Element) {
+  el.classList.add('bkd-search-flash')
+  setTimeout(() => el.classList.remove('bkd-search-flash'), 1800)
+}
+
+/**
+ * Scroll the bubble for `messageId` into view inside `root` and flash it.
+ * Polls briefly because virtualized rows mount a frame or two after the
+ * Virtuoso `scrollToIndex` call brings them into range.
+ */
+function scrollToMessage(root: HTMLElement | null, messageId: string) {
+  if (!root) return
+  let tries = 0
+  const tick = () => {
+    const el = root.querySelector(`[data-message-id="${CSS.escape(messageId)}"]`)
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      flashHighlight(el)
+      return
+    }
+    if (tries++ < 40) requestAnimationFrame(tick)
+  }
+  requestAnimationFrame(tick)
+}
+
+/** `/command` user-message rendered as a collapsed <details> with its output. */
+const AcpCommandCard = memo(({
+  entry,
+  output,
+}: {
+  entry: NormalizedLogEntry
+  output?: NormalizedLogEntry
+}) => (
+  <div className="group py-1.5 animate-message-enter">
+    <details className="rounded-lg border border-border/30 bg-muted/10 transition-all duration-200 open:bg-muted/20">
+      <summary className="cursor-pointer list-none px-3 py-2 text-xs text-muted-foreground hover:bg-muted/20 transition-colors">
+        <code className="font-mono text-foreground/70">{entry.content}</code>
+      </summary>
+      {output
+        ? (
+            <div className="px-3 pb-3 pt-1.5 border-t border-border/20">
+              <pre className="text-xs text-foreground/80 whitespace-pre-wrap font-mono leading-relaxed overflow-x-auto">
+                {output.content}
+              </pre>
+            </div>
+          )
+        : null}
+    </details>
+  </div>
+))
 
 const AcpPlanCard = memo(({
   entry,
@@ -167,6 +228,24 @@ export function AcpTimeline({
     setScrollEl(scrollRef?.current ?? null)
   }, [scrollRef])
 
+  // In-chat search jump (ported from Legacy). Bring the target item into the
+  // DOM via Virtuoso's scrollToIndex (rows are virtualized, so an off-screen
+  // target isn't mounted yet), then scroll + flash the bubble by data-message-id.
+  const virtuosoRef = useRef<VirtuosoHandle>(null)
+  const jumpNonce = useChatSearchStore(s => s.jumpNonce)
+  const jumpMessageId = useChatSearchStore(s => s.jumpMessageId)
+  useEffect(() => {
+    if (!jumpMessageId) return
+    const idx = items.findIndex(it => itemMessageId(it) === jumpMessageId)
+    if (idx >= 0) virtuosoRef.current?.scrollToIndex({ index: idx, align: 'center' })
+    // A second pass after layout settles — dynamically-measured rows can shift
+    // the first estimate, same as the old VirtualMessageList jump.
+    requestAnimationFrame(() => {
+      if (idx >= 0) virtuosoRef.current?.scrollToIndex({ index: idx, align: 'center' })
+      scrollToMessage(scrollRef?.current ?? null, jumpMessageId)
+    })
+  }, [jumpNonce, jumpMessageId, items, scrollRef])
+
   // firstItemIndex bookkeeping for jump-free prepend (inverse infinite scroll):
   // start high, decrement by the number of items prepended; Virtuoso uses the
   // index shift to hold the user's position instead of snapping to the new top.
@@ -214,6 +293,7 @@ export function AcpTimeline({
 
   return (
     <Virtuoso
+      ref={virtuosoRef}
       data={items}
       context={context}
       customScrollParent={scrollEl}
@@ -225,7 +305,7 @@ export function AcpTimeline({
       }}
       computeItemKey={(_index, item) => item.id}
       itemContent={(_index, item) => (
-        <div className={`${itemClass} py-1.5`}>
+        <div className={`${itemClass} py-1.5`} data-message-id={itemMessageId(item)}>
           {item.type === 'tool-group'
             ? (
                 <div className="group">
@@ -239,20 +319,24 @@ export function AcpTimeline({
               ? (
                   <AcpPlanCard entry={item.entry} todos={item.todos} completedCount={item.completedCount} />
                 )
-              : item.type === 'thinking'
-                ? (item.isStreaming && isRunning
-                    ? <StreamingThinking entry={item.entry} />
-                    : <CompletedThinking entry={item.entry} />)
-                : item.type === 'entry'
-                  ? (
-                      <div className="group">
-                        {item.thinking && (
-                          <div className="mb-1.5"><CompletedThinking entry={item.thinking} /></div>
-                        )}
-                        <LogEntry entry={item.entry} />
-                      </div>
-                    )
-                  : null}
+              : item.type === 'command'
+                ? (
+                    <AcpCommandCard entry={item.entry} output={item.output} />
+                  )
+                : item.type === 'thinking'
+                  ? (item.isStreaming && isRunning
+                      ? <StreamingThinking entry={item.entry} />
+                      : <CompletedThinking entry={item.entry} />)
+                  : item.type === 'entry'
+                    ? (
+                        <div className="group">
+                          {item.thinking && (
+                            <div className="mb-1.5"><CompletedThinking entry={item.thinking} /></div>
+                          )}
+                          <LogEntry entry={item.entry} />
+                        </div>
+                      )
+                    : null}
         </div>
       )}
       components={{ Header: AcpListHeader, Footer: AcpListFooter }}

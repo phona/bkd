@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { useChatMessages } from '@/hooks/use-chat-messages'
+import { useAcpTimeline } from '@/hooks/use-acp-timeline'
 import { __resetIssueLogsCache, useIssueStream } from '@/hooks/use-issue-stream'
 import type { IssueEventHandler } from '@/lib/event-bus'
 import type { NormalizedLogEntry, TimelineEntry } from '@/types/kanban'
@@ -460,7 +460,7 @@ describe('useIssueStream', () => {
   })
 
   it('end-to-end: cascading thinking + assistant chunks keep thinking as its own surface', async () => {
-    // Full integration: data layer (useIssueStream) + message layer (useChatMessages).
+    // Full integration: data layer (useIssueStream) + message layer (useAcpTimeline).
     // OpenCode sends full accumulated text for BOTH thinking and assistant chunks.
     // Thinking is its own surface — even when the assistant repeats the thinking's
     // prefix, the thinking block is kept (no dedup heuristics).
@@ -517,17 +517,21 @@ describe('useIssueStream', () => {
       expect(streamResult.current.logs).toHaveLength(2)
     })
 
-    // Feed the merged logs into useChatMessages
+    // Feed the merged logs into the unified timeline hook.
     const { result: chatResult } = renderHook(
-      () => useChatMessages(streamResult.current.logs),
+      () => useAcpTimeline(streamResult.current.logs),
       { wrapper: createWrapper() },
     )
 
-    // Thinking is kept as its own surface alongside the assistant message.
+    // Thinking is kept as its own surface — in the unified renderer a thinking
+    // chunk that immediately precedes the assistant reply attaches to that
+    // assistant entry (rendered as a collapsed block above it), not dropped.
     await waitFor(() => {
-      expect(chatResult.current.messages).toHaveLength(2)
-      expect(chatResult.current.messages[0]?.type).toBe('thinking')
-      expect(chatResult.current.messages[1]?.type).toBe('assistant')
+      expect(chatResult.current.items).toHaveLength(1)
+      expect(chatResult.current.items[0]?.type).toBe('entry')
+      expect((chatResult.current.items[0] as { thinking?: unknown }).thinking).toBeDefined()
+      expect((chatResult.current.items[0] as { entry: { entryType: string } }).entry.entryType)
+        .toBe('assistant-message')
     })
   })
 
@@ -595,15 +599,15 @@ describe('useIssueStream', () => {
     })
 
     const { result: chatResult } = renderHook(
-      () => useChatMessages(streamResult.current.logs),
+      () => useAcpTimeline(streamResult.current.logs),
       { wrapper: createWrapper() },
     )
 
     await waitFor(() => {
-      expect(chatResult.current.messages).toHaveLength(1)
-      expect(chatResult.current.messages[0]?.type).toBe('assistant')
-      const assistantMsg = chatResult.current.messages[0] as { entry: { content: string } }
-      expect(assistantMsg.entry.content).toBe('Hello world')
+      expect(chatResult.current.items).toHaveLength(1)
+      expect(chatResult.current.items[0]?.type).toBe('entry')
+      const assistantItem = chatResult.current.items[0] as { entry: { content: string } }
+      expect(assistantItem.entry.content).toBe('Hello world')
     })
   })
 

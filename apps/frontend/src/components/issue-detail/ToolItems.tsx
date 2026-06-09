@@ -867,7 +867,7 @@ function ToolGroupMessageImpl({ message }: { message: ToolGroupChatMessage }) {
   const [isOpen, setIsOpen] = useState(false)
   const [expanded, setExpanded] = useState(false)
 
-  // isActive is set by useChatMessages — true when this group is the trailing
+  // isActive is set by the timeline builder — true when this group is the trailing
   // tool group (no subsequent assistant/user message has flushed it yet).
   // It stays true until the next conversation message arrives, so it won't
   // flicker between tool action/result pairs.

@@ -432,6 +432,162 @@ describe('useAcpTimeline streaming merge regression', () => {
   })
 })
 
+// ────────────────────────────────────────────────────────────────────────────
+// PLAN-043: cases ported from the deleted use-chat-messages.test.tsx. The
+// unified renderer (useAcpTimeline) must preserve PLAN-041 interleave + tool
+// clustering, and render error / system / command entries the legacy
+// claude-code renderer used to own.
+// ────────────────────────────────────────────────────────────────────────────
+
+function asst(text: string, seq: number): NormalizedLogEntry {
+  return {
+    entryType: 'assistant-message',
+    content: text,
+    timestamp: `2026-01-01T00:00:${String(seq).padStart(2, '0')}Z`,
+    turnIndex: 0,
+    messageId: `am-${text}`,
+  } as NormalizedLogEntry
+}
+function tool(id: string, seq: number): NormalizedLogEntry {
+  return {
+    entryType: 'tool-use',
+    content: `Read ${id}`,
+    timestamp: `2026-01-01T00:00:${String(seq).padStart(2, '0')}Z`,
+    turnIndex: 0,
+    messageId: id,
+    metadata: { toolCallId: id, isResult: false, toolName: 'Read' },
+    toolDetail: { kind: 'file-read', toolName: 'Read', toolCallId: id, isResult: false },
+  } as NormalizedLogEntry
+}
+function think(seq: number): NormalizedLogEntry {
+  return {
+    entryType: 'thinking',
+    content: 'hmm',
+    timestamp: `2026-01-01T00:00:${String(seq).padStart(2, '0')}Z`,
+    turnIndex: 0,
+  } as NormalizedLogEntry
+}
+
+describe('useAcpTimeline — PLAN-041 interleaved tool/text timeline', () => {
+  it('interleaves tools between assistant text segments by sequence', () => {
+    // text → tool → text → tool → text must render with tool cards BETWEEN the
+    // assistant segments — not all text merged with the tools yanked into a
+    // trailing group.
+    const { items } = rebuildAcpTimeline([
+      asst('a', 0),
+      tool('t1', 1),
+      asst('b', 2),
+      tool('t2', 3),
+      asst('c', 4),
+    ])
+    expect(items.map(i => i.type)).toEqual(['entry', 'tool-group', 'entry', 'tool-group', 'entry'])
+    expect(items.filter(i => i.type === 'entry').map(i => (i as any).entry.content)).toEqual(['a', 'b', 'c'])
+    const groups = items.filter(i => i.type === 'tool-group') as Array<{ message: { count: number } }>
+    expect(groups.map(g => g.message.count)).toEqual([1, 1])
+  })
+
+  it('clusters genuinely adjacent tools into a single tool-group', () => {
+    const { items } = rebuildAcpTimeline([asst('a', 0), tool('t1', 1), tool('t2', 2), asst('b', 3)])
+    expect(items.map(i => i.type)).toEqual(['entry', 'tool-group', 'entry'])
+    expect((items[1] as { message: { count: number } }).message.count).toBe(2)
+  })
+
+  it('does not merge tools across an intervening thinking entry', () => {
+    // The boundary holds: two separate tool-groups (the bursts don't merge).
+    // In the unified renderer the thinking attaches to the following burst
+    // rather than rendering standalone, but it still splits the cluster.
+    const { items } = rebuildAcpTimeline([tool('t1', 1), think(2), tool('t2', 3)])
+    expect(items.map(i => i.type)).toEqual(['tool-group', 'tool-group'])
+    expect((items[1] as { thinking?: unknown }).thinking).toBeDefined()
+  })
+
+  it('keeps thinking-before-burst attached above the group', () => {
+    const { items } = rebuildAcpTimeline([think(1), tool('t1', 2), tool('t2', 3)])
+    expect(items.map(i => i.type)).toEqual(['tool-group'])
+    expect((items[0] as { thinking?: unknown }).thinking).toBeDefined()
+    expect((items[0] as { message: { count: number } }).message.count).toBe(2)
+  })
+})
+
+describe('useAcpTimeline — error / system / command entries (ported from legacy)', () => {
+  function errorEntry(seq: number): NormalizedLogEntry {
+    return {
+      entryType: 'error-message',
+      content: 'boom: something failed',
+      timestamp: `2026-01-01T00:00:${String(seq).padStart(2, '0')}Z`,
+      turnIndex: 0,
+      messageId: `err-${seq}`,
+    } as NormalizedLogEntry
+  }
+  function systemEntry(subtype: string, content: string, seq: number): NormalizedLogEntry {
+    return {
+      entryType: 'system-message',
+      content,
+      timestamp: `2026-01-01T00:00:${String(seq).padStart(2, '0')}Z`,
+      turnIndex: 0,
+      messageId: `sys-${subtype}-${seq}`,
+      metadata: { subtype },
+    } as NormalizedLogEntry
+  }
+
+  it('renders an error-message as a timeline entry', () => {
+    const { items } = rebuildAcpTimeline([asst('a', 0), errorEntry(1), asst('b', 2)])
+    expect(items.map(i => i.type)).toEqual(['entry', 'entry', 'entry'])
+    expect((items[1] as { entry: { entryType: string } }).entry.entryType).toBe('error-message')
+  })
+
+  it('treats an error-message as a tool-cluster boundary', () => {
+    const { items } = rebuildAcpTimeline([tool('t1', 0), errorEntry(1), tool('t2', 2)])
+    expect(items.map(i => i.type)).toEqual(['tool-group', 'entry', 'tool-group'])
+    expect((items[1] as { entry: { entryType: string } }).entry.entryType).toBe('error-message')
+  })
+
+  it('renders an info system-message as a timeline entry', () => {
+    const { items } = rebuildAcpTimeline([systemEntry('info', 'context compacted', 0)])
+    expect(items).toHaveLength(1)
+    expect((items[0] as { entry: { entryType: string } }).entry.entryType).toBe('system-message')
+  })
+
+  it('skips noisy system subtypes (task_progress / stop_hook_summary / task_notification)', () => {
+    const { items } = rebuildAcpTimeline([
+      systemEntry('task_progress', 'x', 0),
+      systemEntry('stop_hook_summary', 'y', 1),
+      systemEntry('task_notification', 'z', 2),
+    ])
+    expect(items).toHaveLength(0)
+  })
+
+  it('does not merge tools across a rendered system-message', () => {
+    const { items } = rebuildAcpTimeline([tool('t1', 0), systemEntry('info', 'hi', 1), tool('t2', 2)])
+    expect(items.map(i => i.type)).toEqual(['tool-group', 'entry', 'tool-group'])
+  })
+
+  it('folds a /command user-message + its output into one command item', () => {
+    const command = {
+      entryType: 'user-message',
+      content: '/context',
+      timestamp: '2026-01-01T00:00:00Z',
+      turnIndex: 0,
+      messageId: 'cmd-1',
+      metadata: { type: 'command' },
+    } as NormalizedLogEntry
+    const output = {
+      entryType: 'system-message',
+      content: 'Context: 12k tokens',
+      timestamp: '2026-01-01T00:00:01Z',
+      turnIndex: 0,
+      messageId: 'cmd-out-1',
+      metadata: { subtype: 'command_output' },
+    } as NormalizedLogEntry
+
+    const { items } = rebuildAcpTimeline([command, output])
+    // The output is consumed into the command item — not a second standalone entry.
+    expect(items).toHaveLength(1)
+    expect(items[0]!.type).toBe('command')
+    expect((items[0] as { output?: { content: string } }).output?.content).toBe('Context: 12k tokens')
+  })
+})
+
 describe('useAcpTimeline — thinking attachment edge cases', () => {
   it('flushes orphan thinking as standalone when no subsequent item', () => {
     const logs: NormalizedLogEntry[] = [

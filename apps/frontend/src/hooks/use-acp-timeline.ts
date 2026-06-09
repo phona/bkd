@@ -6,13 +6,52 @@ import type {
   ToolGroupItem,
 } from '@bkd/shared'
 import { useMemo } from 'react'
-import { extractTodos } from './use-chat-messages'
+
+/**
+ * Extract todo list from a TodoWrite tool entry or an ACP `plan` system entry.
+ * Lives here (the single surviving chat hook) — was previously shared with the
+ * now-deleted use-chat-messages.
+ */
+export function extractTodos(entry: NormalizedLogEntry): TaskPlanChatMessage['todos'] | null {
+  const meta = entry.metadata
+  if (!meta) return null
+  const args = (meta.arguments ?? meta.input) as
+    | {
+      todos?: Array<{ content: string, status: string, activeForm?: string }>
+    } |
+    undefined
+  if (args?.todos && Array.isArray(args.todos)) {
+    return args.todos.map(t => ({
+      content: t.content ?? '',
+      status: t.status ?? 'pending',
+      activeForm: typeof t.activeForm === 'string' ? t.activeForm : undefined,
+    }))
+  }
+
+  const planEntries = meta.entries as
+    | Array<{ content?: string, status?: string }>
+    | undefined
+  if (!planEntries || !Array.isArray(planEntries)) return null
+  return planEntries.map(planEntry => ({
+    content: planEntry.content ?? '',
+    status: planEntry.status ?? 'pending',
+  }))
+}
 
 export interface AcpTimelineEntryItem {
   type: 'entry'
   id: string
   entry: NormalizedLogEntry
   thinking?: NormalizedLogEntry // Attached preceding thinking
+}
+
+export interface AcpTimelineCommandItem {
+  type: 'command'
+  id: string
+  /** The `/command` user-message entry */
+  entry: NormalizedLogEntry
+  /** The paired command_output system-message, if one followed */
+  output?: NormalizedLogEntry
 }
 
 export interface AcpTimelinePlanItem {
@@ -39,6 +78,7 @@ export interface AcpTimelineThinkingItem {
 
 export type AcpTimelineItem =
   | AcpTimelineEntryItem
+  | AcpTimelineCommandItem
   | AcpTimelinePlanItem
   | AcpTimelineToolGroupItem
   | AcpTimelineThinkingItem
@@ -48,10 +88,28 @@ export interface AcpTimelineResult {
   pendingMessages: NormalizedLogEntry[]
 }
 
+/**
+ * Noisy system subtypes that carry no user-facing value and — critically —
+ * must NOT break an open tool cluster (PLAN-041 interleave). Legacy
+ * (use-chat-messages) skipped exactly these; ported so the unified renderer
+ * stays as quiet as the old claude-code path.
+ */
+const HIDDEN_SYSTEM_SUBTYPES = new Set([
+  'thinking_tokens',
+  'task_progress',
+  'stop_hook_summary',
+  'task_notification',
+])
+
 function isHiddenEntry(entry: TimelineEntry): boolean {
   if (entry.entryType === 'loading' || entry.entryType === 'token-usage') return true
   if (entry.entryType === 'user-message' && entry.metadata?.type === 'system') return true
-  if (entry.entryType === 'system-message' && entry.metadata?.subtype === 'thinking_tokens') return true
+  if (
+    entry.entryType === 'system-message'
+    && HIDDEN_SYSTEM_SUBTYPES.has(entry.metadata?.subtype as string)
+  ) {
+    return true
+  }
   return false
 }
 
@@ -171,6 +229,30 @@ function rebuildAcpTimeline(entries: TimelineEntry[]): AcpTimelineResult {
     }
   }
 
+  // Pre-pass: pair each `/command` user-message with the next command_output
+  // system-message so the command renders as one expandable <details> (ported
+  // from Legacy). The matched outputs are consumed so they don't also render
+  // standalone.
+  const commandOutputById = new Map<string, TimelineEntry>()
+  const consumedOutputIds = new Set<string>()
+  for (let i = 0; i < entries.length; i++) {
+    const e = entries[i]
+    if (e.entryType === 'user-message' && e.metadata?.type === 'command') {
+      for (let j = i + 1; j < entries.length; j++) {
+        const c = entries[j]
+        if (
+          c.entryType === 'system-message'
+          && c.metadata?.subtype === 'command_output'
+          && !consumedOutputIds.has(c.id)
+        ) {
+          commandOutputById.set(e.id, c)
+          consumedOutputIds.add(c.id)
+          break
+        }
+      }
+    }
+  }
+
   let toolBuffer: ToolGroupItem[] = []
   let pendingThinking: TimelineEntry | null = null
 
@@ -197,8 +279,26 @@ function rebuildAcpTimeline(entries: TimelineEntry[]): AcpTimelineResult {
   for (const entry of entries) {
     if (isHiddenEntry(entry)) continue
 
+    // Skip command_output system-messages already folded into a command item.
+    if (consumedOutputIds.has(entry.id)) continue
+
     if (entry.entryType === 'user-message' && (entry.metadata?.type === 'pending' || entry.metadata?.type === 'done')) {
       pendingMessages.push(entry)
+      continue
+    }
+
+    // `/command` user-messages render as a collapsed <details> with their
+    // paired output (ported from Legacy). A command is a real segment
+    // boundary, so close any open tool cluster / thinking first.
+    if (entry.entryType === 'user-message' && entry.metadata?.type === 'command') {
+      flushToolBuffer()
+      flushPendingThinking()
+      items.push({
+        type: 'command',
+        id: entry.id,
+        entry,
+        output: commandOutputById.get(entry.id),
+      })
       continue
     }
 
