@@ -467,9 +467,22 @@ function VirtualMessageList({
     [scrollRef],
   )
 
+  // Stable per-message key for the measurement cache. Without this,
+  // react-virtual keys cached row heights by ARRAY INDEX (defaultKeyExtractor).
+  // The chat list prepends older history on scroll-up and regroups/appends
+  // while streaming (PLAN-041) — both shift every message's index, so
+  // cached heights get reapplied to the wrong rows, producing overlapping
+  // translateY offsets (two messages stacked on the same line). Keying by
+  // the message id makes measurements travel with the message, not the slot.
+  const getItemKey = useCallback(
+    (index: number) => messages[index]?.id ?? index,
+    [messages],
+  )
+
   const virtualizer = useVirtualizer({
     count: messages.length,
     getScrollElement,
+    getItemKey,
     estimateSize: () => 60,
     overscan: 15,
   })

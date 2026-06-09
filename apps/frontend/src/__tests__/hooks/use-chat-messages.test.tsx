@@ -220,6 +220,46 @@ describe('useChatMessages — PLAN-041 interleaved tool/text timeline', () => {
   })
 })
 
+describe('useChatMessages — stable ids across prepend (virtual-scroll overlap guard)', () => {
+  // Load-bearing invariant for the VirtualMessageList fix: react-virtual keys
+  // its measured-row-height cache by `getItemKey(index)` — which we set to
+  // `msg.id`. That only prevents overlapping rows if a given message keeps the
+  // SAME id before and after older history is prepended (scroll-up load). If
+  // ids ever became positional, prepend would shift them, the height cache
+  // would re-attach to the wrong rows, and bubbles would stack on the same
+  // line (the reported bug). This locks the contract `getItemKey` depends on.
+  //
+  // jsdom has no layout engine, so the visual overlap itself is not unit
+  // testable; this guards the underlying cause instead.
+  const all = (issueLogsFixture as {
+    data: { logs: NormalizedLogEntry[] }
+  }).data.logs
+  // Split the real conversation at a turn boundary: "recent" is the window
+  // first shown; "older" is what a scroll-up load prepends in front of it.
+  const recent = all.filter(l => (l.turnIndex ?? 0) >= 3)
+  const older = all.filter(l => (l.turnIndex ?? 0) < 3)
+
+  it('keeps every recent message id identical after older logs are prepended', () => {
+    const { result: before } = renderHook(() => useChatMessages(recent))
+    const { result: after } = renderHook(() => useChatMessages([...older, ...recent]))
+
+    const idsBefore = before.current.messages.map(m => m.id)
+    const idsAfter = new Set(after.current.messages.map(m => m.id))
+
+    expect(idsBefore.length).toBeGreaterThan(0)
+    // Each id present pre-prepend must still exist post-prepend, unchanged.
+    for (const id of idsBefore) {
+      expect(idsAfter.has(id)).toBe(true)
+    }
+  })
+
+  it('produces unique message ids (no duplicate react/virtual keys)', () => {
+    const { result } = renderHook(() => useChatMessages([...older, ...recent]))
+    const ids = result.current.messages.map(m => m.id)
+    expect(new Set(ids).size).toBe(ids.length)
+  })
+})
+
 describe('useChatMessages', () => {
   it('maps ACP plan system messages into task-plan messages', () => {
     const logs: NormalizedLogEntry[] = [{
