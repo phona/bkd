@@ -127,14 +127,16 @@ export default function IssueDetailPage() {
       {/* Chat area when issue is selected */}
       {issueId ?
           (
-            // No key={issueId} here: remounting the whole ChatArea on every
-            // switch (header / title bar / dock / worktree context + the
-            // useIssue/useProject queries) is what made switching feel like a
-            // full reload (PLAN-040). ChatArea reacts to the issueId prop;
-            // ChatBody keeps its own key={issueId} so the chat's intricate
-            // per-issue state still resets cleanly via remount, and
-            // useIssueStream seeds from cache for an instant repaint.
+            // key={issueId}: REVERTED PLAN-040's key removal. Dropping it kept
+            // ChatArea mounted across switches (no "reload feel"), but the
+            // in-place issue swap in useIssueStream dropped the new issue's
+            // fetched logs in a switch-time race — messages didn't load until a
+            // hard refresh (a real, user-hit regression). Remounting the whole
+            // ChatArea on switch = a clean fetch every time (same as a fresh
+            // load, which always worked). A smooth in-place switch needs the
+            // single-data-source refactor (PLAN-032); until then correctness wins.
             <ChatArea
+              key={issueId}
               projectId={projectId}
               issueId={issueId}
               showBackToList
