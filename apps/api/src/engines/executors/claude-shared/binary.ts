@@ -116,6 +116,7 @@ export function getClaudeAuthStatus(): EngineAvailability['authStatus'] {
  * a curated static list. `[1m]` variants use the 1M-token context window.
  */
 export const CLAUDE_MODELS: EngineModel[] = [
+  { id: 'claude-fable-5', name: 'Claude Fable 5', isDefault: false },
   { id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6', isDefault: false },
   { id: 'claude-sonnet-4-6[1m]', name: 'Claude Sonnet 4.6 (1M)', isDefault: false },
   { id: 'claude-opus-4-8', name: 'Claude Opus 4.8', isDefault: true },
