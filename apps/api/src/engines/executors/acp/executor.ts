@@ -137,17 +137,31 @@ export class AcpExecutor implements EngineExecutor {
     // verify --version (which falls back to npx for missing agents and
     // can take 30s+ each). Query models sequentially to avoid spawning
     // multiple child processes simultaneously.
+    //
+    // Per-agent timeout: a single broken ACP adapter must not hang the
+    // entire engine probe. 15s per agent × 4 agents = max 60s, well within
+    // the outer 30s per-engine timeout in startup-probe.ts (which is why
+    // we keep the inner timeout shorter).
     const agents = getAcpAgents()
     const allModels: EngineModel[] = []
+    const PER_AGENT_TIMEOUT_MS = 15_000
 
     for (const agent of agents) {
       const binary = resolveBinaryOnly(agent.commandName)
       if (!binary) continue
       try {
-        const models = await queryScopedAcpModels(agent.id, process.cwd())
+        const models = await Promise.race([
+          queryScopedAcpModels(agent.id, process.cwd()),
+          new Promise<never>((_, reject) =>
+            setTimeout(
+              () => reject(new Error(`${agent.id} model query timed out`)),
+              PER_AGENT_TIMEOUT_MS,
+            ),
+          ),
+        ])
         allModels.push(...models)
       } catch {
-        // Skip agents that fail model query
+        // Skip agents that fail model query or time out
       }
     }
 

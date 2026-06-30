@@ -65,14 +65,38 @@ function buildPermissionResponse(
 export function toEngineModels(
   response: SessionBootstrap | undefined,
 ): EngineModel[] {
-  return (
-    response?.models?.availableModels?.map(model => ({
-      id: model.modelId,
-      name: model.name,
-      description: model.description ?? undefined,
-      isDefault: model.modelId === response.models?.currentModelId,
-    })) ?? []
-  )
+  // Standard ACP format: response.models
+  if (response?.models?.availableModels) {
+    return (
+      response.models.availableModels.map(model => ({
+        id: model.modelId,
+        name: model.name,
+        description: model.description ?? undefined,
+        isDefault: model.modelId === response.models?.currentModelId,
+      }))
+    )
+  }
+
+  // OpenCode custom format: response.configOptions
+  const configOptions = (response as { configOptions?: Array<{
+    id: string
+    name?: string
+    type?: string
+    currentValue?: string
+    options?: Array<{ value: string, name: string }>
+  }> } | undefined)?.configOptions
+
+  const modelConfig = configOptions?.find(opt => opt.id === 'model')
+  if (modelConfig?.options) {
+    return modelConfig.options.map(opt => ({
+      id: opt.value,
+      name: opt.name,
+      description: undefined,
+      isDefault: opt.value === modelConfig.currentValue,
+    }))
+  }
+
+  return []
 }
 
 function sanitizeModels(
