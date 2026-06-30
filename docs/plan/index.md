@@ -1,6 +1,6 @@
 # BKD - Plan Index
 
-> Updated: 2026-06-06 (PLAN-023 … PLAN-027)
+> Updated: 2026-06-09 (PLAN-045)
 
 ## Usage
 
@@ -73,3 +73,4 @@ Each plan is a single line linking to its detail file. All detailed information 
 - [ ] [**PLAN-042 Built-in coding agent (Vercel AI SDK) as a bkd ACP agent — acp:bkd-agent**](PLAN-042.md) `2026-06-08`
 - [x] [**PLAN-043 Unify chat on one renderer (AcpTimeline) — delete legacy claude-code renderer**](PLAN-043.md) `2026-06-08`
 - [x] [**PLAN-044 Deploy resilience — auto-reload open tabs on chunk/preload error**](PLAN-044.md) `2026-06-09`
+- [ ] [**PLAN-045 Move ACP protocol handshake outside per-issue lock**](PLAN-045.md) `2026-06-09`
