@@ -742,10 +742,13 @@ async function main() {
       const file = Bun.file(resolve(publicDir, filePath))
       if (await file.exists()) {
         const isHtml = filePath === 'index.html'
+        const isManifest = filePath.endsWith('.webmanifest')
         return new Response(file, {
           headers: isHtml
             ? { 'Content-Type': 'text/html;charset=utf-8', 'Cache-Control': 'no-cache' }
-            : { 'Cache-Control': 'public, max-age=3600, must-revalidate' },
+            : isManifest
+              ? { 'Content-Type': 'application/manifest+json', 'Cache-Control': 'public, max-age=3600, must-revalidate', 'Access-Control-Allow-Origin': '*' }
+              : { 'Cache-Control': 'public, max-age=3600, must-revalidate' },
         })
       }
 

@@ -35,6 +35,20 @@ if (staticAssets.size > 0) {
       }),
     )
 
+    // Serve PWA manifest with CORS headers to prevent auth-proxy CORS errors
+    app.get('/manifest.webmanifest', async (c) => {
+      const manifestPath = resolve(staticRoot, 'manifest.webmanifest')
+      if (!existsSync(manifestPath)) return c.notFound()
+      const file = Bun.file(manifestPath)
+      return new Response(file, {
+        headers: {
+          'Content-Type': 'application/manifest+json',
+          'Cache-Control': 'public, max-age=3600, must-revalidate',
+          'Access-Control-Allow-Origin': '*',
+        },
+      })
+    })
+
     app.use(
       '*',
       serveStatic({

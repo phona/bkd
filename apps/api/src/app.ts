@@ -36,7 +36,7 @@ export function createApp(_deps?: AppDeps): OpenAPIHono {
 
   // --- CORS ---
   const allowedOrigin = process.env.ALLOWED_ORIGIN ?? '*'
-  app.use('/api/*', cors({
+  app.use(cors({
     origin: allowedOrigin === '*'
       ? '*'
       : allowedOrigin.split(',').map(o => o.trim()),
