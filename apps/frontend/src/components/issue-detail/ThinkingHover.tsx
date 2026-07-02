@@ -54,7 +54,12 @@ export function ThinkingHover({
 
   if (variant === 'inline') {
     return (
-      <div className="flex items-center gap-2.5 my-2 px-3 py-2 text-xs text-muted-foreground animate-message-enter">
+      <div
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        className="flex items-center gap-2.5 my-2 px-3 py-2 text-xs text-muted-foreground animate-message-enter"
+      >
         <span className="thinking-dots flex items-center gap-[3px] text-violet-500/70 dark:text-violet-400/70">
           <span />
           <span />
@@ -90,7 +95,12 @@ export function ThinkingHover({
   }
 
   return (
-    <div className="flex items-center gap-2 rounded-lg border border-violet-300/30 dark:border-violet-500/20 bg-background/85 backdrop-blur-md shadow-sm px-3 py-2 text-sm">
+    <div
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+      className="flex items-center gap-2 rounded-lg border border-violet-300/30 dark:border-violet-500/20 bg-background/85 backdrop-blur-md shadow-sm px-3 py-2 text-sm"
+    >
       <Brain className="h-4 w-4 shrink-0 text-violet-500/80 dark:text-violet-300/80 thinking-pulse" />
       <span className="font-medium text-violet-700/90 dark:text-violet-200/90 shrink-0">
         {isCancelling ? t('session.cancelling') : t('session.thinking')}

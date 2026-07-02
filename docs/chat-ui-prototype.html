@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BKD Chat UI Prototype</title>
+  <style>
+    :root {
+      --bg: #0b0c0f;
+      --surface: #15171c;
+      --surface-2: #1e2128;
+      --border: #2a2e37;
+      --text: #e6e8ef;
+      --muted: #9aa0af;
+      --primary: #6366f1;
+      --primary-soft: rgba(99, 102, 241, 0.15);
+      --success: #22c55e;
+      --warning: #f59e0b;
+      --error: #ef4444;
+      --code-bg: #0f1115;
+      --thinking-bg: rgba(139, 92, 246, 0.06);
+      --thinking-border: rgba(139, 92, 246, 0.25);
+      --radius: 14px;
+      --radius-sm: 10px;
+      --shadow: 0 4px 24px rgba(0,0,0,0.35);
+    }
+
+    [data-theme="light"] {
+      --bg: #ffffff;
+      --surface: #f7f8fa;
+      --surface-2: #eef0f4;
+      --border: #e1e4ea;
+      --text: #1f232c;
+      --muted: #5b6271;
+      --primary: #4f46e5;
+      --primary-soft: rgba(79, 70, 229, 0.08);
+      --code-bg: #f3f4f6;
+      --thinking-bg: rgba(139, 92, 246, 0.04);
+      --thinking-border: rgba(139, 92, 246, 0.2);
+      --shadow: 0 4px 24px rgba(0,0,0,0.08);
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      height: 100%;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+
+    .app {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      max-width: 960px;
+      margin: 0 auto;
+      border-left: 1px solid var(--border);
+      border-right: 1px solid var(--border);
+      background: var(--bg);
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+
+    header h1 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .logo {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, var(--primary), #8b5cf6);
+      display: grid;
+      place-items: center;
+      color: white;
+      font-size: 0.7rem;
+      font-weight: 700;
+    }
+
+    .controls {
+      display: flex;
+      gap: 10px;
+    }
+
+    button.icon, button.pill {
+      height: 34px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--surface-2);
+      color: var(--text);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: background 0.15s, border-color 0.15s;
+      font: inherit;
+      font-size: 0.8rem;
+      font-weight: 600;
+      padding: 0 12px;
+    }
+
+    button.icon { width: 34px; padding: 0; }
+
+    button.icon:hover, button.pill:hover {
+      background: var(--border);
+    }
+
+    .chat {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px 20px 12px;
+      scroll-behavior: smooth;
+    }
+
+    .message {
+      display: flex;
+      margin-bottom: 24px;
+      animation: enter 0.25s ease both;
+    }
+
+    @keyframes enter {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .message.user {
+      justify-content: flex-end;
+    }
+
+    .message.assistant {
+      justify-content: flex-start;
+    }
+
+    .bubble {
+      max-width: 82%;
+      padding: 12px 16px;
+      border-radius: 20px;
+      background: var(--primary-soft);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-size: 0.95rem;
+      line-height: 1.55;
+      box-shadow: var(--shadow);
+    }
+
+    .message.assistant .content {
+      max-width: 92%;
+      color: var(--text);
+      font-size: 0.95rem;
+      line-height: 1.65;
+    }
+
+    .content h3 {
+      font-size: 1.05rem;
+      font-weight: 600;
+      margin: 0 0 10px;
+    }
+
+    .content p {
+      margin: 0 0 12px;
+    }
+
+    .content ul {
+      margin: 0 0 14px;
+      padding-left: 22px;
+    }
+
+    .content li {
+      margin-bottom: 6px;
+    }
+
+    .content code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.85em;
+      background: var(--surface-2);
+      padding: 2px 6px;
+      border-radius: 5px;
+      border: 1px solid var(--border);
+    }
+
+    .code-block {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      margin: 12px 0 16px;
+      overflow: hidden;
+    }
+
+    .code-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px;
+      background: var(--surface-2);
+      border-bottom: 1px solid var(--border);
+      font-size: 0.75rem;
+      color: var(--muted);
+    }
+
+    .code-header button {
+      background: transparent;
+      border: none;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 0.75rem;
+    }
+
+    .code-header button:hover { color: var(--text); }
+
+    .code-block pre {
+      margin: 0;
+      padding: 14px 16px;
+      overflow-x: auto;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.85rem;
+      line-height: 1.55;
+    }
+
+    .thinking {
+      margin-bottom: 14px;
+      border-left: 2px solid var(--thinking-border);
+      background: var(--thinking-bg);
+      border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+      overflow: hidden;
+    }
+
+    .thinking-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      padding: 8px 12px;
+      background: transparent;
+      border: none;
+      color: var(--muted);
+      font: inherit;
+      font-size: 0.8rem;
+      cursor: pointer;
+      text-align: left;
+    }
+
+    .thinking-header:hover { color: var(--text); }
+
+    .chevron {
+      width: 12px;
+      height: 12px;
+      transition: transform 0.15s ease;
+      flex-shrink: 0;
+    }
+
+    .thinking.open .chevron { transform: rotate(90deg); }
+
+    .thinking-body {
+      padding: 0 14px 12px 32px;
+      color: var(--muted);
+      font-size: 0.85rem;
+      line-height: 1.55;
+      display: none;
+    }
+
+    .thinking.open .thinking-body { display: block; }
+
+    .tool-call {
+      margin: 12px 0 16px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: var(--surface);
+      overflow: hidden;
+      font-size: 0.85rem;
+      animation: enter 0.2s ease both;
+    }
+
+    .tool-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      padding: 10px 12px;
+      background: transparent;
+      border: none;
+      color: var(--text);
+      font: inherit;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .tool-header:hover { background: var(--surface-2); }
+
+    .tool-icon {
+      width: 20px;
+      height: 20px;
+      border-radius: 5px;
+      display: grid;
+      place-items: center;
+      background: var(--primary-soft);
+      color: var(--primary);
+      font-size: 0.7rem;
+      flex-shrink: 0;
+    }
+
+    .tool-name {
+      font-weight: 600;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      flex-shrink: 0;
+    }
+
+    .tool-status {
+      font-size: 0.75rem;
+      color: var(--muted);
+      flex-shrink: 0;
+    }
+
+    .tool-status.done { color: var(--success); }
+    .tool-status.error { color: var(--error); }
+    .tool-status.pending { color: var(--warning); }
+
+    .tool-summary {
+      flex: 1;
+      min-width: 0;
+      color: var(--muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.8rem;
+    }
+
+    .tool-body {
+      display: none;
+      border-top: 1px solid var(--border);
+      padding: 12px;
+      background: var(--code-bg);
+    }
+
+    .tool-call.open .tool-body { display: block; }
+
+    .tool-section {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin: 0 0 6px;
+    }
+
+    .tool-pre {
+      margin: 0 0 12px;
+      padding: 10px 12px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.8rem;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .tool-pre:last-child { margin-bottom: 0; }
+
+    .caret {
+      display: inline-block;
+      width: 2px;
+      height: 1.1em;
+      background: var(--primary);
+      vertical-align: text-bottom;
+      margin-left: 2px;
+      animation: blink 1s step-end infinite;
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+
+    .input-bar {
+      display: flex;
+      gap: 10px;
+      padding: 14px 18px 18px;
+      border-top: 1px solid var(--border);
+      background: var(--surface);
+    }
+
+    .input-bar input {
+      flex: 1;
+      padding: 12px 16px;
+      border-radius: 24px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+      font: inherit;
+      outline: none;
+    }
+
+    .input-bar input:focus { border-color: var(--primary); }
+
+    .input-bar button.send {
+      padding: 0 22px;
+      border-radius: 24px;
+      border: none;
+      background: var(--primary);
+      color: white;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .input-bar button.send:hover { opacity: 0.9; }
+
+    .input-bar button.send:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .footer-note {
+      text-align: center;
+      padding: 8px;
+      font-size: 0.75rem;
+      color: var(--muted);
+    }
+
+    .spinner {
+      width: 12px;
+      height: 12px;
+      border: 2px solid var(--border);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      flex-shrink: 0;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    @media (max-width: 640px) {
+      .app { border: none; }
+      .bubble, .message.assistant .content { max-width: 92%; }
+      .controls button.pill span { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1><span class="logo">BKD</span> Chat UI Prototype</h1>
+      <div class="controls">
+        <button class="pill" id="simulateBtn" onclick="simulateResponse()">
+          <span>▶</span>
+          <span>Simulate response</span>
+        </button>
+        <button class="icon" id="themeBtn" title="Toggle theme">☀</button>
+      </div>
+    </header>
+
+    <main class="chat" id="chat">
+      <!-- Static examples -->
+      <div class="message user">
+        <div class="bubble">
+          Refactor the auth module to use OAuth. Keep the existing session API compatible.
+        </div>
+      </div>
+
+      <div class="message assistant">
+        <div class="content">
+          <div class="thinking open" id="think1">
+            <button class="thinking-header" onclick="toggleThinking('think1')">
+              <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>
+              <span>Thought process</span>
+            </button>
+            <div class="thinking-body">
+              <p>The user wants OAuth without breaking the session API. I should keep <code>SessionStore</code> interface unchanged, add an OAuth provider abstraction, and store tokens in the same session table.</p>
+            </div>
+          </div>
+
+          <h3>Plan</h3>
+          <p>I'll refactor in three layers so existing callers don't change:</p>
+          <ul>
+            <li><strong>Provider layer</strong> — generic <code>OAuthProvider</code> interface.</li>
+            <li><strong>Session layer</strong> — extend <code>SessionStore</code> to accept <code>provider</code> and <code>subject</code>.</li>
+            <li><strong>HTTP layer</strong> — add <code>/auth/oauth/:provider</code> callbacks while keeping <code>/auth/session</code>.</li>
+          </ul>
+
+          <div class="code-block">
+            <div class="code-header">
+              <span>src/auth/oauth.ts</span>
+              <button onclick="copyCode(this)">Copy</button>
+            </div>
+            <pre><code>export interface OAuthProvider {
+  authorizeUrl(state: string): string
+  exchange(code: string): Promise&lt;OAuthClaims&gt;
+}
+
+export async function createSessionFromOAuth(
+  provider: OAuthProvider,
+  code: string,
+): Promise&lt;Session&gt; {
+  const claims = await provider.exchange(code)
+  return sessionStore.create({
+    subject: claims.sub,
+    provider: claims.iss,
+    email: claims.email,
+  })
+}</code></pre>
+          </div>
+        </div>
+      </div>
+
+      <div class="message assistant">
+        <div class="content">
+          <div class="tool-call open" id="tool1">
+            <button class="tool-header" onclick="toggleTool('tool1')">
+              <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>
+              <span class="tool-icon">R</span>
+              <span class="tool-name">read</span>
+              <span class="tool-status done">✓ done</span>
+              <span class="tool-summary">src/auth/session-store.ts</span>
+            </button>
+            <div class="tool-body">
+              <div class="tool-section">Input</div>
+              <div class="tool-pre">{ "path": "src/auth/session-store.ts" }</div>
+              <div class="tool-section">Output</div>
+              <div class="tool-pre">export interface SessionStore {
+  create(data: SessionData): Promise&lt;Session&gt;
+  findById(id: string): Promise&lt;Session | null&gt;
+  destroy(id: string): Promise&lt;void&gt;
+}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <div class="input-bar">
+      <input type="text" placeholder="Send a message…" id="msgInput" />
+      <button class="send" id="sendBtn" onclick="send()">Send</button>
+    </div>
+    <div class="footer-note">Prototype only — click “Simulate response” to see streaming dynamics</div>
+  </div>
+
+  <script>
+    function toggleThinking(id) {
+      document.getElementById(id).classList.toggle('open')
+    }
+
+    function toggleTool(id) {
+      document.getElementById(id).classList.toggle('open')
+    }
+
+    function copyCode(btn) {
+      const code = btn.closest('.code-block').querySelector('pre').innerText
+      navigator.clipboard.writeText(code)
+      btn.textContent = 'Copied'
+      setTimeout(() => btn.textContent = 'Copy', 1500)
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div')
+      div.textContent = text
+      return div.innerHTML
+    }
+
+    function scrollToBottom() {
+      const chat = document.getElementById('chat')
+      chat.scrollTo({ top: chat.scrollHeight, behavior: 'smooth' })
+    }
+
+    function send() {
+      const input = document.getElementById('msgInput')
+      const text = input.value.trim()
+      if (!text) return
+
+      const chat = document.getElementById('chat')
+      const userMsg = document.createElement('div')
+      userMsg.className = 'message user'
+      userMsg.innerHTML = `<div class="bubble">${escapeHtml(text)}</div>`
+      chat.appendChild(userMsg)
+      input.value = ''
+      scrollToBottom()
+    }
+
+    const themeBtn = document.getElementById('themeBtn')
+    themeBtn.addEventListener('click', () => {
+      const isLight = document.documentElement.getAttribute('data-theme') === 'light'
+      document.documentElement.setAttribute('data-theme', isLight ? 'dark' : 'light')
+      themeBtn.textContent = isLight ? '☀' : '☾'
+    })
+
+    document.getElementById('msgInput').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') send()
+    })
+
+    // --- Streaming simulation ---
+
+    let simulating = false
+
+    const thinkingChunks = [
+      "The user wants OAuth without breaking the session API. ",
+      "I should keep the existing SessionStore interface unchanged. ",
+      "Then add a generic OAuthProvider abstraction. ",
+      "Tokens can live in the same session table with a new provider column."
+    ]
+
+    const answerChunks = [
+      "I'll refactor in three layers so existing callers don't change.",
+      "\n\n**Provider layer** — a generic OAuthProvider interface handles authorize URL and token exchange.",
+      "\n\n**Session layer** — SessionStore gets a provider and subject field, but the public API stays the same.",
+      "\n\n**HTTP layer** — new /auth/oauth/:provider/callback routes sit beside the existing /auth/session endpoints.",
+      "\n\nLet me read the current session store first."
+    ]
+
+    function sleep(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms))
+    }
+
+    async function simulateResponse() {
+      if (simulating) return
+      simulating = true
+      document.getElementById('simulateBtn').disabled = true
+      document.getElementById('sendBtn').disabled = true
+
+      const chat = document.getElementById('chat')
+
+      // Create assistant message shell
+      const wrapper = document.createElement('div')
+      wrapper.className = 'message assistant'
+      wrapper.innerHTML = `
+        <div class="content">
+          <div class="thinking open" id="dyn-thinking">
+            <button class="thinking-header" onclick="toggleThinking('dyn-thinking')">
+              <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>
+              <span>Thinking…</span>
+            </button>
+            <div class="thinking-body"><span id="dyn-thinking-text"></span></div>
+          </div>
+          <div id="dyn-answer"><span id="dyn-answer-text"></span><span class="caret"></span></div>
+        </div>
+      `
+      chat.appendChild(wrapper)
+      scrollToBottom()
+
+      const thinkingText = wrapper.querySelector('#dyn-thinking-text')
+      const answerText = wrapper.querySelector('#dyn-answer-text')
+      const thinkingHeaderLabel = wrapper.querySelector('.thinking-header span:last-child')
+
+      // Stream thinking
+      for (const chunk of thinkingChunks) {
+        await sleep(350)
+        thinkingText.textContent += chunk
+        scrollToBottom()
+      }
+
+      // Transition to answer
+      await sleep(600)
+      thinkingHeaderLabel.textContent = 'Thought process'
+      document.getElementById('dyn-thinking').classList.remove('open')
+
+      // Stream answer
+      for (const chunk of answerChunks) {
+        await sleep(180)
+        answerText.textContent += chunk
+        scrollToBottom()
+      }
+
+      // Add a pending tool call
+      await sleep(400)
+      const toolId = 'dyn-tool-' + Date.now()
+      const toolCard = document.createElement('div')
+      toolCard.className = 'message assistant'
+      toolCard.innerHTML = `
+        <div class="content">
+          <div class="tool-call" id="${toolId}">
+            <button class="tool-header" onclick="toggleTool('${toolId}')">
+              <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>
+              <span class="tool-icon">R</span>
+              <span class="tool-name">read</span>
+              <span class="tool-status pending" id="${toolId}-status">… pending</span>
+              <span class="tool-summary">src/auth/session-store.ts</span>
+            </button>
+            <div class="tool-body">
+              <div class="tool-section">Input</div>
+              <div class="tool-pre">{ "path": "src/auth/session-store.ts" }</div>
+              <div class="tool-section">Output</div>
+              <div class="tool-pre" id="${toolId}-output">Loading…</div>
+            </div>
+          </div>
+        </div>
+      `
+      chat.appendChild(toolCard)
+      scrollToBottom()
+
+      // Tool completes
+      await sleep(1200)
+      const status = document.getElementById(`${toolId}-status`)
+      const output = document.getElementById(`${toolId}-output`)
+      status.className = 'tool-status done'
+      status.textContent = '✓ done'
+      output.textContent = `export interface SessionStore {
+  create(data: SessionData): Promise<Session>
+  findById(id: string): Promise<Session | null>
+  destroy(id: string): Promise<void>
+}`
+      document.getElementById(toolId).classList.add('open')
+      scrollToBottom()
+
+      // Final answer tail
+      await sleep(400)
+      answerText.textContent += "\n\nThe store interface is already minimal, so the shim will be small."
+      scrollToBottom()
+
+      // Remove caret
+      const caret = wrapper.querySelector('.caret')
+      if (caret) caret.remove()
+
+      simulating = false
+      document.getElementById('simulateBtn').disabled = false
+      document.getElementById('sendBtn').disabled = false
+    }
+  </script>
+</body>
+</html>

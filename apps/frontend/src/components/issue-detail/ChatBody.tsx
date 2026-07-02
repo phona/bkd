@@ -467,7 +467,14 @@ export function ChatBody({
             <CurrentPromptHover logs={logs} scrollRef={scrollRef} />
           </div>
         </div>
-        <div ref={scrollRef} className="h-full overflow-y-auto overflow-x-hidden">
+        <div
+          ref={scrollRef}
+          className="h-full overflow-y-auto overflow-x-hidden"
+          role="log"
+          aria-live="polite"
+          aria-relevant="additions"
+          aria-label={t('chat.title')}
+        >
           {searchOpen
             ? (
                 <ChatSearchBar
@@ -555,8 +562,9 @@ export function ChatBody({
                   onClick={scrollToTop}
                   className="rounded-full border border-border/50 bg-background/90 p-1.5 text-muted-foreground shadow-sm backdrop-blur-sm transition-colors hover:bg-accent hover:text-foreground"
                   title={t('session.scrollToTop')}
+                  aria-label={t('session.scrollToTop')}
                 >
-                  <ArrowUpToLine className="h-3.5 w-3.5" />
+                  <ArrowUpToLine className="h-3.5 w-3.5" aria-hidden="true" />
                 </button>
               ) :
             null}
@@ -567,8 +575,9 @@ export function ChatBody({
                   onClick={scrollToBottom}
                   className="rounded-full border border-border/50 bg-background/90 p-1.5 text-muted-foreground shadow-sm backdrop-blur-sm transition-colors hover:bg-accent hover:text-foreground"
                   title={t('session.scrollToBottom')}
+                  aria-label={t('session.scrollToBottom')}
                 >
-                  <ArrowDownToLine className="h-3.5 w-3.5" />
+                  <ArrowDownToLine className="h-3.5 w-3.5" aria-hidden="true" />
                 </button>
               ) :
             null}

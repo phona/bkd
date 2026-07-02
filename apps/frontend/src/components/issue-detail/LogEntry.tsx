@@ -32,6 +32,7 @@ import { formatFileSize } from '@/lib/format'
 import type { NormalizedLogEntry, ToolAction } from '@/types/kanban'
 import { MarkdownContent } from './MarkdownContent'
 import { MessageForkButton } from './MessageForkButton'
+import { ThinkingShell } from './ThinkingShell'
 
 interface AttachmentMeta {
   id: string
@@ -265,10 +266,12 @@ function LogEntryImpl({
   entry,
   durationMs,
   inToolGroup = false,
+  thinking,
 }: {
   entry: NormalizedLogEntry
   durationMs?: number
   inToolGroup?: boolean
+  thinking?: NormalizedLogEntry
 }) {
   const { t } = useTranslation()
   // On the cockpit `/review/:projectAlias/:issueId` route the param is the
@@ -335,6 +338,7 @@ function LogEntryImpl({
                 messageId={entry.messageId}
                 projectId={projectId}
                 issueId={issueId}
+                thinking={thinking}
               />
             ) : (
               <div className="text-[15px] whitespace-pre-wrap break-words text-foreground leading-[1.7]">
@@ -362,11 +366,11 @@ function LogEntryImpl({
       // invisible on light themes and users couldn't tell the speakers
       // apart. We use the higher-contrast `bg-muted` (full opacity) plus a
       // primary-tinted left bar so the bubble reads as a quoted prompt.
-      const barColor = isPending ?
-        'border-amber-400/80 bg-amber-500/10' :
-        isDone ?
-          'border-emerald-400/80 bg-emerald-500/10' :
-          'border-primary/70 bg-muted'
+      const bubbleClass = isPending
+        ? 'bg-amber-500/10 border-amber-400/80'
+        : isDone
+          ? 'bg-emerald-500/10 border-emerald-400/80'
+          : 'bg-muted border-border'
       // data-user-turn: stable DOM anchor for CurrentPromptHover. Skip
       // pending/done bubbles (they bypass the message list — see ChatBody)
       // so the hover only tracks landed turns.
@@ -376,10 +380,10 @@ function LogEntryImpl({
         undefined
       return (
         <div
-          className="group py-1.5 animate-message-enter"
+          className="group py-1.5 animate-message-enter flex justify-end"
           data-user-turn={anchorTurn}
         >
-          <div className={`relative px-3 py-2 border-l-[3px] rounded-r-md ${barColor}`}>
+          <div className={`relative max-w-[85%] px-4 py-2.5 rounded-2xl border ${bubbleClass}`}>
             {entry.messageId
               ? (
                   <MessageForkButton
@@ -462,7 +466,7 @@ function LogEntryImpl({
     }
 
     case 'assistant-message':
-      if (!entry.content.trim()) return null
+      if (!entry.content.trim() && !thinking) return null
       return (
         <AssistantMessage
           content={entry.content}
@@ -472,6 +476,7 @@ function LogEntryImpl({
           messageId={entry.messageId}
           projectId={projectId}
           issueId={issueId}
+          thinking={thinking}
         />
       )
 
@@ -630,13 +635,22 @@ export const LogEntry = memo(LogEntryImpl, (prev, next) => {
   if (prev.inToolGroup !== next.inToolGroup) return false
   const a = prev.entry
   const b = next.entry
-  return (
+  const entryEqual = (
     a === b
     || (a.messageId === b.messageId
       && a.entryType === b.entryType
       && a.content === b.content
       && a.metadata?.streaming === b.metadata?.streaming
       && a.metadata?.completed === b.metadata?.completed)
+  )
+  if (!entryEqual) return false
+  const ta = prev.thinking
+  const tb = next.thinking
+  return (
+    ta === tb
+    || (ta?.messageId === tb?.messageId
+      && ta?.content === tb?.content
+      && ta?.metadata?.streaming === tb?.metadata?.streaming)
   )
 })
 
@@ -679,6 +693,7 @@ export function AssistantMessage({
   messageId,
   projectId = '',
   issueId = '',
+  thinking,
 }: {
   content: string
   timestamp?: string
@@ -687,6 +702,7 @@ export function AssistantMessage({
   messageId?: string
   projectId?: string
   issueId?: string
+  thinking?: NormalizedLogEntry
 }) {
   const { t } = useTranslation()
   const [copied, setCopied] = useState(false)
@@ -751,6 +767,13 @@ export function AssistantMessage({
               )}
         </button>
 
+        {thinking && (
+          <ThinkingShell
+            entry={thinking}
+            isStreaming={isStreaming && !content.trim()}
+          />
+        )}
+
         {preamble
           ? (
               <div className="mb-2 border border-border/40 bg-muted/20 rounded-sm">
@@ -770,6 +793,7 @@ export function AssistantMessage({
                         <MarkdownContent
                           content={preamble}
                           className="text-[13px] leading-[1.65] text-muted-foreground"
+                          isStreaming={isStreaming}
                         />
                       </div>
                     )
@@ -786,6 +810,7 @@ export function AssistantMessage({
                   className="text-[15px] leading-[1.7] md:text-[14px] md:leading-[1.65]"
                   knownPaths={hasPreview ? knownPaths : undefined}
                   onPathClick={hasPreview ? openPreview : undefined}
+                  isStreaming={isStreaming}
                 />
               </MarkdownErrorBoundary>
             )
@@ -794,7 +819,8 @@ export function AssistantMessage({
                 <MarkdownErrorBoundary fallbackContent={streamingPreview} className="text-[15px] leading-[1.7] md:text-[14px] md:leading-[1.65] animate-pulse">
                   <MarkdownContent
                     content={streamingPreview}
-                    className="text-[15px] leading-[1.7] md:text-[14px] md:leading-[1.65] animate-pulse"
+                    className="text-[15px] leading-[1.7] md:text-[14px] md:leading-[1.65]"
+                    isStreaming={isStreaming}
                   />
                 </MarkdownErrorBoundary>
               )

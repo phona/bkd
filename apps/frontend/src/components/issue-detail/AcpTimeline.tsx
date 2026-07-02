@@ -1,13 +1,14 @@
 import type { AcpTimelineItem } from '@/hooks/use-acp-timeline'
 import type { NormalizedLogEntry, TimelineEntry } from '@bkd/shared'
-import { CheckCircle2, Circle, Lightbulb, ListTodo, Loader2 } from 'lucide-react'
+import { CheckCircle2, Circle, ListTodo, Loader2 } from 'lucide-react'
 import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Virtuoso } from 'react-virtuoso'
 import { useAcpTimeline } from '@/hooks/use-acp-timeline'
 import { useChatSearchStore } from '@/stores/chat-search-store'
 import { useViewModeStore } from '@/stores/view-mode-store'
-import { LogEntry } from './LogEntry'
+import { AssistantMessage, LogEntry } from './LogEntry'
+import { ThinkingShell } from './ThinkingShell'
 import { ToolGroupMessage } from './ToolItems'
 import type { VirtuosoHandle } from 'react-virtuoso'
 
@@ -132,69 +133,7 @@ const AcpPlanCard = memo(({
   )
 })
 
-/** Real-time streaming thinking block — full content with auto-scroll. */
-const StreamingThinking = memo(({ entry }: { entry: NormalizedLogEntry }) => {
-  const { t } = useTranslation()
-  const contentRef = useRef<HTMLPreElement>(null)
 
-  useEffect(() => {
-    const el = contentRef.current
-    if (el) el.scrollTop = el.scrollHeight
-  }, [entry.content])
-
-  return (
-    <div className="my-1">
-      <div className="border border-violet-300/20 dark:border-violet-500/15 bg-violet-500/[0.02] dark:bg-violet-500/[0.02] rounded-sm">
-        <div className="flex items-center gap-2 px-3 py-1.5 text-xs text-violet-500/50 dark:text-violet-400/50">
-          <Loader2 className="h-3 w-3 shrink-0 animate-spin" />
-          <span className="font-medium">{t('session.thinking')}</span>
-        </div>
-        <div className="px-3 pb-2 pt-0.5 border-t border-violet-300/10 dark:border-violet-500/10">
-          <pre
-            ref={contentRef}
-            className="text-xs text-violet-600/50 dark:text-violet-300/40 whitespace-pre-wrap font-mono leading-relaxed overflow-x-auto max-h-[300px] overflow-y-auto scroll-smooth"
-          >
-            {entry.content}
-          </pre>
-        </div>
-      </div>
-    </div>
-  )
-})
-
-/**
- * Completed thinking block — expanded by default so switching out of
- *  streaming mode doesn't visually collapse all thinking content.
- */
-const CompletedThinking = memo(({ entry }: { entry: NormalizedLogEntry }) => {
-  const { t } = useTranslation()
-  const [isOpen, setIsOpen] = useState(true)
-
-  return (
-    <div className="animate-message-enter my-1">
-      <div className="bg-violet-500/[0.02] border border-violet-300/15 dark:border-violet-500/10 rounded-sm">
-        <button
-          type="button"
-          onClick={() => setIsOpen(v => !v)}
-          className="w-full cursor-pointer px-3 py-1.5 text-xs text-violet-500/50 dark:text-violet-400/50 hover:bg-violet-500/[0.03] transition-colors flex items-center gap-2"
-        >
-          <Lightbulb className="h-3 w-3 shrink-0" />
-          <span className="font-medium">{t('session.thoughtProcess')}</span>
-          <span className="ml-auto text-[10px] opacity-50">
-            {isOpen ? '收起' : '展开'}
-          </span>
-        </button>
-        {isOpen && (
-          <div className="px-3 pb-2 pt-1 border-t border-violet-300/10 dark:border-violet-500/10">
-            <pre className="text-xs text-violet-600/50 dark:text-violet-300/40 whitespace-pre-wrap font-mono leading-relaxed overflow-x-auto max-h-[400px] overflow-y-auto">
-              {entry.content}
-            </pre>
-          </div>
-        )}
-      </div>
-    </div>
-  )
-})
 
 export function AcpTimeline({
   logs,
@@ -319,7 +258,7 @@ export function AcpTimeline({
             ? (
                 <div className="group">
                   {item.thinking && (
-                    <div className="mb-1.5"><CompletedThinking entry={item.thinking} /></div>
+                    <div className="mb-1.5"><ThinkingShell entry={item.thinking} /></div>
                   )}
                   <ToolGroupMessage message={item.message} />
                 </div>
@@ -333,16 +272,20 @@ export function AcpTimeline({
                     <AcpCommandCard entry={item.entry} output={item.output} />
                   )
                 : item.type === 'thinking'
-                  ? (item.isStreaming && isRunning
-                      ? <StreamingThinking entry={item.entry} />
-                      : <CompletedThinking entry={item.entry} />)
+                  ? (
+                      <AssistantMessage
+                        content=""
+                        thinking={item.entry}
+                        isStreaming={item.isStreaming && isRunning}
+                      />
+                    )
                   : item.type === 'entry'
                     ? (
                         <div className="group">
-                          {item.thinking && (
-                            <div className="mb-1.5"><CompletedThinking entry={item.thinking} /></div>
+                          {item.entry.entryType !== 'assistant-message' && item.thinking && (
+                            <div className="mb-1.5"><ThinkingShell entry={item.thinking} /></div>
                           )}
-                          <LogEntry entry={item.entry} />
+                          <LogEntry entry={item.entry} thinking={item.thinking} />
                         </div>
                       )
                     : null}

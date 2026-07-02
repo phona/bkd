@@ -238,6 +238,8 @@
     "delete": "删除"
   },
   "chat": {
+    "title": "对话",
+    "commandMenuLabel": "命令建议",
     "openTerminalHere": "在此工作目录打开终端",
     "search": {
       "placeholder": "搜索当前对话…",
@@ -256,6 +258,7 @@
     },
     "filesChanged": "{{count}} 个文件已更改",
     "placeholder": "继续处理此任务...",
+    "inputLabel": "消息输入框",
     "placeholderTodo": "输入消息（将在执行开始时发送）",
     "pendingMessage": "已排队",
     "pendingCount_other": "{{count}} 条排队消息",

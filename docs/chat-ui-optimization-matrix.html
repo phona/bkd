@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BKD Chat UI Optimization Matrix</title>
+  <style>
+    :root {
+      --bg: #0b0c0f;
+      --surface: #15171c;
+      --surface-2: #1e2128;
+      --border: #2a2e37;
+      --text: #e6e8ef;
+      --muted: #9aa0af;
+      --brand: #6366f1;
+      --brand-soft: rgba(99, 102, 241, 0.12);
+      --success: #22c55e;
+      --success-soft: rgba(34, 197, 94, 0.12);
+      --warning: #f59e0b;
+      --warning-soft: rgba(245, 158, 11, 0.12);
+      --radius: 12px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 40px 24px 80px;
+    }
+
+    header {
+      margin-bottom: 32px;
+    }
+
+    h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      margin: 0 0 8px;
+      letter-spacing: -0.02em;
+    }
+
+    .subtitle {
+      color: var(--muted);
+      font-size: 1rem;
+    }
+
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 16px;
+      margin-bottom: 40px;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+    }
+
+    .card .label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    .card .value {
+      font-size: 1.5rem;
+      font-weight: 700;
+    }
+
+    .card .value.small {
+      font-size: 1.05rem;
+      font-weight: 600;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+
+    .badge.full {
+      background: var(--success-soft);
+      color: var(--success);
+    }
+
+    .badge.partial {
+      background: var(--warning-soft);
+      color: var(--warning);
+    }
+
+    .badge.tiny { background: #334155; color: #cbd5e1; }
+    .badge.small { background: #1e3a8a; color: #93c5fd; }
+    .badge.medium { background: #5b21b6; color: #c4b5fd; }
+
+    section {
+      margin-bottom: 48px;
+    }
+
+    h2 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin: 0 0 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    h2::before {
+      content: "";
+      display: block;
+      width: 4px;
+      height: 22px;
+      border-radius: 2px;
+      background: var(--brand);
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+      min-width: 760px;
+    }
+
+    th, td {
+      padding: 14px 16px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+
+    th {
+      background: var(--surface-2);
+      font-weight: 600;
+      color: var(--text);
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(255,255,255,0.02); }
+
+    .num {
+      font-variant-numeric: tabular-nums;
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    .file {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.82rem;
+      color: #a5b4fc;
+    }
+
+    ul.compact {
+      margin: 0;
+      padding-left: 18px;
+    }
+
+    ul.compact li { margin-bottom: 4px; }
+
+    .phase-grid {
+      display: grid;
+      grid-template-columns: 60px 1fr 120px 120px;
+      gap: 1px;
+      background: var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+
+    .phase-grid > div {
+      background: var(--surface);
+      padding: 14px 16px;
+    }
+
+    .phase-grid > .head {
+      background: var(--surface-2);
+      font-weight: 600;
+    }
+
+    .phase-grid .phase-num {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      color: var(--brand);
+      background: var(--brand-soft);
+    }
+
+    footer {
+      margin-top: 40px;
+      padding-top: 24px;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    @media (max-width: 640px) {
+      .container { padding: 24px 16px; }
+      h1 { font-size: 1.5rem; }
+      .phase-grid { grid-template-columns: 40px 1fr 90px 90px; }
+      .phase-grid > div { padding: 10px 12px; font-size: 0.85rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>BKD Chat UI Optimization Matrix</h1>
+      <p class="subtitle">Mapping problems → solutions → effort for the chat UI refresh inspired by <code>slopus/happy</code>.</p>
+    </header>
+
+    <div class="summary">
+      <div class="card">
+        <div class="label">Issues identified</div>
+        <div class="value">9</div>
+      </div>
+      <div class="card">
+        <div class="label">Fully solvable</div>
+        <div class="value">8</div>
+      </div>
+      <div class="card">
+        <div class="label">Polish item</div>
+        <div class="value small">1 (scroll UX)</div>
+      </div>
+      <div class="card">
+        <div class="label">Estimated timeline</div>
+        <div class="value small">1–2 weeks</div>
+      </div>
+      <div class="card">
+        <div class="label">Key library</div>
+        <div class="value small"><code>streamdown</code></div>
+      </div>
+    </div>
+
+    <section>
+      <h2>1. Problem → Solution Matrix</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Bug / Problem</th>
+              <th>Root cause</th>
+              <th>Fix</th>
+              <th>Effort</th>
+              <th>Solved?</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="num">1</td>
+              <td>Message text re-parses / flickers while streaming</td>
+              <td><code>react-markdown</code> re-renders the whole string on every chunk</td>
+              <td>Replace <code>MarkdownContent</code> with <strong>streamdown</strong></td>
+              <td><span class="badge small">Small</span></td>
+              <td><span class="badge full">● Full</span></td>
+            </tr>
+            <tr>
+              <td class="num">2</td>
+              <td>Whole chat timeline rebuilds on every token</td>
+              <td><code>useAcpTimeline</code> calls <code>rebuildAcpTimeline(entries)</code> each update</td>
+              <td>Patch only the <strong>tail item</strong> + keep stable refs</td>
+              <td><span class="badge medium">Medium</span></td>
+              <td><span class="badge full">● Full</span></td>
+            </tr>
+            <tr>
+              <td class="num">3</td>
+              <td>Last thinking block renders <strong>below</strong> the answer</td>
+              <td><code>flushPendingThinking()</code> emits an orphan <code>thinking</code> row</td>
+              <td>Attach trailing thinking to the <strong>previous entry/tool-group</strong></td>
+              <td><span class="badge small">Small</span></td>
+              <td><span class="badge full">● Full</span></td>
+            </tr>
+            <tr>
+              <td class="num">4</td>
+              <td>Thinking block looks ugly (violet <code>&lt;pre&gt;</code> box)</td>
+              <td>Custom <code>CompletedThinking</code> / <code>StreamingThinking</code> shell</td>
+              <td>Move thinking <strong>inside <code>AssistantMessage</code></strong> as a collapsible section</td>
+              <td><span class="badge small">Small</span></td>
+              <td><span class="badge full">● Full</span></td>
+            </tr>
+            <tr>
+              <td class="num">5</td>
+              <td>Tool cards look noisy / hard to scan</td>
+              <td><code>ToolGroupMessage</code> / <code>ToolItems.tsx</code> styling</td>
+              <td>Redesign to Happy-style compact cards</td>
+              <td><span class="badge medium">Medium</span></td>
+              <td><span class="badge full">● Full</span></td>
+            </tr>
+            <tr>
+              <td class="num">6</td>
+              <td><code>ThinkingHover</code> re-renders 2× per second</td>
+              <td><code>setInterval</code> drives React state</td>
+              <td>Replace with <strong>CSS animation</strong> + ref-based timer</td>
+              <td><span class="badge tiny">Tiny</span></td>
+              <td><span class="badge full">● Full</span></td>
+            </tr>
+            <tr>
+              <td class="num">7</td>
+              <td>Code blocks re-highlight from scratch</td>
+              <td><code>ShikiCodeBlock</code> not keyed / memoized</td>
+              <td>Use <strong><code>@streamdown/code</code></strong> or memoize per <code>messageId+index</code></td>
+              <td><span class="badge small">Small</span></td>
+              <td><span class="badge full">● Full</span></td>
+            </tr>
+            <tr>
+              <td class="num">8</td>
+              <td>User / assistant bubbles feel dated</td>
+              <td><code>LogEntry.tsx</code> bubble styles</td>
+              <td>Adopt Happy-style minimal bubbles</td>
+              <td><span class="badge small">Small</span></td>
+              <td><span class="badge full">● Full</span></td>
+            </tr>
+            <tr>
+              <td class="num">9</td>
+              <td>Scroll UX missing polish</td>
+              <td><code>AcpTimeline</code> / <code>ChatBody</code></td>
+              <td>Add jump-to-bottom button, reduced-motion support</td>
+              <td><span class="badge small">Small</span></td>
+              <td><span class="badge partial">⚠ Polish</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section>
+      <h2>2. Solution → Scope Matrix</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Solution</th>
+              <th>Fixes</th>
+              <th>Does <em>not</em> fix</th>
+              <th>Files to touch</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>streamdown</strong> core</td>
+              <td>#1 flicker, #8 typography, #7 via plugin</td>
+              <td>#2 rebuild, #3 placement, #5 tool cards</td>
+              <td class="file">MarkdownContent.tsx, global CSS</td>
+            </tr>
+            <tr>
+              <td><strong>@streamdown/code</strong> + <strong>@streamdown/mermaid</strong></td>
+              <td>#7 highlighting, Mermaid diagrams</td>
+              <td>Layout / data-flow</td>
+              <td class="file">MarkdownContent.tsx</td>
+            </tr>
+            <tr>
+              <td>Tail-only <code>useAcpTimeline</code></td>
+              <td>#2 performance</td>
+              <td>Visual styling</td>
+              <td class="file">use-acp-timeline.ts</td>
+            </tr>
+            <tr>
+              <td>Attach orphan thinking</td>
+              <td>#3 placement</td>
+              <td>Styling</td>
+              <td class="file">use-acp-timeline.ts</td>
+            </tr>
+            <tr>
+              <td>In-message thinking shell</td>
+              <td>#4 thinking styling</td>
+              <td>Placement</td>
+              <td class="file">LogEntry.tsx, AcpTimeline.tsx</td>
+            </tr>
+            <tr>
+              <td>Happy-style tool cards</td>
+              <td>#5 tool UI</td>
+              <td>Performance</td>
+              <td class="file">ToolItems.tsx</td>
+            </tr>
+            <tr>
+              <td>CSS-based <code>ThinkingHover</code></td>
+              <td>#6 interval re-render</td>
+              <td>Visual design</td>
+              <td class="file">ThinkingHover.tsx</td>
+            </tr>
+            <tr>
+              <td>Bubble redesign</td>
+              <td>#8 visual</td>
+              <td>Performance</td>
+              <td class="file">LogEntry.tsx</td>
+            </tr>
+            <tr>
+              <td>Scroll / polish</td>
+              <td>#9 UX</td>
+              <td>Core rendering</td>
+              <td class="file">ChatBody.tsx, AcpTimeline.tsx</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section>
+      <h2>3. Recommended Implementation Order</h2>
+      <div class="phase-grid">
+        <div class="head">Phase</div>
+        <div class="head">Work</div>
+        <div class="head">Effort</div>
+        <div class="head">Impact</div>
+
+        <div class="phase-num">1</div>
+        <div>Swap <code>MarkdownContent</code> to <code>streamdown</code> + plugins; refresh base typography &amp; bubbles</div>
+        <div>1–2 days</div>
+        <div>High visual + streaming smoothness</div>
+
+        <div class="phase-num">2</div>
+        <div>Make <code>useAcpTimeline</code> patch the tail only; add <code>startTransition</code></div>
+        <div>2–3 days</div>
+        <div>Biggest performance win</div>
+
+        <div class="phase-num">3</div>
+        <div>Fix thinking placement + redesign thinking shell inside assistant message</div>
+        <div>1–2 days</div>
+        <div>Fixes orphan thought + cleaner UI</div>
+
+        <div class="phase-num">4</div>
+        <div>Happy-style tool cards, CSS <code>ThinkingHover</code>, scroll-to-bottom, reduced-motion</div>
+        <div>2–3 days</div>
+        <div>Professional finish</div>
+      </div>
+    </section>
+
+    <section>
+      <h2>4. Risks &amp; Notes</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Risk</th>
+              <th>Mitigation</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>streamdown</code> + plugins increase bundle size</td>
+              <td>Measure with <code>bun run build</code>; lazy-load Mermaid/math plugins if needed.</td>
+            </tr>
+            <tr>
+              <td>Custom path chips need porting</td>
+              <td>Implement as a <code>streamdown</code> component override for <code>&lt;code&gt;</code> / inline text.</td>
+            </tr>
+            <tr>
+              <td>Diff rendering is separate</td>
+              <td>Keep <code>@pierre/diffs/react</code> for diff panels; <code>streamdown</code> only handles prose.</td>
+            </tr>
+            <tr>
+              <td>Tailwind v4 source scanning</td>
+              <td>Add <code>@source "../node_modules/streamdown/dist/*.js"</code> per plugin docs.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <footer>
+      Next step: turn this into a formal <code>/pma</code> plan under <code>docs/plan/</code> and start Phase 1.
+    </footer>
+  </div>
+</body>
+</html>

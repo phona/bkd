@@ -5,7 +5,7 @@ import type {
   ToolGroupChatMessage,
   ToolGroupItem,
 } from '@bkd/shared'
-import { useMemo } from 'react'
+import { useRef } from 'react'
 
 /**
  * Extract todo list from a TodoWrite tool entry or an ACP `plan` system entry.
@@ -195,6 +195,168 @@ function buildToolGroup(items: ToolGroupItem[]): ToolGroupChatMessage {
   }
 }
 
+interface BuilderState {
+  items: AcpTimelineItem[]
+  pendingMessages: NormalizedLogEntry[]
+  pendingThinking: TimelineEntry | null
+  toolBuffer: ToolGroupItem[]
+}
+
+interface BuilderSnapshot {
+  pendingThinking: TimelineEntry | null
+  toolBuffer: ToolGroupItem[]
+  pendingMessages: NormalizedLogEntry[]
+  itemsLength: number
+}
+
+function flushToolBuffer(state: BuilderState): void {
+  if (state.toolBuffer.length === 0) return
+  const toolGroupThinking = state.pendingThinking ?? undefined
+  if (toolGroupThinking) state.pendingThinking = null
+  const group = buildToolGroup(state.toolBuffer)
+  state.items.push({ type: 'tool-group', id: group.id, message: group, thinking: toolGroupThinking })
+  state.toolBuffer = []
+}
+
+function flushPendingThinking(state: BuilderState): void {
+  if (!state.pendingThinking) return
+  state.items.push({
+    type: 'thinking',
+    id: state.pendingThinking.id,
+    entry: state.pendingThinking,
+    isStreaming: state.pendingThinking.metadata?.streaming === true,
+  })
+  state.pendingThinking = null
+}
+
+function processEntry(
+  entry: TimelineEntry,
+  state: BuilderState,
+  resultMap: Map<string, TimelineEntry>,
+  commandOutputById: Map<string, TimelineEntry>,
+  consumedOutputIds: Set<string>,
+): void {
+  if (isHiddenEntry(entry)) return
+
+  // Skip command_output system-messages already folded into a command item.
+  if (consumedOutputIds.has(entry.id)) return
+
+  if (entry.entryType === 'user-message' && (entry.metadata?.type === 'pending' || entry.metadata?.type === 'done')) {
+    state.pendingMessages.push(entry)
+    return
+  }
+
+  // `/command` user-messages render as a collapsed <details> with their
+  // paired output (ported from Legacy). A command is a real segment
+  // boundary, so close any open tool cluster / thinking first.
+  if (entry.entryType === 'user-message' && entry.metadata?.type === 'command') {
+    flushToolBuffer(state)
+    flushPendingThinking(state)
+    state.items.push({
+      type: 'command',
+      id: entry.id,
+      entry,
+      output: commandOutputById.get(entry.id),
+    })
+    return
+  }
+
+  if (entry.type === 'thinking') {
+    flushToolBuffer(state)
+    // Skip empty thinking chunks (Claude/ACP adapter sometimes emits
+    // agent_thought_chunk with no content). Backend filter is the
+    // primary guard; this is a safety net for edge cases.
+    if (entry.content.trim().length > 0) {
+      state.pendingThinking = entry
+    }
+    return
+  }
+
+  if (entry.type === 'tool') {
+    if (entry.metadata?.isResult) {
+      return
+    }
+    if (isSkillTool(entry)) return
+    const callId = entry.metadata?.toolCallId as string | undefined
+    const result = callId ? resultMap.get(callId) ?? null : null
+    state.toolBuffer.push({ action: entry, result })
+    // Don't flush yet — adjacent tools accumulate into one group so a
+    // burst of N actions renders as one card with N items. Streaming
+    // still feels real-time because rebuild runs on every log change
+    // and the end-of-loop flushToolBuffer() emits the in-flight group
+    // on every render.
+    return
+  }
+
+  if (entry.entryType === 'system-message' && entry.metadata?.subtype === 'plan') {
+    const todos = extractTodos(entry)
+    if (todos) {
+      flushToolBuffer(state)
+      state.items.push({
+        type: 'plan',
+        id: entry.id,
+        entry,
+        todos,
+        completedCount: todos.filter(todo => todo.status === 'completed').length,
+      })
+      return
+    }
+  }
+
+  flushToolBuffer(state)
+
+  // Note: previously we deleted a preceding thinking block when the
+  // assistant content started with the same text, on the assumption that
+  // the assistant was just a richer repeat of the thinking. That heuristic
+  // fires constantly because models commonly open the reply with the same
+  // sentence as the reasoning ("让我看看 X" → "让我看看 X，发现..."),
+  // so the whole thinking block silently vanished. Thinking is its own
+  // surface — keep it; if the duplication bothers users, they can collapse
+  // the thinking <details> block.
+
+  const attachedThinking = state.pendingThinking ?? undefined
+  state.pendingThinking = null
+  state.items.push({ type: 'entry', id: entry.id, entry, thinking: attachedThinking })
+}
+
+function buildMaps(entries: TimelineEntry[]) {
+  // Pre-pass: collect tool results by callId so actions can pair with results
+  // regardless of arrival order.
+  const resultMap = new Map<string, TimelineEntry>()
+  for (const entry of entries) {
+    if (entry.type === 'tool' && entry.metadata?.isResult) {
+      const callId = entry.metadata?.toolCallId as string | undefined
+      if (callId) resultMap.set(callId, entry)
+    }
+  }
+
+  // Pre-pass: pair each `/command` user-message with the next command_output
+  // system-message so the command renders as one expandable <details> (ported
+  // from Legacy). The matched outputs are consumed so they don't also render
+  // standalone.
+  const commandOutputById = new Map<string, TimelineEntry>()
+  const consumedOutputIds = new Set<string>()
+  for (let i = 0; i < entries.length; i++) {
+    const e = entries[i]!
+    if (e.entryType === 'user-message' && e.metadata?.type === 'command') {
+      for (let j = i + 1; j < entries.length; j++) {
+        const c = entries[j]!
+        if (
+          c.entryType === 'system-message'
+          && c.metadata?.subtype === 'command_output'
+          && !consumedOutputIds.has(c.id)
+        ) {
+          commandOutputById.set(e.id, c)
+          consumedOutputIds.add(c.id)
+          break
+        }
+      }
+    }
+  }
+
+  return { resultMap, commandOutputById, consumedOutputIds }
+}
+
 /**
  * Pure mapping from backend-normalized TimelineEntry[] → AcpTimelineItem[].
  *
@@ -213,33 +375,123 @@ function buildToolGroup(items: ToolGroupItem[]): ToolGroupChatMessage {
  * distinct entries with distinct ids. No more chunk merging — content is
  * already accumulated upstream.
  */
-function rebuildAcpTimeline(entries: TimelineEntry[]): AcpTimelineResult {
-  // Trust backend ordering. Entries already arrive sorted by sequence (use-issue-stream
-  // does the merge sort) — no need to re-sort here.
-  const items: AcpTimelineItem[] = []
-  const pendingMessages: NormalizedLogEntry[] = []
+function buildTimeline(entries: TimelineEntry[]): { result: AcpTimelineResult, snapshots: BuilderSnapshot[] } {
+  const { resultMap, commandOutputById, consumedOutputIds } = buildMaps(entries)
+  const state: BuilderState = {
+    items: [],
+    pendingMessages: [],
+    pendingThinking: null,
+    toolBuffer: [],
+  }
+  const snapshots: BuilderSnapshot[] = []
 
-  // Pre-pass: collect tool results by callId so actions can pair with results
-  // regardless of arrival order.
-  const resultMap = new Map<string, TimelineEntry>()
   for (const entry of entries) {
-    if (entry.type === 'tool' && entry.metadata?.isResult) {
-      const callId = entry.metadata?.toolCallId as string | undefined
-      if (callId) resultMap.set(callId, entry)
+    processEntry(entry, state, resultMap, commandOutputById, consumedOutputIds)
+    snapshots.push({
+      pendingThinking: state.pendingThinking,
+      toolBuffer: [...state.toolBuffer],
+      pendingMessages: [...state.pendingMessages],
+      itemsLength: state.items.length,
+    })
+  }
+
+  flushToolBuffer(state)
+  flushPendingThinking(state)
+
+  return {
+    result: { items: state.items, pendingMessages: state.pendingMessages },
+    snapshots,
+  }
+}
+
+export function rebuildAcpTimeline(entries: TimelineEntry[]): AcpTimelineResult {
+  return buildTimeline(entries).result
+}
+
+/**
+ * Try to patch only the changed tail of `nextLogs` against the previously
+ * built `prevResult`/`prevSnapshots`. Returns `null` when the change is not
+ * a simple tail append/replace (e.g. older-log prepend, result arriving for
+ * an action in the prefix, etc.) and the caller must fall back to a full
+ * rebuild.
+ */
+function patchTimeline(
+  prevLogs: TimelineEntry[],
+  nextLogs: TimelineEntry[],
+  prevResult: AcpTimelineResult,
+  prevSnapshots: BuilderSnapshot[],
+): { result: AcpTimelineResult, snapshots: BuilderSnapshot[] } | null {
+  let firstDiff = -1
+  const limit = Math.min(prevLogs.length, nextLogs.length)
+  for (let i = 0; i < limit; i++) {
+    if (prevLogs[i] !== nextLogs[i]) {
+      firstDiff = i
+      break
+    }
+  }
+  if (firstDiff === -1) {
+    if (nextLogs.length === prevLogs.length) {
+      return { result: prevResult, snapshots: prevSnapshots }
+    }
+    firstDiff = prevLogs.length
+  }
+
+  // Older logs prepended at the top — not a tail patch.
+  if (firstDiff === 0 && nextLogs.length > prevLogs.length) {
+    return null
+  }
+
+  // If a result in the suffix pairs with an action before the changed window,
+  // the prefix tool-group would need updating. Fall back to full rebuild.
+  for (let i = firstDiff; i < nextLogs.length; i++) {
+    const e = nextLogs[i]!
+    if (e.type === 'tool' && e.metadata?.isResult) {
+      const callId = e.metadata?.toolCallId as string | undefined
+      if (!callId) continue
+      const actionBefore = nextLogs.findIndex((x, idx) =>
+        idx < firstDiff
+        && x.type === 'tool'
+        && !x.metadata?.isResult
+        && (x.metadata?.toolCallId as string | undefined) === callId,
+      )
+      if (actionBefore >= 0) return null
     }
   }
 
-  // Pre-pass: pair each `/command` user-message with the next command_output
-  // system-message so the command renders as one expandable <details> (ported
-  // from Legacy). The matched outputs are consumed so they don't also render
-  // standalone.
+  // If a command/output pair crosses the boundary, fall back.
+  let commandOutputInSuffix = false
+  for (let i = firstDiff; i < nextLogs.length; i++) {
+    const e = nextLogs[i]!
+    if (e.entryType === 'system-message' && e.metadata?.subtype === 'command_output') {
+      commandOutputInSuffix = true
+      break
+    }
+  }
+  if (commandOutputInSuffix) {
+    for (let i = 0; i < firstDiff; i++) {
+      const e = nextLogs[i]!
+      if (e.entryType === 'user-message' && e.metadata?.type === 'command') {
+        return null
+      }
+    }
+  }
+
+  // Build maps for the suffix only — the prefix has already been processed.
+  const resultMap = new Map<string, TimelineEntry>()
+  for (let i = firstDiff; i < nextLogs.length; i++) {
+    const e = nextLogs[i]!
+    if (e.type === 'tool' && e.metadata?.isResult) {
+      const callId = e.metadata?.toolCallId as string | undefined
+      if (callId) resultMap.set(callId, e)
+    }
+  }
   const commandOutputById = new Map<string, TimelineEntry>()
   const consumedOutputIds = new Set<string>()
-  for (let i = 0; i < entries.length; i++) {
-    const e = entries[i]
+  for (let i = firstDiff; i < nextLogs.length; i++) {
+    const e = nextLogs[i]!
     if (e.entryType === 'user-message' && e.metadata?.type === 'command') {
-      for (let j = i + 1; j < entries.length; j++) {
-        const c = entries[j]
+      for (let j = i + 1; j < nextLogs.length; j++) {
+        const c = nextLogs[j]!
         if (
           c.entryType === 'system-message'
           && c.metadata?.subtype === 'command_output'
@@ -253,118 +505,62 @@ function rebuildAcpTimeline(entries: TimelineEntry[]): AcpTimelineResult {
     }
   }
 
-  let toolBuffer: ToolGroupItem[] = []
-  let pendingThinking: TimelineEntry | null = null
+  const state: BuilderState = firstDiff === 0
+    ? { items: [], pendingMessages: [], pendingThinking: null, toolBuffer: [] }
+    : {
+        items: [],
+        pendingMessages: [...prevSnapshots[firstDiff - 1]!.pendingMessages],
+        pendingThinking: prevSnapshots[firstDiff - 1]!.pendingThinking,
+        toolBuffer: [...prevSnapshots[firstDiff - 1]!.toolBuffer],
+      }
 
-  function flushPendingThinking(): void {
-    if (!pendingThinking) return
-    items.push({
-      type: 'thinking',
-      id: pendingThinking.id,
-      entry: pendingThinking,
-      isStreaming: pendingThinking.metadata?.streaming === true,
+  const suffixSnapshots: BuilderSnapshot[] = []
+  for (let i = firstDiff; i < nextLogs.length; i++) {
+    processEntry(nextLogs[i]!, state, resultMap, commandOutputById, consumedOutputIds)
+    suffixSnapshots.push({
+      pendingThinking: state.pendingThinking,
+      toolBuffer: [...state.toolBuffer],
+      pendingMessages: [...state.pendingMessages],
+      itemsLength: state.items.length,
     })
-    pendingThinking = null
   }
+  flushToolBuffer(state)
+  flushPendingThinking(state)
 
-  function flushToolBuffer(): void {
-    if (toolBuffer.length === 0) return
-    const toolGroupThinking = pendingThinking ?? undefined
-    if (toolGroupThinking) pendingThinking = null
-    const group = buildToolGroup(toolBuffer)
-    items.push({ type: 'tool-group', id: group.id, message: group, thinking: toolGroupThinking })
-    toolBuffer = []
+  const prefixItemsLength = firstDiff === 0 ? 0 : prevSnapshots[firstDiff - 1]!.itemsLength
+  const prefixPendingMessages = firstDiff === 0 ? [] : prevSnapshots[firstDiff - 1]!.pendingMessages
+  const result: AcpTimelineResult = {
+    items: prevResult.items.slice(0, prefixItemsLength).concat(state.items),
+    pendingMessages: prefixPendingMessages.concat(state.pendingMessages),
   }
+  const snapshots = firstDiff === 0
+    ? suffixSnapshots
+    : prevSnapshots.slice(0, firstDiff).concat(suffixSnapshots)
 
-  for (const entry of entries) {
-    if (isHiddenEntry(entry)) continue
-
-    // Skip command_output system-messages already folded into a command item.
-    if (consumedOutputIds.has(entry.id)) continue
-
-    if (entry.entryType === 'user-message' && (entry.metadata?.type === 'pending' || entry.metadata?.type === 'done')) {
-      pendingMessages.push(entry)
-      continue
-    }
-
-    // `/command` user-messages render as a collapsed <details> with their
-    // paired output (ported from Legacy). A command is a real segment
-    // boundary, so close any open tool cluster / thinking first.
-    if (entry.entryType === 'user-message' && entry.metadata?.type === 'command') {
-      flushToolBuffer()
-      flushPendingThinking()
-      items.push({
-        type: 'command',
-        id: entry.id,
-        entry,
-        output: commandOutputById.get(entry.id),
-      })
-      continue
-    }
-
-    if (entry.type === 'thinking') {
-      flushToolBuffer()
-      // Skip empty thinking chunks (Claude/ACP adapter sometimes emits
-      // agent_thought_chunk with no content). Backend filter is the
-      // primary guard; this is a safety net for edge cases.
-      if (entry.content.trim().length > 0) {
-        pendingThinking = entry
-      }
-      continue
-    }
-
-    if (entry.type === 'tool') {
-      if (entry.metadata?.isResult) {
-        continue
-      }
-      if (isSkillTool(entry)) continue
-      const callId = entry.metadata?.toolCallId as string | undefined
-      const result = callId ? resultMap.get(callId) ?? null : null
-      toolBuffer.push({ action: entry, result })
-      // Don't flush yet — adjacent tools accumulate into one group so a
-      // burst of N actions renders as one card with N items. Streaming
-      // still feels real-time because rebuild runs on every log change
-      // and the end-of-loop flushToolBuffer() emits the in-flight group
-      // on every render.
-      continue
-    }
-
-    if (entry.entryType === 'system-message' && entry.metadata?.subtype === 'plan') {
-      const todos = extractTodos(entry)
-      if (todos) {
-        flushToolBuffer()
-        items.push({
-          type: 'plan',
-          id: entry.id,
-          entry,
-          todos,
-          completedCount: todos.filter(todo => todo.status === 'completed').length,
-        })
-        continue
-      }
-    }
-
-    flushToolBuffer()
-
-    // Note: previously we deleted a preceding thinking block when the
-    // assistant content started with the same text, on the assumption that
-    // the assistant was just a richer repeat of the thinking. That heuristic
-    // fires constantly because models commonly open the reply with the same
-    // sentence as the reasoning ("让我看看 X" → "让我看看 X，发现..."),
-    // so the whole thinking block silently vanished. Thinking is its own
-    // surface — keep it; if the duplication bothers users, they can collapse
-    // the thinking <details> block.
-
-    const attachedThinking = pendingThinking ?? undefined
-    pendingThinking = null
-    items.push({ type: 'entry', id: entry.id, entry, thinking: attachedThinking })
-  }
-
-  flushToolBuffer()
-  flushPendingThinking()
-  return { items, pendingMessages }
+  return { result, snapshots }
 }
 
 export function useAcpTimeline(logs: TimelineEntry[]): AcpTimelineResult {
-  return useMemo(() => rebuildAcpTimeline(logs), [logs])
+  const cacheRef = useRef<{
+    logs: TimelineEntry[]
+    result: AcpTimelineResult
+    snapshots: BuilderSnapshot[]
+  } | null>(null)
+
+  const prev = cacheRef.current
+  if (!prev || logs.length < prev.logs.length) {
+    const built = buildTimeline(logs)
+    cacheRef.current = { logs, result: built.result, snapshots: built.snapshots }
+    return built.result
+  }
+
+  const patched = patchTimeline(prev.logs, logs, prev.result, prev.snapshots)
+  if (!patched) {
+    const built = buildTimeline(logs)
+    cacheRef.current = { logs, result: built.result, snapshots: built.snapshots }
+    return built.result
+  }
+
+  cacheRef.current = { logs, result: patched.result, snapshots: patched.snapshots }
+  return patched.result
 }

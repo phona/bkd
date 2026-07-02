@@ -238,6 +238,8 @@
     "delete": "Delete"
   },
   "chat": {
+    "title": "Chat",
+    "commandMenuLabel": "Command suggestions",
     "openTerminalHere": "Open terminal in this working directory",
     "search": {
       "placeholder": "Search this conversation…",
@@ -256,6 +258,7 @@
     },
     "filesChanged": "{{count}} files changed",
     "placeholder": "Continue working on this task...",
+    "inputLabel": "Message input",
     "placeholderTodo": "Type a message (queued until execution starts)",
     "pendingMessage": "Queued",
     "pendingCount_one": "{{count}} queued message",

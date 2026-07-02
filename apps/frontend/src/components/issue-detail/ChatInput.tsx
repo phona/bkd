@@ -1,4 +1,5 @@
 import {
+  AlertCircle,
   ArrowUp,
   Eraser,
   FileDiff,
@@ -726,8 +727,21 @@ export function ChatInput({
         {/* Error banner */}
         {sendError ?
             (
-              <div className="mx-2 mt-2 rounded-lg bg-destructive/10 border border-destructive/20 px-2 py-2 text-xs text-destructive">
-                {sendError}
+              <div
+                role="alert"
+                aria-live="assertive"
+                className="mx-2 mt-2 flex items-start gap-2 rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive"
+              >
+                <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                <span className="flex-1">{sendError}</span>
+                <button
+                  type="button"
+                  onClick={() => setSendError(null)}
+                  className="shrink-0 rounded p-0.5 text-destructive/70 hover:bg-destructive/10 hover:text-destructive"
+                  aria-label={t('common.close', 'Close')}
+                >
+                  <X className="h-3 w-3" />
+                </button>
               </div>
             ) :
           null}
@@ -735,12 +749,18 @@ export function ChatInput({
         {/* Inline command menu */}
         {showCommandMenu ?
             (
-              <div className="mx-2 mt-1 rounded-lg border border-border/40 bg-popover shadow-md overflow-hidden">
+              <div
+                role="listbox"
+                aria-label={t('chat.commandMenuLabel')}
+                className="mx-2 mt-1 rounded-lg border border-border/40 bg-popover shadow-md overflow-hidden"
+              >
                 <div className="max-h-[200px] overflow-y-auto py-1">
                   {filteredCommands.map((item, i) => (
                     <button
                       key={`${item.category}:${item.value}`}
                       type="button"
+                      role="option"
+                      aria-selected={i === commandIndex}
                       onMouseDown={(e) => {
                         e.preventDefault()
                         setInput(resolveCommandInput(item))
@@ -867,6 +887,7 @@ export function ChatInput({
             onChange={handleInput}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
+            aria-label={t('chat.inputLabel')}
             onFocus={() => {
               setIsFocused(true)
               // Entering edit mode expands the collapsed mobile toolbar (taller

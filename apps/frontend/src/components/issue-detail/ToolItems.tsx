@@ -906,26 +906,38 @@ function ToolGroupMessageImpl({ message }: { message: ToolGroupChatMessage }) {
     }
   }, [])
 
+  const statusLabel = isActive ? t('session.thinking') : t('common.done', 'Done')
+
   return (
     <div className={`py-1 ${isActive ? '' : 'animate-message-enter'}`}>
-      <div className="border border-border/40 bg-card/30">
+      <div className="border border-border/40 bg-card/30 rounded-md overflow-hidden">
         <button
           type="button"
           onClick={handleHeaderClick}
           aria-expanded={bodyVisible}
           aria-controls={bodyId}
           aria-disabled={isActive || undefined}
-          className="flex w-full items-center gap-2 px-2.5 py-1.5 text-xs text-muted-foreground cursor-pointer select-none bg-muted/40"
+          aria-label={`${description || statsLabel} — ${statusLabel}`}
+          className="flex w-full items-center gap-2 px-2.5 py-1.5 text-xs text-muted-foreground cursor-pointer select-none bg-muted/40 hover:bg-muted/50 transition-colors"
         >
           <ChevronRight className={`h-3 w-3 shrink-0 transition-transform ${bodyVisible ? 'rotate-90' : ''}`} />
+          <Wrench className="h-3 w-3 shrink-0 text-primary/70" aria-hidden="true" />
           <span className="truncate">{description || statsLabel}</span>
-          {description
-            ? (
-                <span className="ml-auto shrink-0 text-[10px] text-muted-foreground/40">
-                  {statsLabel}
-                </span>
-              )
-            : null}
+          <span className="ml-auto inline-flex items-center gap-1 shrink-0 text-[10px]">
+            {isActive
+              ? (
+                  <>
+                    <Loader2 className="h-3 w-3 animate-spin text-violet-500/80" aria-hidden="true" />
+                    <span className="text-violet-500/80">{statusLabel}</span>
+                  </>
+                )
+              : (
+                  <>
+                    <CheckCircle2 className="h-3 w-3 text-emerald-500/80" aria-hidden="true" />
+                    <span className="text-emerald-500/80">{statusLabel}</span>
+                  </>
+                )}
+          </span>
         </button>
         {bodyVisible
           ? (
