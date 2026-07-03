@@ -232,29 +232,66 @@ function flushPendingThinking(state: BuilderState): void {
 /**
  * When reasoning arrives after the assistant response (common with OpenCode/ACP),
  * the backend converter gives the thinking segment a later sequence, so it sorts
- * after the assistant message and renders below the reply. Fold that trailing
- * thinking back into the preceding assistant entry so it renders above the
- * response where users expect it.
+ * after the assistant message and renders below the reply. The system may also
+ * emit process-exit/system messages between the reply and the late reasoning, in
+ * which case `processEntry` attaches the pending thinking to that system entry.
+ * Reassign any trailing/orphaned thinking back to the most recent assistant entry
+ * in the same turn so it renders above the response where users expect it.
  */
-function foldTrailingThinkingIntoAssistant(items: AcpTimelineItem[]): AcpTimelineItem[] {
+function reassignTrailingThinking(items: AcpTimelineItem[]): AcpTimelineItem[] {
   const result: AcpTimelineItem[] = []
   for (const item of items) {
-    if (
-      item.type === 'thinking'
-      && result.length > 0
+    let orphanThinking: NormalizedLogEntry | undefined
+
+    if (item.type === 'thinking') {
+      orphanThinking = item.entry
+    }
+    else if (
+      item.type === 'entry'
+      && item.thinking
+      && item.entry.entryType !== 'assistant-message'
     ) {
-      const prev = result[result.length - 1]!
-      if (
-        prev.type === 'entry'
-        && prev.entry.entryType === 'assistant-message'
-        && prev.entry.turnIndex === item.entry.turnIndex
-        && !prev.thinking
-      ) {
-        prev.thinking = item.entry
-        continue
+      // Thinking that got attached to a system/error/user entry by processEntry
+      // should live on the assistant response instead.
+      orphanThinking = item.thinking
+      item.thinking = undefined
+    }
+
+    if (item.type !== 'thinking') {
+      result.push(item)
+    }
+
+    if (orphanThinking) {
+      let attached = false
+      for (let i = result.length - 1; i >= 0; i--) {
+        const candidate = result[i]!
+        if (
+          candidate.type === 'entry'
+          && candidate.entry.entryType === 'assistant-message'
+          && candidate.entry.turnIndex === orphanThinking.turnIndex
+          && !candidate.thinking
+        ) {
+          candidate.thinking = orphanThinking
+          attached = true
+          break
+        }
+        // Stop searching once we cross a user turn boundary.
+        if (
+          candidate.type === 'entry'
+          && candidate.entry.entryType === 'user-message'
+        ) {
+          break
+        }
+      }
+      if (!attached) {
+        result.push({
+          type: 'thinking',
+          id: orphanThinking.id,
+          entry: orphanThinking,
+          isStreaming: orphanThinking.metadata?.streaming === true,
+        })
       }
     }
-    result.push(item)
   }
   return result
 }
@@ -428,7 +465,7 @@ function buildTimeline(entries: TimelineEntry[]): { result: AcpTimelineResult, s
   flushToolBuffer(state)
   flushPendingThinking(state)
 
-  const foldedItems = foldTrailingThinkingIntoAssistant(state.items)
+  const foldedItems = reassignTrailingThinking(state.items)
 
   return {
     result: { items: foldedItems, pendingMessages: state.pendingMessages },
@@ -559,7 +596,7 @@ function patchTimeline(
   flushToolBuffer(state)
   flushPendingThinking(state)
 
-  const foldedItems = foldTrailingThinkingIntoAssistant(state.items)
+  const foldedItems = reassignTrailingThinking(state.items)
 
   const prefixItemsLength = firstDiff === 0 ? 0 : prevSnapshots[firstDiff - 1]!.itemsLength
   const prefixPendingMessages = firstDiff === 0 ? [] : prevSnapshots[firstDiff - 1]!.pendingMessages

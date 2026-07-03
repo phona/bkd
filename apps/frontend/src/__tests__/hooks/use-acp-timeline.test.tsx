@@ -220,6 +220,42 @@ describe('useAcpTimeline rendering', () => {
     expect((items[0] as any).thinking!.content).toBe('用户发了一份详细的方案，我需要先查看工作目录')
   })
 
+  it('folds trailing thinking above assistant even when system messages come between', () => {
+    const logs: NormalizedLogEntry[] = [
+      {
+        entryType: 'assistant-message',
+        content: 'Done.',
+        timestamp: '2026-01-01T00:00:00Z',
+        turnIndex: 0,
+        metadata: { streaming: false, completed: true },
+      },
+      {
+        entryType: 'system-message',
+        content: '[BKD] Process exited',
+        timestamp: '2026-01-01T00:00:01Z',
+        turnIndex: 0,
+        metadata: { subtype: 'diagnostic' },
+      },
+      {
+        entryType: 'thinking',
+        content: 'I should summarize the changes',
+        timestamp: '2026-01-01T00:00:02Z',
+        turnIndex: 0,
+        metadata: { streaming: false },
+      },
+    ]
+
+    const { items } = rebuildAcpTimeline(logs)
+
+    // Assistant keeps the thinking; system message stays separate.
+    expect(items).toHaveLength(2)
+    const assistant = items.find(i => i.type === 'entry' && (i as any).entry.entryType === 'assistant-message')
+    expect(assistant).toBeDefined()
+    expect((assistant as any).thinking).toBeDefined()
+    expect((assistant as any).thinking!.content).toBe('I should summarize the changes')
+    expect(items.find(i => i.type === 'thinking')).toBeUndefined()
+  })
+
   it('keeps thinking across tool groups when assistant starts with same prefix', () => {
     // Same scenario as above but with a tool burst between thinking and the
     // assistant reply. Thinking still preserved — see the no-startsWith-dedup
