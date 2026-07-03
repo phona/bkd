@@ -163,7 +163,7 @@ describe('acpTimeline', () => {
     expect(screen.getByText(finalContent)).toBeInTheDocument()
 
     // Tool call body is collapsed by default — expand it first
-    const toolHeader = screen.getByRole('button', { expanded: false })
+    const toolHeader = screen.getByRole('button', { name: /session\.tool\.fileRead/i })
     fireEvent.click(toolHeader)
 
     // Tool call should be present
@@ -191,14 +191,13 @@ describe('acpTimeline', () => {
 
     renderTimeline(toTimeline(logs))
 
-    // Completed thinking is expanded by default so it stays visible across view
-    // switches; the header toggles it.
+    // Completed thinking is collapsed by default; only the header is visible.
     expect(screen.getByText('session.thoughtProcess')).toBeInTheDocument()
-    expect(screen.getByText(/Let me analyze the problem/)).toBeInTheDocument()
-
-    // Clicking the header collapses it (content unmounts).
-    fireEvent.click(screen.getByText('session.thoughtProcess'))
     expect(screen.queryByText(/Let me analyze the problem/)).not.toBeInTheDocument()
+
+    // Clicking the header expands it.
+    fireEvent.click(screen.getByText('session.thoughtProcess'))
+    expect(screen.getByText(/Let me analyze the problem/)).toBeInTheDocument()
 
     // The assistant message is shown regardless.
     expect(screen.getByText(/The issue is/)).toBeInTheDocument()

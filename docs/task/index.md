@@ -98,3 +98,4 @@ Each task is a single line linking to its detail file. All detailed information 
 - [x] [**CHAT-014 Unify chat on one renderer (AcpTimeline)**](CHAT-014.md) `P1`
 - [-] [**PERF-001 Reduce per-issue lock contention during concurrent ACP spawns**](PERF-001.md) `P1`
 - [-] [**CHAT-015 Complete chat UI overhaul — streamdown rendering, performance, a11y, and error handling**](CHAT-015.md) `P1`
+- [x] [**CHAT-016 Collapse completed thinking blocks by default**](CHAT-016.md) `P2`

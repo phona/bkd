@@ -14,7 +14,10 @@ export const ThinkingShell = memo(function ThinkingShell({
 }: ThinkingShellProps) {
   const { t } = useTranslation()
   const bodyId = useId()
-  const [isOpen, setIsOpen] = useState(true)
+  // Collapse completed thinking by default so it doesn't push the assistant
+  // reply down the screen. Keep streaming thinking open so users can watch
+  // live reasoning as it arrives.
+  const [isOpen, setIsOpen] = useState(isStreaming)
   const contentRef = useRef<HTMLPreElement>(null)
 
   useEffect(() => {
