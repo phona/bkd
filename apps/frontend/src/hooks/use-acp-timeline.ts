@@ -229,6 +229,36 @@ function flushPendingThinking(state: BuilderState): void {
   state.pendingThinking = null
 }
 
+/**
+ * When reasoning arrives after the assistant response (common with OpenCode/ACP),
+ * the backend converter gives the thinking segment a later sequence, so it sorts
+ * after the assistant message and renders below the reply. Fold that trailing
+ * thinking back into the preceding assistant entry so it renders above the
+ * response where users expect it.
+ */
+function foldTrailingThinkingIntoAssistant(items: AcpTimelineItem[]): AcpTimelineItem[] {
+  const result: AcpTimelineItem[] = []
+  for (const item of items) {
+    if (
+      item.type === 'thinking'
+      && result.length > 0
+    ) {
+      const prev = result[result.length - 1]!
+      if (
+        prev.type === 'entry'
+        && prev.entry.entryType === 'assistant-message'
+        && prev.entry.turnIndex === item.entry.turnIndex
+        && !prev.thinking
+      ) {
+        prev.thinking = item.entry
+        continue
+      }
+    }
+    result.push(item)
+  }
+  return result
+}
+
 function processEntry(
   entry: TimelineEntry,
   state: BuilderState,
@@ -398,8 +428,10 @@ function buildTimeline(entries: TimelineEntry[]): { result: AcpTimelineResult, s
   flushToolBuffer(state)
   flushPendingThinking(state)
 
+  const foldedItems = foldTrailingThinkingIntoAssistant(state.items)
+
   return {
-    result: { items: state.items, pendingMessages: state.pendingMessages },
+    result: { items: foldedItems, pendingMessages: state.pendingMessages },
     snapshots,
   }
 }
@@ -527,10 +559,12 @@ function patchTimeline(
   flushToolBuffer(state)
   flushPendingThinking(state)
 
+  const foldedItems = foldTrailingThinkingIntoAssistant(state.items)
+
   const prefixItemsLength = firstDiff === 0 ? 0 : prevSnapshots[firstDiff - 1]!.itemsLength
   const prefixPendingMessages = firstDiff === 0 ? [] : prevSnapshots[firstDiff - 1]!.pendingMessages
   const result: AcpTimelineResult = {
-    items: prevResult.items.slice(0, prefixItemsLength).concat(state.items),
+    items: prevResult.items.slice(0, prefixItemsLength).concat(foldedItems),
     pendingMessages: prefixPendingMessages.concat(state.pendingMessages),
   }
   const snapshots = firstDiff === 0

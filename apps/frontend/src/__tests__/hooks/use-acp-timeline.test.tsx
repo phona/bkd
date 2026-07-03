@@ -190,6 +190,36 @@ describe('useAcpTimeline rendering', () => {
     expect((items[0] as { entry: NormalizedLogEntry }).entry.entryType).toBe('assistant-message')
   })
 
+  it('folds trailing thinking back above the assistant response when reasoning arrives late', () => {
+    // OpenCode/ACP sometimes emits the assistant reply before the reasoning
+    // update. The backend then sorts thinking after the reply, which would make
+    // it render below the response. It should still appear above.
+    const logs: NormalizedLogEntry[] = [
+      {
+        entryType: 'assistant-message',
+        content: '方案整体框架非常扎实',
+        timestamp: '2026-01-01T00:00:00Z',
+        turnIndex: 0,
+        metadata: { streaming: false, completed: true },
+      },
+      {
+        entryType: 'thinking',
+        content: '用户发了一份详细的方案，我需要先查看工作目录',
+        timestamp: '2026-01-01T00:00:01Z',
+        turnIndex: 0,
+        metadata: { streaming: false },
+      },
+    ]
+
+    const { items } = rebuildAcpTimeline(logs)
+
+    expect(items).toHaveLength(1)
+    expect(items[0]!.type).toBe('entry')
+    expect((items[0] as any).entry.entryType).toBe('assistant-message')
+    expect((items[0] as any).thinking).toBeDefined()
+    expect((items[0] as any).thinking!.content).toBe('用户发了一份详细的方案，我需要先查看工作目录')
+  })
+
   it('keeps thinking across tool groups when assistant starts with same prefix', () => {
     // Same scenario as above but with a tool burst between thinking and the
     // assistant reply. Thinking still preserved — see the no-startsWith-dedup
