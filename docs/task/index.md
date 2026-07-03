@@ -86,6 +86,7 @@ Each task is a single line linking to its detail file. All detailed information 
 - [x] [**BUG-010 Chat — composer stays expanded after keyboard dismiss (mobile)**](BUG-010.md) `P1`
 - [x] [**BUG-011 Chat — entry jumps to a stale anchor (neither latest nor last-read)**](BUG-011.md) `P1`
 - [x] [**BUG-012 Mobile — blank gap under the composer (double safe-area)**](BUG-012.md) `P1`
+- [x] [**BUG-013 OpenCode ACP model discovery fails in BKD project directory**](BUG-013.md) `P1`
 - [-] [**DOCK-002 Desktop dock rail + mobile summon panels (terminal/files/diff)**](DOCK-002.md) `P1`
 - [-] [**WS-001 Multi-project association — same-branch worktrees across linked projects**](WS-001.md) `P1`
 - [x] [**WT-004 Worktree experience parity with AoE — settings panel + strategy knobs**](WT-004.md) `P1`

@@ -22,7 +22,10 @@ export const opencodeAgent: AcpAgentDefinition = {
   label: 'OpenCode',
   commandName: 'opencode',
   npxFallback: ['npx', '-y', 'opencode-ai@latest'],
-  acpArgs: ['acp'],
+  // --pure disables opencode's external plugin loader. The directory service
+  // plugin fails during ACP model discovery in some environments (WSL + proxy),
+  // causing the probe to return no models even though the binary is installed.
+  acpArgs: ['acp', '--pure'],
   authStatus: getOpencodeAuthStatus,
   verify: async (cmd) => {
     const binaryPath = cmd[0] === 'npx' ? undefined : cmd[0]

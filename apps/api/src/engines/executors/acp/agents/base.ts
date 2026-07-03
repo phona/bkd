@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { safeEnv } from '@/engines/safe-env'
 import { resolveCommand, runCommand } from '@/engines/spawn'
@@ -39,6 +40,9 @@ export function resolveBinaryOnly(commandName: string): string | null {
     const candidates = [
       join(home, `.local/bin/${commandName}`),
       join(home, `.bun/bin/${commandName}`),
+      // ACP agents installed by their own installers (opencode, gemini, etc.)
+      // live under ~/.<name>/bin rather than ~/.local/bin.
+      join(home, `.${commandName}/bin/${commandName}`),
     ]
     const found = candidates.find(candidate => existsSync(candidate))
     if (found) return found
@@ -61,7 +65,9 @@ export async function verifyAcpCommand(
       {
         env: safeEnv({ NPM_CONFIG_LOGLEVEL: 'error' }, 'acp'),
         stderr: 'pipe',
-        timeout: 30000,
+        // Keep this well under the per-engine outer timeout so one missing
+        // agent can't take down the whole ACP probe.
+        timeout: 5000,
       },
     )
 
@@ -154,7 +160,10 @@ export async function getAcpAgentAvailabilityFromRegistry(
   registry: Record<AcpAgentId, AcpAgentDefinition>,
 ): Promise<EngineAvailability & { agentId: AcpAgentId, label: string }> {
   const agent = registry[agentId]
-  const cmd = getAcpLaunchCommandFromRegistry(agentId, registry)
+  // Verify the binary itself, not the ACP adapter invocation, so the
+  // availability probe doesn't compete with the model-discovery probe.
+  const binaryPath = resolveBinaryOnly(agent.commandName)
+  const cmd = binaryPath ? [binaryPath] : agent.npxFallback
   const result = await agent.verify(cmd)
 
   return {
@@ -166,15 +175,22 @@ export async function getAcpAgentAvailabilityFromRegistry(
   }
 }
 
+function getSafeAcpModelDiscoveryCwd(): string {
+  // Some ACP agents (notably OpenCode) fail their directory service when
+  // started inside certain project directories. Model lists are agent-global,
+  // so run model discovery from a neutral directory to avoid that bug.
+  return process.env.BKD_ACP_MODEL_CWD || tmpdir()
+}
+
 export async function queryScopedAcpModelsFromRegistry(
   agentId: AcpAgentId,
-  workingDir: string,
+  _workingDir: string,
   registry: Record<AcpAgentId, AcpAgentDefinition>,
 ): Promise<EngineModel[]> {
   const agent = registry[agentId]
   const models = await queryAcpModels({
     cmd: getAcpLaunchCommandFromRegistry(agentId, registry),
-    workingDir,
+    workingDir: getSafeAcpModelDiscoveryCwd(),
     env: safeEnv({ NPM_CONFIG_LOGLEVEL: 'error' }, 'acp'),
   })
 
